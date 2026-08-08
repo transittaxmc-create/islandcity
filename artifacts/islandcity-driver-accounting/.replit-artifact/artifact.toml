@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "IslandCity Driver Accounting"
+description = "A mobile-first static driver accounting dashboard for EI Program IslandCity Transport, with trip tracking, tolls, expenses, reports, and at-a-glance operating stats."
+version = "1.0.0"
+id = "artifacts/islandcity-driver-accounting"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25415
+
+[services.development]
+run = "pnpm --filter @workspace/islandcity-driver-accounting run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/islandcity-driver-accounting", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/islandcity-driver-accounting/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25415"
+BASE_PATH = "/"
