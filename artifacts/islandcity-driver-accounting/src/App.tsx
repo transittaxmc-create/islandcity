@@ -367,17 +367,17 @@ function PlatformAvatar({
 // Change this version string any time you need a forced wipe.
 // The app checks on every load; if the stored version differs, it clears all
 // data keys and sets the new version — then normal initialization runs fresh.
-const CLEAN_SLATE_VERSION = "2026-08-11-v2";
+// One-time reset: bump version to clear all data once, then stays clean forever.
+const CLEAN_SLATE_VERSION = "2026-08-11-v3";
 (function enforceCleanSlate() {
   try {
     if (localStorage.getItem("ic-app-version") !== CLEAN_SLATE_VERSION) {
-      const keys = [
+      [
         "island-city-trips", "island-city-expenses", "island-city-hours",
         "island-city-last-saved", "island-city-trips-count",
         "ic-custom-exp-types", "ic-custom-exp-cats", "ic-custom-vendors",
         "ic-last-shift-date",
-      ];
-      keys.forEach(k => localStorage.removeItem(k));
+      ].forEach(k => localStorage.removeItem(k));
       localStorage.setItem("ic-app-version", CLEAN_SLATE_VERSION);
     }
   } catch {}
@@ -947,6 +947,17 @@ export default function App() {
     if (!window.confirm("Delete this trip? This cannot be undone.")) return;
     setTrips(trips.filter(t => t.id !== id));
     showToast("Trip deleted");
+  };
+
+  const handleUnpostTrip = (id: string) => {
+    setTrips(trips.map(t => t.id !== id ? t : { ...t, status: "pending" as const, reviewed: false, postedAt: undefined }));
+    showToast("Trip moved back to Register");
+  };
+
+  const handleDeletePostedTrip = (id: string) => {
+    if (!window.confirm("Delete this posted trip permanently? This cannot be undone.")) return;
+    setTrips(trips.filter(t => t.id !== id));
+    showToast("Posted trip deleted");
   };
 
   const handleInlineEditStart = (trip: Trip) => {
@@ -1892,6 +1903,17 @@ export default function App() {
                         {t.postedAt  && <span>📋 Posted {new Date(t.postedAt).toLocaleDateString()}</span>}
                       </div>
                       {t.notes && <p className="text-[11px] text-neutral-600 leading-[1.4] break-words">{t.notes}</p>}
+                      {/* Ledger actions */}
+                      <div className="flex gap-2 pt-1">
+                        <button onClick={() => handleUnpostTrip(t.id)}
+                          className="flex-1 h-8 rounded-full border border-[#2a2a2a] text-neutral-400 text-[10px] font-semibold tracking-wide hover:border-[#f6dd8c]/40 hover:text-[#f6dd8c] transition-colors">
+                          ↩ Regresar al Register
+                        </button>
+                        <button onClick={() => handleDeletePostedTrip(t.id)}
+                          className="h-8 w-8 rounded-full border border-[#3a1010] text-[#ff6b6b] text-[12px] hover:bg-[#ff6b6b]/10 transition-colors flex items-center justify-center">
+                          ✕
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
