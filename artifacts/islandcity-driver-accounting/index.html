@@ -3,95 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0d0f0f">
-  <meta name="description" content="IslandCity Transport driver accounting command center">
+  <meta name="theme-color" content="#000000">
+  <meta name="description" content="IslandCity Transport — Driver Accounting Command Center">
   <title>IslandCity Driver Accounting</title>
-  <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-  <div class="app-shell">
-    <aside class="side-rail">
-      <div class="brand">
-        <div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 17h14M6 17l1.2-6.5A2 2 0 0 1 9.2 9h5.6a2 2 0 0 1 2 1.5L18 17M8 17v2m8-2v2M8 13h8M6.5 15h.01M17.5 15h.01"/></svg></div>
-        <div class="brand-copy"><strong>IslandCity</strong><span>TRANSPORT / DRIVER LEDGER</span></div>
-      </div>
-      <div class="rail-label">Workspace</div>
-      <nav class="nav-list" aria-label="Primary navigation">
-        <button class="nav-btn active" data-page="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="6" height="7" rx="1"/><rect x="14" y="4" width="6" height="4" rx="1"/><rect x="14" y="12" width="6" height="8" rx="1"/><rect x="4" y="15" width="6" height="5" rx="1"/></svg><span>Dashboard</span></button>
-        <button class="nav-btn" data-page="trips"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17h16M5 17l1.4-7.1A2 2 0 0 1 8.36 8.3h7.28a2 2 0 0 1 1.96 1.6L19 17M7 12h10M8 17v2m8-2v2"/></svg><span>Register</span></button>
-        <button class="nav-btn" data-page="expenses"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h4"/></svg><span>Operating Expenses</span></button>
-        <button class="nav-btn" data-page="tolls"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M9 12h6M12 9v6"/></svg><span>Operating Tolls</span></button>
-        <button class="nav-btn" data-page="reports"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 19V9m7 10V5m7 14v-7"/></svg><span>Statement</span></button>
-      </nav>
-      <div class="rail-footer">
-        <div class="driver-card"><div class="avatar">ML</div><div><b>Marcus Lee</b><small>IC-042 · Active shift</small></div></div>
-        <div class="local-note"><i class="local-dot"></i> Saved locally on this device</div>
-      </div>
-    </aside>
-    <main class="main-wrap">
-      <header class="topbar">
-        <div class="mobile-brand"><div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 17h14M6 17l1.2-6.5A2 2 0 0 1 9.2 9h5.6a2 2 0 0 1 2 1.5L18 17M8 13h8"/></svg></div><span>IslandCity</span></div>
-        <div class="today-label" id="topDate"></div>
-        <div class="top-actions"><div class="sync-badge"><i class="local-dot"></i> Device saved</div><button class="icon-btn" id="exportBtn" aria-label="Export ledger" title="Export ledger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v12m0-12 4 4m-4-4L8 7M5 13v6h14v-6"/></svg></button><button class="icon-btn" id="resetBtn" aria-label="Reset sample data" title="Reset sample data"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 12a8 8 0 1 0 2.35-5.65L4 8.7M4 4v4.7h4.7"/></svg></button></div>
-      </header>
-
-      <section class="page active" id="page-dashboard">
-        <div class="page-heading"><div><div class="eyebrow">Driver Accounting Dashboard</div><h1>Good morning, Marcus.</h1><p class="subhead">Review posted earnings, operating costs, and trips awaiting reconciliation.</p></div><button class="button button-primary" data-open-modal="trip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Add Trip</button></div>
-        <div class="hero-grid">
-          <article class="hero-card"><div class="hero-label">Net Earnings · Today</div><div class="hero-total"><small>$</small><span id="dashNet">0.00</span></div><div class="hero-caption" id="dashNetCaption">Posted earnings after operating costs</div><div class="hero-footer"><span id="dashTripCount">0 posted · 0 pending</span><strong id="dashStatus">Ready to start</strong></div></article>
-           <div class="stat-grid"><article class="stat-card"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17h16M5 17l1.4-7.1A2 2 0 0 1 8.36 8.3h7.28a2 2 0 0 1 1.96 1.6L19 17"/></svg></div><div class="stat-label">Gross Earnings</div><div class="stat-value">$<span id="dashGross">0.00</span></div><div class="change">Posted trips today</div></article><article class="stat-card"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M16 7.5c0-1.7-1.7-2.5-4-2.5s-4 .8-4 2.5c0 4 8 2 8 6 0 1.7-1.7 2.5-4 2.5s-4-.8-4-2.5"/></svg></div><div class="stat-label">Operating Costs</div><div class="stat-value">$<span id="dashCosts">0.00</span></div><div class="change">Expenses + operating tolls</div></article><article class="stat-card"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 19V9m7 10V5m7 14v-7"/></svg></div><div class="stat-label">Average Gross Earnings / Trip</div><div class="stat-value">$<span id="dashAvg">0.00</span></div><div class="change">Posted gross / trip</div></article><article class="stat-card"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M9 12h6"/></svg></div><div class="stat-label">Toll Charges</div><div class="stat-value">$<span id="dashTolls">0.00</span></div><div class="change">Operating tolls today</div></article></div>
-        </div>
-        <article class="card shift-card">
-          <div class="card-head"><div><h2 class="section-title">Shift and GPS Status</h2><span class="section-meta">Track active driving time without changing trip records</span></div><span class="shift-badge" id="shiftStatus">Off duty</span></div>
-          <div class="shift-readout"><div><span class="shift-label">Active Hours</span><strong id="shiftClock">00:00:00</strong></div><div><span class="shift-label">GPS Status</span><strong id="gpsStatus">Not active</strong></div><div><span class="shift-label">IRS Mileage Deduction Value</span><strong id="dashIrsDeduction">$0.00</strong></div></div>
-          <div class="shift-actions"><button class="button button-primary" data-shift-action="start">Start Shift</button><button class="button button-secondary" data-shift-action="break" disabled>Start Break</button><button class="button button-secondary" data-shift-action="end" disabled>End Shift</button></div>
-        </article>
-        <div class="dashboard-columns">
-          <article class="card"><div class="card-head"><div><h2 class="section-title">Recent Register Activity</h2><span class="section-meta">Latest trip, expense, and toll entries</span></div><button class="button button-ghost button-compact" data-page-link="trips">View Trip Register <span>→</span></button></div><div class="activity-list" id="recentActivity"></div></article>
-          <div class="card"><div class="card-head"><div><h2 class="section-title">Daily Accounting Summary</h2><span class="section-meta">Posted totals and pending review</span></div></div><div class="overview-rows" id="glance"></div></div>
-          <article class="card"><div class="card-head"><div><h2 class="section-title">Quick Entry</h2><span class="section-meta">Add a record without leaving the dashboard</span></div></div><div class="quick-actions"><button class="quick-action" data-open-modal="trip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17h16M5 17l1.4-7.1A2 2 0 0 1 8.36 8.3h7.28a2 2 0 0 1 1.96 1.6L19 17"/></svg><span>Add Trip</span></button><button class="quick-action" data-open-modal="expense"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h4"/></svg><span>Add Expense</span></button><button class="quick-action" data-open-modal="toll"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M9 12h6"/></svg><span>Add Toll Charge</span></button></div></article>
-          <article class="card"><div class="card-head"><div><h2 class="section-title">Shift Hours Log</h2><span class="section-meta">Completed shifts — active hours after breaks</span></div></div><div class="activity-list" id="shiftLog"></div></article>
-        </div>
-      </section>
-
-      <section class="page" id="page-trips">
-        <div class="page-heading"><div><div class="eyebrow">Trip Register / Revenue Workflow</div><h1>Trip Register</h1><p class="subhead">Create one trip record, then update its tips, toll charges, fees, and adjustments here before closing the book.</p></div><button class="button button-primary" data-open-modal="trip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Add Trip</button></div>
-        <div class="ledger-note"><span class="note-marker"></span><div><b>One trip record from capture to close</b><span>Pending trips are editable quick captures. Reconcile invoice details, late toll charges, tips, and extra fees on this same entry. Closed trips are locked.</span></div></div>
-        <div class="toolbar"><div class="search-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg><input class="field" id="tripSearch" placeholder="Search route, platform, or notes" type="search"></div><select class="select date-filter" id="tripFilter"><option value="all">All Trip Register Entries</option><option value="today">Today</option><option value="week">This Week</option><option value="pending">Pending</option><option value="reconciled">Reconciled</option><option value="closed">Closed</option></select></div>
-         <div class="summary-strip register-summary"><div class="summary-chip"><small>Showing</small><b id="tripShown">0 trips</b></div><div class="summary-chip"><small>Pending Review</small><b id="tripPending">0 trips</b></div><div class="summary-chip"><small>Posted Net Earnings</small><b id="tripGross">$0.00</b></div><div class="summary-chip"><small>IRS Mileage Deduction Value</small><b id="tripIrsDeduction">$0.00</b></div></div>
-        <div class="card entries" id="tripEntries"></div>
-      </section>
-
-      <section class="page" id="page-expenses">
-        <div class="page-heading"><div><div class="eyebrow">Ledger / Operating Costs</div><h1>Operating Expenses</h1><p class="subhead">Record fuel, maintenance, supplies, insurance, and other business costs.</p></div><button class="button button-primary" data-open-modal="expense"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Add Expense</button></div>
-        <div class="toolbar"><div class="search-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg><input class="field" id="expenseSearch" placeholder="Search category, vendor, or notes" type="search"></div><select class="select date-filter" id="expenseFilter"><option value="all">All Operating Expenses</option><option value="today">Today</option><option value="week">This Week</option></select></div>
-        <div class="summary-strip"><div class="summary-chip"><small>Showing</small><b id="expenseShown">0 entries</b></div><div class="summary-chip"><small>Total costs</small><b id="expenseTotal">$0.00</b></div><div class="summary-chip"><small>Largest category</small><b id="expenseLargest">—</b></div></div>
-        <div class="card entries" id="expenseEntries"></div>
-      </section>
-
-      <section class="page" id="page-tolls">
-        <div class="page-heading"><div><div class="eyebrow">Ledger / Operating Road Charges</div><h1>Operating Toll Charges</h1><p class="subhead">Record unassigned operating tolls here. Trip Toll Charges must be updated on the related entry in Trip Register.</p></div><button class="button button-primary" data-open-modal="toll"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Add Operating Toll</button></div>
-        <div class="summary-strip"><div class="summary-chip"><small>Recorded Charges</small><b id="tollShown">0 crossings</b></div><div class="summary-chip"><small>Total Operating Tolls</small><b id="tollTotal">$0.00</b></div><div class="summary-chip"><small>Average Toll Charge</small><b id="tollAverage">$0.00</b></div></div>
-        <div class="toolbar"><div class="search-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg><input class="field" id="tollSearch" placeholder="Search toll location or direction" type="search"></div><select class="select date-filter" id="tollFilter"><option value="all">All Operating Toll Charges</option><option value="today">Today</option><option value="week">This Week</option></select></div>
-        <div class="card entries" id="tollEntries"></div>
-      </section>
-
-      <section class="page" id="page-reports">
-        <div class="page-heading"><div><div class="eyebrow">Financial Statement / Posted Entries</div><h1>Financial Statement</h1><p class="subhead">Only Reconciled and Closed trips appear here. Pending trips remain in Trip Register.</p></div><div class="report-controls"><button class="period-btn active" data-period="week">Last 7 Days</button><button class="period-btn" data-period="month">Last 30 Days</button></div></div>
-         <div class="report-hero"><article class="card"><div class="eyebrow">Net Earnings · Selected Period</div><div class="report-big"><small>$</small><span id="reportNet">0.00</span></div><div class="report-note" id="reportNote">Pending trips excluded</div></article><article class="card"><div class="card-head"><div><h2 class="section-title">Accounting Snapshot</h2><span class="section-meta">Posted operating totals</span></div></div><div class="breakdown" id="reportSnapshot"></div></article></div>
-         <article class="card"><div class="card-head"><div><h2 class="section-title">Posted Earnings by Day</h2><span class="section-meta">Gross Fare Value</span></div><span class="eyebrow">CAD</span></div><div class="chart" id="reportChart"></div><div class="report-footer"><span id="reportRange">—</span><span id="reportTrips">0 posted trips</span></div></article>
-      </section>
-    </main>
-  </div>
-  <nav class="bottom-nav" aria-label="Mobile navigation">
-    <button class="nav-btn active" data-page="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="6" height="7" rx="1"/><rect x="14" y="4" width="6" height="4" rx="1"/><rect x="14" y="12" width="6" height="8" rx="1"/><rect x="4" y="15" width="6" height="5" rx="1"/></svg><span>Home</span></button>
-    <button class="nav-btn" data-page="trips"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17h16M5 17l1.4-7.1A2 2 0 0 1 8.36 8.3h7.28a2 2 0 0 1 1.96 1.6L19 17"/></svg><span>Register</span></button>
-    <button class="nav-btn" data-open-modal="trip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M8 12h8"/></svg><span>Quick add</span></button>
-     <button class="nav-btn" data-page="expenses"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4h14v16H5zM8 8h8M8 12h8"/></svg><span>Expenses</span></button>
-    <button class="nav-btn" data-page="reports"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 19V9m7 10V5m7 14v-7"/></svg><span>Statement</span></button>
-  </nav>
-  <div class="modal-backdrop" id="modalBackdrop" aria-hidden="true"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal-head"><div><div class="eyebrow">New ledger entry</div><h2 id="modalTitle">Log a trip</h2></div><button class="icon-btn" id="closeModal" aria-label="Close dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m7 7 10 10M17 7 7 17"/></svg></button></div><form id="entryForm" class="form-grid"></form></section></div>
-  <div class="toast" id="toast" role="status"></div>
-  <script src="./script.js"></script>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>
