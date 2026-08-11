@@ -62,22 +62,32 @@ type Expense = {
   note: string;
 };
 
-const TOLL_PLAZAS = [
-  { name: "Lincoln Tunnel", lat: 40.7589, lng: -74.006, rate: 16.79, type: "Port Authority Peak" },
-  { name: "Holland Tunnel", lat: 40.726, lng: -74.027, rate: 16.79, type: "Port Authority Peak" },
-  { name: "GWB Upper", lat: 40.8517, lng: -73.9527, rate: 16.79, type: "Port Authority Peak" },
-  { name: "Brooklyn Battery", lat: 40.6895, lng: -74.0449, rate: 6.94, type: "MTA 2026" },
-  { name: "Queens Midtown", lat: 40.7434, lng: -73.9637, rate: 6.94, type: "MTA 2026" },
-  { name: "Verrazzano E-ZPass", lat: 40.6066, lng: -74.0449, rate: 6.94, type: "MTA 2026" },
-  { name: "RFK Bridge", lat: 40.78, lng: -73.95, rate: 6.94, type: "MTA 2026" },
-  { name: "Whitestone", lat: 40.796, lng: -73.8305, rate: 6.94, type: "MTA 2026" },
-  { name: "Throgs Neck", lat: 40.801, lng: -73.797, rate: 6.94, type: "MTA 2026" },
-  { name: "Henry Hudson", lat: 40.876, lng: -73.93, rate: 3.18, type: "MTA 2026 Off" },
-  { name: "Marine Parkway", lat: 40.58, lng: -73.89, rate: 2.60, type: "MTA 2026" },
-  { name: "Cross Bay", lat: 40.596, lng: -73.84, rate: 2.60, type: "MTA 2026" },
-  { name: "Goethals", lat: 40.64, lng: -74.19, rate: 16.79, type: "Port Authority" },
-  { name: "Outerbridge", lat: 40.52, lng: -74.25, rate: 16.79, type: "Port Authority" },
-  { name: "Bayonne", lat: 40.64, lng: -74.11, rate: 16.79, type: "Port Authority" },
+// ── Toll plaza list — update rates each January ───────────────────────────
+// Last updated: 2026 · E-ZPass · passenger car · per crossing
+// Sources: MTA Bridges & Tunnels 2026; Port Authority 2026 schedule
+// Port Authority peak = Mon–Fri 6–10 AM and 4–9 PM; all other = off-peak
+const TOLL_YEAR = 2026;
+const TOLL_PLAZAS: {
+  name: string; lat: number; lng: number;
+  rate: number; offPeak?: number; type: string;
+}[] = [
+  // ── MTA Bridges & Tunnels ─────────────────────────────────────────────
+  { name: "Queens Midtown Tunnel",      lat: 40.7434, lng: -73.9637, rate: 7.46, type: "MTA" },
+  { name: "Hugh L. Carey Tunnel",       lat: 40.6895, lng: -74.0149, rate: 7.46, type: "MTA" },
+  { name: "RFK Bridge",                 lat: 40.7800, lng: -73.9500, rate: 7.46, type: "MTA" },
+  { name: "Verrazzano-Narrows Bridge",  lat: 40.6066, lng: -74.0449, rate: 7.46, type: "MTA" },
+  { name: "Whitestone Bridge",          lat: 40.7960, lng: -73.8305, rate: 7.46, type: "MTA" },
+  { name: "Throgs Neck Bridge",         lat: 40.8010, lng: -73.7970, rate: 7.46, type: "MTA" },
+  { name: "Henry Hudson Bridge",        lat: 40.8760, lng: -73.9300, rate: 3.42, type: "MTA" },
+  { name: "Cross Bay Bridge",           lat: 40.5960, lng: -73.8400, rate: 2.80, type: "MTA" },
+  { name: "Marine Parkway Bridge",      lat: 40.5800, lng: -73.8900, rate: 2.80, type: "MTA" },
+  // ── Port Authority (peak / off-peak) ──────────────────────────────────
+  { name: "Lincoln Tunnel",             lat: 40.7589, lng: -74.0060, rate: 16.79, offPeak: 14.79, type: "Port Authority" },
+  { name: "Holland Tunnel",             lat: 40.7260, lng: -74.0270, rate: 16.79, offPeak: 14.79, type: "Port Authority" },
+  { name: "George Washington Bridge",   lat: 40.8517, lng: -73.9527, rate: 16.79, offPeak: 14.79, type: "Port Authority" },
+  { name: "Goethals Bridge",            lat: 40.6400, lng: -74.1900, rate: 16.79, offPeak: 14.79, type: "Port Authority" },
+  { name: "Bayonne Bridge",             lat: 40.6400, lng: -74.1100, rate: 16.79, offPeak: 14.79, type: "Port Authority" },
+  { name: "Outerbridge Crossing",       lat: 40.5200, lng: -74.2500, rate: 16.79, offPeak: 14.79, type: "Port Authority" },
 ];
 
 const LOCATION_CATEGORIES = [
@@ -339,6 +349,11 @@ export default function App() {
   const [dropoffResolving, setDropoffResolving] = useState(false);
   const [selectedForPost, setSelectedForPost] = useState<Set<string>>(new Set());
 
+  // Toll detection
+  const [detectedToll, setDetectedToll] = useState<{ plaza: string; rate: number; at: string } | null>(null);
+  const [tollManuallyEdited, setTollManuallyEdited] = useState(false);
+  const lastDetectedPlazaRef = useRef<string | null>(null);
+
   // Storage state
   const [lastSavedAt, setLastSavedAt] = useState<string>(() => {
     try { return localStorage.getItem("island-city-last-saved") || "—"; } catch { return "—"; }
@@ -398,6 +413,45 @@ export default function App() {
       if (raw) { setStorageBytes(new Blob([raw]).size); setStorageVerified(true); }
     } catch { setStorageVerified(false); }
   }, []);
+
+  // ── GPS toll geofencing ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (!gps.lat || !gps.lng) return;
+    const GEOFENCE_KM = 0.35; // ~350 m radius around each plaza
+    for (const plaza of TOLL_PLAZAS) {
+      const d = haversineKm(gps.lat, gps.lng, plaza.lat, plaza.lng);
+      if (d <= GEOFENCE_KM) {
+        // Avoid re-firing for the same plaza
+        if (lastDetectedPlazaRef.current === plaza.name) return;
+        lastDetectedPlazaRef.current = plaza.name;
+
+        // Port Authority: choose peak vs off-peak by time of day
+        let rate = plaza.rate;
+        if (plaza.offPeak !== undefined) {
+          const now = new Date();
+          const h = now.getHours();
+          const dow = now.getDay(); // 0=Sun 6=Sat
+          const isWeekday = dow >= 1 && dow <= 5;
+          const isPeak = isWeekday && ((h >= 6 && h < 10) || (h >= 16 && h < 21));
+          rate = isPeak ? plaza.rate : plaza.offPeak;
+        }
+
+        const at = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        setDetectedToll({ plaza: plaza.name, rate, at });
+
+        // Auto-fill only if field is empty
+        setTripForm(s => {
+          if (!s.toll) return { ...s, toll: String(rate) };
+          return s;
+        });
+        setTollManuallyEdited(false);
+        showToast(`⚡ Toll detected · ${plaza.name} · $${rate.toFixed(2)}`);
+        return;
+      }
+    }
+    // Driver moved away from all plazas — clear the "last detected" so re-entry fires again
+    lastDetectedPlazaRef.current = null;
+  }, [gps.lat, gps.lng]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // GPS airport + reverse geocode
   useEffect(() => {
@@ -579,6 +633,9 @@ export default function App() {
   const resetForm = () => {
     setTripForm({ reference: "", earnings: "", tips: "", extraCash: "", toll: "", platformFee: "", platform: "Uber", pickup: "", dropoff: "", notes: "" });
     setEditingId(null);
+    setDetectedToll(null);
+    setTollManuallyEdited(false);
+    lastDetectedPlazaRef.current = null;
   };
 
   const handleSave = () => {
@@ -909,14 +966,44 @@ export default function App() {
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <label className="text-[11px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">TOLL ($)</label>
-            <span className="px-2 py-0.5 rounded-full bg-[#052e16] border border-[#166534] text-[#4ade80] text-[10px] font-bold tracking-widest">GPS</span>
+            {detectedToll ? (
+              tollManuallyEdited ? (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#2d1b00] border border-[#92400e] text-[#fbbf24] text-[10px] font-bold tracking-wider animate-pulse">
+                  ✎ EDITED · detected ${detectedToll.rate.toFixed(2)}
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#052e16] border border-[#166534] text-[#4ade80] text-[10px] font-bold tracking-wider">
+                  ⚡ DETECTED · {detectedToll.plaza}
+                </span>
+              )
+            ) : (
+              <span className="px-2 py-0.5 rounded-full bg-[#1a1a1a] border border-[#2a2a2a] text-neutral-500 text-[10px] font-bold tracking-widest">GPS AUTO</span>
+            )}
           </div>
+          {detectedToll && (
+            <p className="text-[10px] text-neutral-500 font-mono-jet">
+              {detectedToll.plaza} · ${detectedToll.rate.toFixed(2)} · {detectedToll.at}
+              {detectedToll.rate === 16.79 || detectedToll.rate === 14.79
+                ? detectedToll.rate === 16.79 ? " · Peak" : " · Off-peak"
+                : ""} · {TOLL_YEAR}
+            </p>
+          )}
           <input inputMode="decimal" value={tripForm.toll}
-            onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, toll: e.target.value })); }}
-            placeholder="e.g. 6.94"
-            className="w-full h-16 rounded-2xl bg-black border border-[#262626] px-4 text-white text-[18px] font-bold font-mono-jet placeholder:text-[#6b7280] focus:outline-none focus:border-[#3a3a3a]" />
+            onChange={e => {
+              if (!numericFilter(e.target.value)) return;
+              setTripForm(s => ({ ...s, toll: e.target.value }));
+              if (detectedToll) setTollManuallyEdited(true);
+            }}
+            placeholder="e.g. 7.46"
+            className={`w-full h-16 rounded-2xl bg-black px-4 text-white text-[18px] font-bold font-mono-jet placeholder:text-[#6b7280] focus:outline-none transition-colors border ${
+              detectedToll && !tollManuallyEdited
+                ? "border-[#166534] focus:border-[#4ade80]"
+                : detectedToll && tollManuallyEdited
+                ? "border-[#92400e] focus:border-[#fbbf24]"
+                : "border-[#262626] focus:border-[#3a3a3a]"
+            }`} />
         </div>
         <div className="space-y-1.5">
           <label className="text-[11px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">PLATFORM FEE ($)</label>
