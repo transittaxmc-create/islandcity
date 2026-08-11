@@ -370,20 +370,16 @@ function PlatformAvatar({
 // One-time reset: bump version string below to wipe all data on the next load.
 // After clearing it forces a real page reload so React can't write stale
 // in-memory state back into the freshly-cleared localStorage.
-const CLEAN_SLATE_VERSION = "2026-08-11-v3";
+const CLEAN_SLATE_VERSION = "2026-08-11-v4";
 (function enforceCleanSlate() {
   try {
     if (localStorage.getItem("ic-app-version") !== CLEAN_SLATE_VERSION) {
-      [
-        "island-city-trips", "island-city-expenses", "island-city-hours",
-        "island-city-last-saved", "island-city-trips-count",
-        "ic-custom-exp-types", "ic-custom-exp-cats", "ic-custom-vendors",
-        "ic-last-shift-date",
-      ].forEach(k => localStorage.removeItem(k));
+      // localStorage.clear() — nukes everything, no partial key list that can miss entries.
+      // Set version immediately after so the next load sees a match and skips the wipe.
+      localStorage.clear();
       localStorage.setItem("ic-app-version", CLEAN_SLATE_VERSION);
-      // Hard reload so React re-initialises from the now-empty storage.
-      // Without this, HMR preserves the old in-memory state and immediately
-      // writes the old trips back, making the wipe appear to do nothing.
+      // Hard reload forces React to re-initialise from the now-empty storage instead
+      // of writing the old in-memory state back (HMR race condition).
       window.location.reload();
     }
   } catch {}
