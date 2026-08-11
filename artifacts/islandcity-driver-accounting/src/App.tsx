@@ -367,7 +367,9 @@ function PlatformAvatar({
 // Change this version string any time you need a forced wipe.
 // The app checks on every load; if the stored version differs, it clears all
 // data keys and sets the new version — then normal initialization runs fresh.
-// One-time reset: bump version to clear all data once, then stays clean forever.
+// One-time reset: bump version string below to wipe all data on the next load.
+// After clearing it forces a real page reload so React can't write stale
+// in-memory state back into the freshly-cleared localStorage.
 const CLEAN_SLATE_VERSION = "2026-08-11-v3";
 (function enforceCleanSlate() {
   try {
@@ -379,6 +381,10 @@ const CLEAN_SLATE_VERSION = "2026-08-11-v3";
         "ic-last-shift-date",
       ].forEach(k => localStorage.removeItem(k));
       localStorage.setItem("ic-app-version", CLEAN_SLATE_VERSION);
+      // Hard reload so React re-initialises from the now-empty storage.
+      // Without this, HMR preserves the old in-memory state and immediately
+      // writes the old trips back, making the wipe appear to do nothing.
+      window.location.reload();
     }
   } catch {}
 })();
@@ -945,18 +951,18 @@ export default function App() {
 
   const handleDelete = (id: string) => {
     if (!window.confirm("Delete this trip? This cannot be undone.")) return;
-    setTrips(trips.filter(t => t.id !== id));
+    setTrips(prev => prev.filter(t => t.id !== id));   // functional form — never stale
     showToast("Trip deleted");
   };
 
   const handleUnpostTrip = (id: string) => {
-    setTrips(trips.map(t => t.id !== id ? t : { ...t, status: "pending" as const, reviewed: false, postedAt: undefined }));
+    setTrips(prev => prev.map(t => t.id !== id ? t : { ...t, status: "pending" as const, reviewed: false, postedAt: undefined }));
     showToast("Trip moved back to Register");
   };
 
   const handleDeletePostedTrip = (id: string) => {
     if (!window.confirm("Delete this posted trip permanently? This cannot be undone.")) return;
-    setTrips(trips.filter(t => t.id !== id));
+    setTrips(prev => prev.filter(t => t.id !== id));   // functional form — never stale
     showToast("Posted trip deleted");
   };
 
@@ -966,12 +972,11 @@ export default function App() {
   };
 
   const handleInlineSave = (id: string) => {
-    const updated = trips.map(t => {
+    setTrips(prev => prev.map(t => {
       if (t.id !== id) return t;
       const newEarnings = parseFloat(inlineForm.earnings) || 0;
       return { ...t, pickup: inlineForm.pickup, dropoff: inlineForm.dropoff, earnings: newEarnings, reference: inlineForm.reference, grandTotal: newEarnings + t.tips + t.extra + t.toll - t.fee };
-    });
-    setTrips(updated);
+    }));
     setInlineEditId(null);
     showToast("Trip updated ✓");
   };
@@ -980,12 +985,11 @@ export default function App() {
     if (selectedForPost.size === 0) return;
     const now = new Date().toISOString();
     const count = selectedForPost.size;
-    const updated = trips.map(t =>
+    setTrips(prev => prev.map(t =>
       selectedForPost.has(t.id)
         ? { ...t, status: "posted" as const, reviewed: true, postedAt: now }
         : t
-    );
-    setTrips(updated);
+    ));
     setSelectedForPost(new Set());
     showToast(`${count} trip${count !== 1 ? "s" : ""} posted to Ledger ✓`);
     setActiveTab("LEDGER");
@@ -1025,12 +1029,12 @@ export default function App() {
 
   const handleDeleteExpense = (id: string) => {
     if (!window.confirm("¿Eliminar este gasto?")) return;
-    setExpenses(expenses.filter(e => e.id !== id));
+    setExpenses(prev => prev.filter(e => e.id !== id));
     showToast("Gasto eliminado");
   };
 
   const handleToggleExpenseVerified = (id: string) => {
-    setExpenses(expenses.map(e => e.id === id ? { ...e, verified: !e.verified } : e));
+    setExpenses(prev => prev.map(e => e.id === id ? { ...e, verified: !e.verified } : e));
   };
 
   const goldGradientStyle = {
