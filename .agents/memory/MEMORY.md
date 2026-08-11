@@ -1,0 +1,2 @@
+- [Driver ledger posting rule](driver-ledger-posting.md) — Financial statements include only Reconciled and Closed trips; Pending captures stay editable in the Register.
+- [Completed dashboard features](dashboard-features.md) — All six dashboard/export TODOs resolved; key decisions and UI element IDs to be aware of.
