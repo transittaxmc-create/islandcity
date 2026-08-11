@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useRef } from "react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 type TurnStatus = "START" | "BREAK" | "END";
-type Tab = "ENTRY" | "REGISTER" | "DASHBOARD" | "EXPENSES" | "REPORTS" | "LEDGER";
+type Tab = "ENTRY" | "REGISTER" | "DASHBOARD" | "EXPENSES" | "REPORTS" | "LEDGER" | "FINANCES";
 
 type Trip = {
   id: string;
@@ -62,6 +63,8 @@ type Expense = {
   note: string;         // description (label kept for localStorage compat)
   type?: string;        // expense type (dropdown)
   verified?: boolean;   // audit flag
+  frequency?: "none" | "daily" | "weekly" | "monthly"; // recurrence
+  dueDate?: string;     // next due date for recurring expenses
 };
 type ProjectionEntry = { date: string; projectedRevenue: number; projectedSavings: number; }; type FinancialSummary = { totalRevenue: number; totalExpenses: number; netIncome: number; projections: ProjectionEntry[]; };
 // ── Toll plaza list — update rates each January ───────────────────────────
@@ -486,6 +489,8 @@ export default function App() {
   const [expenseForm, setExpenseForm] = useState({
     name: "", type: "Gasoline / Fuel", category: "Vehicle & Fuel",
     description: "", amount: "", date: new Date().toISOString().slice(0, 10),
+    frequency: "none" as "none" | "daily" | "weekly" | "monthly",
+    dueDate: "",
   });
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
 
@@ -505,6 +510,14 @@ export default function App() {
   const [newCustomType,   setNewCustomType]   = useState("");
   const [newCustomCat,    setNewCustomCat]    = useState("");
   const [newCustomVendor, setNewCustomVendor] = useState("");
+
+  // FINANCES — goal + working days (persisted)
+  const [dailyGoal, setDailyGoal] = useState<number>(() => {
+    try { return parseInt(localStorage.getItem("ic-daily-goal") || "500") || 500; } catch { return 500; }
+  });
+  const [workDays, setWorkDays] = useState<number[]>(() => {
+    try { return JSON.parse(localStorage.getItem("ic-work-days") || "[1,2,3,4,5]"); } catch { return [1,2,3,4,5]; }
+  });
 
   // Live clock
   useEffect(() => {
@@ -548,6 +561,10 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem("island-city-hours", JSON.stringify(hoursLog)); } catch {}
   }, [hoursLog]);
+
+  // Persist FINANCES settings
+  useEffect(() => { try { localStorage.setItem("ic-daily-goal", String(dailyGoal)); } catch {} }, [dailyGoal]);
+  useEffect(() => { try { localStorage.setItem("ic-work-days", JSON.stringify(workDays)); } catch {} }, [workDays]);
 
   // Keep refs in sync so the pagehide listener always has the latest state
   useEffect(() => { tripsRef.current    = trips;    }, [trips]);
@@ -903,14 +920,13 @@ export default function App() {
     [trips, currentTime]
   );
 
-  // ── $500 daily goal ──────────────────────────────────────────
-  const DAILY_GOAL_USD = 500;
-  const goalPct        = Math.min((grossToday / DAILY_GOAL_USD) * 100, 100);
-  const remainingToGoal = Math.max(DAILY_GOAL_USD - grossToday, 0);
+  // ── Daily goal (driven by FINANCES settings) ─────────────────
+  const goalPct        = Math.min((grossToday / dailyGoal) * 100, 100);
+  const remainingToGoal = Math.max(dailyGoal - grossToday, 0);
   const projectedFinish = useMemo(() => {
-    if (perHourGross <= 0 || grossToday >= DAILY_GOAL_USD) return null;
+    if (perHourGross <= 0 || grossToday >= dailyGoal) return null;
     return new Date(Date.now() + (remainingToGoal / perHourGross) * 3600000);
-  }, [perHourGross, remainingToGoal, grossToday]);
+  }, [perHourGross, remainingToGoal, grossToday, dailyGoal]);
 
   // ── Smart suggestion (time-of-day + pace) ────────────────────
   const smartSuggestion = useMemo(() => {
@@ -918,7 +934,7 @@ export default function App() {
     const dow = currentTime.getDay();
     const wd  = dow >= 1 && dow <= 5;
     const we  = !wd;
-    if (grossToday >= DAILY_GOAL_USD)
+    if (grossToday >= dailyGoal)
       return { emoji: "🏆", text: "$500 goal reached! Outstanding shift.", type: "gold" };
     if (wd && h >= 7 && h < 9)
       return { emoji: "🔥", text: "Morning rush — Midtown, Queens→Manhattan, Penn Station. Stay on the move.", type: "hot" };
@@ -1054,6 +1070,7 @@ export default function App() {
   const resetExpenseForm = () => setExpenseForm({
     name: "", type: "Gasoline / Fuel", category: "Vehicle & Fuel",
     description: "", amount: "", date: new Date().toISOString().slice(0, 10),
+    frequency: "none", dueDate: "",
   });
 
   const handleSaveExpense = () => {
@@ -1071,6 +1088,8 @@ export default function App() {
       verified: editingExpenseId
         ? (expenses.find(e => e.id === editingExpenseId)?.verified ?? false)
         : false,
+      frequency: expenseForm.frequency !== "none" ? expenseForm.frequency : undefined,
+      dueDate: expenseForm.dueDate || undefined,
     };
     if (editingExpenseId) {
       syncSaveExpenses(expenses.map(e => e.id === editingExpenseId ? newExpense : e));
@@ -1248,12 +1267,12 @@ export default function App() {
           </div>
           <div className="flex items-center justify-between text-[10px] font-mono-jet">
             <span className="text-neutral-500">
-              {grossToday >= DAILY_GOAL_USD ? "🏆 Goal reached!" : `Faltan $${remainingToGoal.toFixed(2)}`}
+              {grossToday >= dailyGoal ? "🏆 Goal reached!" : `Faltan $${remainingToGoal.toFixed(2)}`}
             </span>
             <span className="text-neutral-400">
               {projectedFinish
                 ? `Llegas ~${projectedFinish.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
-                : grossToday >= DAILY_GOAL_USD ? "✓ Done" : "—"}
+                : grossToday >= dailyGoal ? "✓ Done" : "—"}
             </span>
           </div>
         </div>
@@ -1301,7 +1320,7 @@ export default function App() {
             <span className="text-[16px] flex-shrink-0 mt-0.5">{smartSuggestion.emoji}</span>
             <p className="text-[11px] leading-[1.5] text-neutral-200">{smartSuggestion.text}</p>
           </div>
-          {perHourGross > 0 && grossToday < DAILY_GOAL_USD && (
+          {perHourGross > 0 && grossToday < dailyGoal && (
             <p className="text-[10px] font-mono-jet text-neutral-500 mt-2">
               A este ritmo necesitas {perHourGross > 0 ? `${(remainingToGoal / perHourGross).toFixed(1)}h` : "—"} más para $500
             </p>
@@ -2141,6 +2160,33 @@ export default function App() {
                 className="w-full h-11 rounded-xl bg-black border border-[#262626] px-2 text-white text-[11px] focus:outline-none" />
             </div>
           </div>
+
+          {/* Frequency (recurring) */}
+          <div>
+            <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest mb-1.5 block">Frecuencia (gasto recurrente)</label>
+            <div className="flex gap-1.5">
+              {(["none","daily","weekly","monthly"] as const).map(f => (
+                <button key={f} onClick={() => setExpenseForm(s => ({ ...s, frequency: f }))}
+                  className={`flex-1 h-9 rounded-xl text-[10px] font-bold transition-colors ${
+                    expenseForm.frequency === f
+                      ? "bg-[#facc15] text-black"
+                      : "bg-[#1e1e1e] text-neutral-500 border border-[#262626] hover:text-white"
+                  }`}>
+                  {f === "none" ? "Una vez" : f === "daily" ? "Diario" : f === "weekly" ? "Semanal" : "Mensual"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Due date — only if recurring */}
+          {expenseForm.frequency !== "none" && (
+            <div>
+              <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest mb-1 block">Próxima fecha de vencimiento</label>
+              <input type="date" value={expenseForm.dueDate}
+                onChange={e => setExpenseForm(s => ({ ...s, dueDate: e.target.value }))}
+                className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[13px] focus:outline-none" />
+            </div>
+          )}
 
           {/* Buttons */}
           <div className="flex gap-2 pt-1">
