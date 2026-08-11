@@ -127,46 +127,33 @@ async function reverseGeocodeRich(
   const placeName: string = data.name || "";
 
   const parts: string[] = [];
+  const city = addr.city || addr.town || addr.village || addr.county || "";
+  const road  = addr.road || addr.pedestrian || addr.footway || addr.path || "";
 
-  // 3. Named POI
+  // 3. Branch by location type
   if (addr.aeroway === "terminal" && placeName) {
+    // Airport terminal → full name
     const airport = addr.aerodrome || nearAirport?.name || "Airport";
     parts.push(`${airport} – ${placeName}`);
   } else if (addr.aeroway === "aerodrome" || addr.aerodrome) {
+    // Aerodrome → airport name
     parts.push(nearAirport?.name || addr.aerodrome || placeName || "Airport");
   } else if (nearAirport && nearAirport.dist < 2) {
+    // Within 2 km of known airport → airport name
     parts.push(nearAirport.name);
-  } else if (
-    placeName &&
-    (addr.amenity || addr.tourism || addr.building ||
-      addr.leisure || addr.shop || addr.office || addr.healthcare)
-  ) {
+  } else if (placeName && addr.amenity === "hospital") {
+    // Hospital → name + city
     parts.push(placeName);
+    if (city) parts.push(city);
+  } else {
+    // Everything else (house, business, office, restaurant…) → street + city only
+    if (road) {
+      parts.push(road);          // no house number
+    } else if (placeName) {
+      parts.push(placeName);     // last resort fallback
+    }
+    if (city) parts.push(city);
   }
-
-  // 4. Street address
-  const houseNum = addr.house_number || "";
-  const road =
-    addr.road || addr.pedestrian || addr.footway || addr.path || "";
-  if (road) {
-    parts.push(houseNum ? `${houseNum} ${road}` : road);
-  } else if (!parts.length && placeName) {
-    parts.push(placeName);
-  }
-
-  // 5. Neighbourhood / borough
-  const nbhd =
-    addr.neighbourhood || addr.suburb || addr.quarter || addr.borough || "";
-  if (nbhd) parts.push(nbhd);
-
-  // 6. City
-  const city =
-    addr.city || addr.town || addr.village || addr.county || "";
-  if (city) parts.push(city);
-
-  // 7. State abbreviation
-  const st = STATE_ABBR[addr.state] || "";
-  if (st) parts.push(st);
 
   // 8. Coordinates suffix (always included)
   const coord = `${lat.toFixed(5)},${lng.toFixed(5)}`;
