@@ -1,2 +1,3 @@
-- [Driver ledger posting rule](driver-ledger-posting.md) — Financial statements include only Reconciled and Closed trips; Pending captures stay editable in the Register.
+- [Driver ledger posting rule](driver-ledger-posting.md) — Financial statements include only posted (Ledger) trips; pending stays editable in Register.
 - [Completed dashboard features](dashboard-features.md) — All six dashboard/export TODOs resolved; key decisions and UI element IDs to be aware of.
+- [Register-Ledger workflow](register-ledger-workflow.md) — Full audit workflow: Trip.status pending→posted, checkbox selection, day-grouping, floating POST button, sticky totals bar.

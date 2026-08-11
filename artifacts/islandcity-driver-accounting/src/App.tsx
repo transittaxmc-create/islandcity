@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 
 type TurnStatus = "START" | "BREAK" | "END";
-type Tab = "ENTRY" | "REGISTER" | "DASHBOARD" | "EXPENSES" | "REPORTS";
+type Tab = "ENTRY" | "REGISTER" | "DASHBOARD" | "EXPENSES" | "REPORTS" | "LEDGER";
 
 type Trip = {
   id: string;
@@ -20,6 +20,9 @@ type Trip = {
   date: string;
   timestamp: string;
   gps?: { lat: number; lng: number; acc?: number };
+  status: "pending" | "posted";
+  reviewed: boolean;
+  postedAt?: string;
 };
 
 type TripForm = {
@@ -221,6 +224,7 @@ const initialTrips: Trip[] = [
     time: "7:12 PM", date: new Date().toISOString().slice(0, 10),
     timestamp: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
     gps: { lat: 40.758, lng: -73.9855 },
+    status: "pending" as const, reviewed: false,
   },
   {
     id: "2", reference: "IC-8822", earnings: 12.0, tips: 2, extra: 5, toll: 0, fee: 1.8,
@@ -229,6 +233,7 @@ const initialTrips: Trip[] = [
     time: "8:31 PM", date: new Date().toISOString().slice(0, 10),
     timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
     gps: { lat: 40.76, lng: -73.97 },
+    status: "pending" as const, reviewed: false,
   },
 ];
 
@@ -299,7 +304,10 @@ export default function App() {
       const raw = localStorage.getItem("island-city-trips");
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0)
+          return parsed.map((t: Trip) => ({
+            status: "pending" as const, reviewed: false, ...t,
+          }));
       }
     } catch {}
     return initialTrips;
@@ -342,6 +350,7 @@ export default function App() {
   const [showDropoffMenu, setShowDropoffMenu] = useState(false);
   const [pickupResolving, setPickupResolving] = useState(false);
   const [dropoffResolving, setDropoffResolving] = useState(false);
+  const [selectedForPost, setSelectedForPost] = useState<Set<string>>(new Set());
 
   // Storage state
   const [lastSavedAt, setLastSavedAt] = useState<string>(() => {
@@ -606,6 +615,8 @@ export default function App() {
       date: toYYYYMMDD(now),
       timestamp: now.toISOString(),
       gps: gps.lat && gps.lng ? { lat: gps.lat, lng: gps.lng, acc: gps.acc ?? undefined } : undefined,
+      status: "pending" as const,
+      reviewed: false,
     };
     const updated = editingId ? trips.map(p => p.id === editingId ? newTrip : p) : [newTrip, ...trips];
     setTrips(updated);
@@ -644,6 +655,21 @@ export default function App() {
     setTrips(updated);
     setInlineEditId(null);
     showToast("Trip updated ✓");
+  };
+
+  const handlePostToLedger = () => {
+    if (selectedForPost.size === 0) return;
+    const now = new Date().toISOString();
+    const count = selectedForPost.size;
+    const updated = trips.map(t =>
+      selectedForPost.has(t.id)
+        ? { ...t, status: "posted" as const, reviewed: true, postedAt: now }
+        : t
+    );
+    setTrips(updated);
+    setSelectedForPost(new Set());
+    showToast(`${count} trip${count !== 1 ? "s" : ""} posted to Ledger ✓`);
+    setActiveTab("LEDGER");
   };
 
   const handleSaveExpense = () => {
@@ -1132,119 +1158,322 @@ export default function App() {
   );
 
   // ─── Register ─────────────────────────────────────────────────
+  const pendingTrips = trips.filter(t => (t.status ?? "pending") === "pending");
+  const postedTrips  = trips.filter(t => t.status === "posted");
+
+  const pendingByDate: Record<string, Trip[]> = {};
+  for (const t of pendingTrips) {
+    if (!pendingByDate[t.date]) pendingByDate[t.date] = [];
+    pendingByDate[t.date].push(t);
+  }
+  const pendingSortedDates = Object.keys(pendingByDate).sort((a, b) => b.localeCompare(a));
+  const pendingTotal    = pendingTrips.reduce((a, b) => a + b.grandTotal, 0);
+  const pendingTodayAmt = pendingTrips.filter(t => t.date === toYYYYMMDD(currentTime)).reduce((a, b) => a + b.grandTotal, 0);
+  const selectedCount   = selectedForPost.size;
+  const selectedAmt     = pendingTrips.filter(t => selectedForPost.has(t.id)).reduce((a, b) => a + b.grandTotal, 0);
+
   const RegisterContent = (
-    <div className="space-y-5">
+    <div className="space-y-4 pb-24">
+      {/* Page header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-[22px] font-bold text-white tracking-tight">Trip Register</h2>
-        <span className="text-[14px] text-neutral-500 font-mono-jet">{todayTrips.length} today · {trips.length} total</span>
+        <h2 className="text-[22px] font-bold text-white tracking-tight">Register</h2>
+        <div className="flex items-center gap-2">
+          {selectedCount > 0 && (
+            <span className="px-2.5 py-1 rounded-full bg-[#facc15]/20 border border-[#facc15]/40 text-[#f6dd8c] text-[10px] font-bold">
+              {selectedCount} selected
+            </span>
+          )}
+          <span className="font-mono-jet text-[12px] text-neutral-500">{pendingTrips.length} pending</span>
+        </div>
       </div>
 
-      <div className={`rounded-2xl border p-3.5 flex items-center justify-between ${storageVerified ? "bg-[#052e16]/30 border-[#166534]/40" : "bg-[#1a0a0a] border-[#7f1d1d]/40"}`}>
-        <div className="flex items-center gap-2.5">
-          <span className={`w-2 h-2 rounded-full ${storageVerified ? "bg-[#22c55e] animate-pulse" : "bg-red-500"}`} />
-          <div>
-            <p className="text-[11px] font-bold tracking-[0.12em] text-white uppercase">Local Storage</p>
-            <p className="font-mono-jet text-[10px] text-neutral-400">
-              {trips.length} trips · {(storageBytes / 1024).toFixed(2)}KB · {lastSavedAt !== "—" ? new Date(lastSavedAt).toLocaleTimeString() : "—"}
-            </p>
-          </div>
+      {/* Sticky totals bar — always visible while scrolling */}
+      <div className="sticky top-[112px] z-20 -mx-4 px-4 pt-2 pb-3 bg-black/96 backdrop-blur-sm border-b border-[#1a1a1a]">
+        <div className="grid grid-cols-3 gap-2">
+          {([
+            ["PENDING", pendingTrips.length + (pendingTrips.length === 1 ? " trip" : " trips")],
+            ["TODAY",   "$" + pendingTodayAmt.toFixed(2)],
+            ["TOTAL",   "$" + pendingTotal.toFixed(2)],
+          ] as [string, string][]).map(([lbl, val]) => (
+            <div key={lbl} className="bg-[#0d0d0d] border border-[#1e1e1e] rounded-xl p-2 text-center">
+              <p className="text-[8px] tracking-[0.15em] text-neutral-600 font-bold uppercase">{lbl}</p>
+              <p className="font-mono-jet text-[14px] font-bold text-[#f6dd8c] mt-0.5">{val}</p>
+            </div>
+          ))}
         </div>
-        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${storageVerified ? "bg-[#22c55e]/20 text-[#4ade80] border border-[#166534]" : "bg-red-900/30 text-red-400"}`}>
-          {storageVerified ? "✓ SAVED" : "✗ ERROR"}
+      </div>
+
+      {/* Storage pill */}
+      <div className={`rounded-xl border px-3 py-2 flex items-center justify-between ${storageVerified ? "bg-[#052e16]/20 border-[#166534]/30" : "bg-[#1a0a0a] border-[#7f1d1d]/30"}`}>
+        <div className="flex items-center gap-2">
+          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${storageVerified ? "bg-[#22c55e] animate-pulse" : "bg-red-500"}`} />
+          <p className="font-mono-jet text-[10px] text-neutral-500">{trips.length} total · {(storageBytes / 1024).toFixed(2)}KB · {lastSavedAt !== "—" ? new Date(lastSavedAt).toLocaleTimeString() : "—"}</p>
+        </div>
+        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold flex-shrink-0 ${storageVerified ? "bg-[#22c55e]/20 text-[#4ade80] border border-[#166534]" : "bg-red-900/30 text-red-400"}`}>
+          {storageVerified ? "✓ SAVED" : "✗ ERR"}
         </span>
       </div>
 
-      {trips.length === 0 ? (
-        <div className="bg-[#141414] border border-[#222] rounded-2xl p-8 text-center">
-          <p className="text-[14px] text-neutral-400">No trips logged yet</p>
+      {/* Empty state */}
+      {pendingTrips.length === 0 ? (
+        <div className="bg-[#141414] border border-[#222] rounded-2xl p-10 text-center space-y-2">
+          <p className="text-[15px] font-semibold text-white">All trips posted ✓</p>
+          <p className="text-[12px] text-neutral-500">Nothing pending — check the Ledger tab</p>
           <button onClick={() => setActiveTab("ENTRY")}
-            className="mt-4 h-10 px-5 rounded-full border border-[#d9b64f]/50 text-[#f6dd8c] text-[12px] font-semibold hover:bg-[#f6dd8c]/10 transition-colors">
+            className="mt-3 h-10 px-6 rounded-full border border-[#d9b64f]/50 text-[#f6dd8c] text-[12px] font-semibold hover:bg-[#f6dd8c]/10 transition-colors">
             + Log a trip
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
-          {trips.map(t => {
-            const pm = getPlatformMeta(t.platform);
-            return (
-              <div key={t.id} className="bg-[#141414] border border-[#222] rounded-2xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono-jet text-[12px] text-neutral-400">{t.time} · {t.date}</span>
-                    <PlatformAvatar meta={pm} size="sm" />
-                    <span className="px-3 py-1 rounded-full bg-[#1e1e1e] border border-[#333] text-[#e8c766] text-[10px] font-bold tracking-[0.12em]">{t.platform.toUpperCase()}</span>
-                    {pm.tags.map(tg => (
-                      <span key={tg} className={`text-[9px] font-bold uppercase tracking-[0.1em] px-2 py-0.5 rounded-full border ${getTagStyle(tg)}`}>{tg}</span>
-                    ))}
-                  </div>
-                  <span className="font-mono-jet text-[18px] font-bold text-[#facc15]">${t.grandTotal.toFixed(2)}</span>
-                </div>
-                {t.reference && <p className="font-mono-jet text-[11px] text-neutral-500">REF: {t.reference}</p>}
-                <p className="text-[14px] text-white font-medium">
-                  {t.pickup || "—"} <span className="text-neutral-500 mx-2">→</span> {t.dropoff || "—"}
-                </p>
-                <div className="flex gap-3 font-mono-jet text-[10px] text-neutral-500 flex-wrap">
-                  <span>Fare ${t.earnings.toFixed(2)}</span>
-                  <span>Tips ${t.tips.toFixed(2)}</span>
-                  {t.toll > 0 && <span>Toll ${t.toll.toFixed(2)}</span>}
-                  {t.fee > 0 && <span>Fee −${t.fee.toFixed(2)}</span>}
-                  {t.gps && <span>📍 {t.gps.lat.toFixed(3)},{t.gps.lng.toFixed(3)}</span>}
-                </div>
-                {t.notes && <p className="text-[12px] text-neutral-400 leading-[1.4]">{t.notes}</p>}
+        <div className="space-y-5">
+          {pendingSortedDates.map(date => {
+            const dayTrips = pendingByDate[date];
+            const dayTotal = dayTrips.reduce((a, b) => a + b.grandTotal, 0);
+            const allSel   = dayTrips.every(t => selectedForPost.has(t.id));
+            const someSel  = dayTrips.some(t  => selectedForPost.has(t.id));
+            const dayLabel = new Date(date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 
-                {inlineEditId === t.id ? (
-                  <div className="bg-[#0a0a0a] border border-[#222] rounded-xl p-3 space-y-2">
-                    {[["Reference", "reference"], ["Pickup", "pickup"], ["Drop-off", "dropoff"]].map(([ph, key]) => (
-                      <input key={key} value={inlineForm[key as keyof typeof inlineForm]}
-                        onChange={e => setInlineForm(s => ({ ...s, [key]: e.target.value }))}
-                        placeholder={ph}
-                        className="w-full h-10 rounded-lg bg-black border border-[#262626] px-3 text-[13px] text-white placeholder:text-[#6b7280] focus:outline-none" />
-                    ))}
-                    <input value={inlineForm.earnings} inputMode="decimal"
-                      onChange={e => setInlineForm(s => ({ ...s, earnings: e.target.value }))}
-                      placeholder="Earnings"
-                      className="w-full h-10 rounded-lg bg-black border border-[#262626] px-3 text-[13px] text-white font-mono-jet placeholder:text-[#6b7280] focus:outline-none" />
-                    <div className="flex gap-2">
-                      <button onClick={() => handleInlineSave(t.id)} className="flex-1 h-9 rounded-full bg-[#facc15] text-black text-[12px] font-bold">Save</button>
-                      <button onClick={() => setInlineEditId(null)} className="flex-1 h-9 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-400 text-[12px]">Cancel</button>
+            return (
+              <div key={date} className="space-y-2">
+                {/* Day header with master checkbox */}
+                <div className="flex items-center gap-3 px-1">
+                  <button
+                    onClick={() => {
+                      const ids = new Set(selectedForPost);
+                      if (allSel) { dayTrips.forEach(t => ids.delete(t.id)); }
+                      else        { dayTrips.forEach(t => ids.add(t.id));    }
+                      setSelectedForPost(ids);
+                    }}
+                    className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                      allSel  ? "bg-[#facc15] border-[#facc15]" :
+                      someSel ? "bg-[#facc15]/30 border-[#facc15]/60" :
+                                "border-[#444] bg-transparent hover:border-[#888]"
+                    }`}
+                  >
+                    {allSel  && <span className="text-black text-[10px] font-bold leading-none">✓</span>}
+                    {!allSel && someSel && <span className="text-[#facc15] text-[10px] font-bold leading-none">−</span>}
+                  </button>
+                  <div className="flex-1 flex items-center justify-between">
+                    <span className="text-[11px] font-bold tracking-[0.12em] text-neutral-400 uppercase">{dayLabel}</span>
+                    <span className="font-mono-jet text-[11px] text-neutral-500">{dayTrips.length} trip{dayTrips.length !== 1 ? "s" : ""} · ${dayTotal.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {/* Trip cards for this day */}
+                {dayTrips.map(t => {
+                  const pm    = getPlatformMeta(t.platform);
+                  const isSel = selectedForPost.has(t.id);
+                  const liveFare = parseFloat(inlineEditId === t.id ? inlineForm.earnings : String(t.earnings)) || 0;
+                  const liveTotal = liveFare + t.tips + t.extra + t.toll - t.fee;
+
+                  return (
+                    <div key={t.id} className={`border rounded-2xl p-4 space-y-3 transition-all duration-150 ${isSel ? "bg-[#141410] border-[#facc15]/30" : "bg-[#141414] border-[#222]"}`}>
+                      <div className="flex items-start gap-3">
+                        {/* Per-trip checkbox */}
+                        <button
+                          onClick={() => {
+                            const ids = new Set(selectedForPost);
+                            if (ids.has(t.id)) ids.delete(t.id); else ids.add(t.id);
+                            setSelectedForPost(ids);
+                          }}
+                          className={`mt-1 w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                            isSel ? "bg-[#facc15] border-[#facc15]" : "border-[#444] bg-transparent hover:border-[#888]"
+                          }`}
+                        >
+                          {isSel && <span className="text-black text-[10px] font-bold leading-none">✓</span>}
+                        </button>
+
+                        <div className="flex-1 min-w-0">
+                          {/* Time + platform + amount row */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2 flex-wrap min-w-0">
+                              <span className="font-mono-jet text-[11px] text-neutral-500">{t.time}</span>
+                              <PlatformAvatar meta={pm} size="sm" />
+                              <span className="px-2 py-0.5 rounded-full bg-[#1e1e1e] border border-[#333] text-[#e8c766] text-[9px] font-bold tracking-[0.12em]">{t.platform.toUpperCase()}</span>
+                              {pm.tags.map(tg => (
+                                <span key={tg} className={`text-[8px] font-bold uppercase tracking-[0.1em] px-2 py-0.5 rounded-full border ${getTagStyle(tg)}`}>{tg}</span>
+                              ))}
+                            </div>
+                            <span className="font-mono-jet text-[17px] font-bold text-[#facc15] flex-shrink-0">${t.grandTotal.toFixed(2)}</span>
+                          </div>
+
+                          {t.reference && <p className="font-mono-jet text-[10px] text-neutral-600 mt-1">REF: {t.reference}</p>}
+
+                          <p className="text-[13px] text-white/80 font-medium mt-1.5 leading-[1.3] break-words">
+                            {t.pickup || "—"} <span className="text-neutral-600 mx-1">→</span> {t.dropoff || "—"}
+                          </p>
+
+                          <div className="flex gap-2 font-mono-jet text-[9px] text-neutral-600 flex-wrap mt-1">
+                            <span>Fare ${t.earnings.toFixed(2)}</span>
+                            {t.tips > 0  && <span>Tips ${t.tips.toFixed(2)}</span>}
+                            {t.extra > 0 && <span>Extra ${t.extra.toFixed(2)}</span>}
+                            {t.toll > 0  && <span>Toll ${t.toll.toFixed(2)}</span>}
+                            {t.fee > 0   && <span>Fee −${t.fee.toFixed(2)}</span>}
+                            {t.gps       && <span>📍 {t.gps.lat.toFixed(4)},{t.gps.lng.toFixed(4)}</span>}
+                          </div>
+                          {t.notes && <p className="text-[11px] text-neutral-500 mt-1 leading-[1.4] break-words">{t.notes}</p>}
+                        </div>
+                      </div>
+
+                      {/* Inline edit form */}
+                      {inlineEditId === t.id ? (
+                        <div className="bg-[#0a0a0a] border border-[#222] rounded-xl p-3 space-y-2">
+                          {[["Reference", "reference"], ["Pickup", "pickup"], ["Drop-off", "dropoff"]].map(([ph, key]) => (
+                            <input key={key}
+                              value={inlineForm[key as keyof typeof inlineForm]}
+                              onChange={e => setInlineForm(s => ({ ...s, [key]: e.target.value }))}
+                              placeholder={ph}
+                              className="w-full h-10 rounded-lg bg-black border border-[#262626] px-3 text-[13px] text-white placeholder:text-[#6b7280] focus:outline-none" />
+                          ))}
+                          <input value={inlineForm.earnings} inputMode="decimal"
+                            onChange={e => setInlineForm(s => ({ ...s, earnings: e.target.value }))}
+                            placeholder="Earnings"
+                            className="w-full h-10 rounded-lg bg-black border border-[#262626] px-3 text-[13px] text-white font-mono-jet placeholder:text-[#6b7280] focus:outline-none" />
+                          {/* Live total preview */}
+                          <div className="flex items-center justify-between bg-black rounded-lg px-3 py-2 border border-[#1e1e1e]">
+                            <span className="font-mono-jet text-[9px] text-neutral-600 truncate pr-2">
+                              ${liveFare.toFixed(2)} fare + ${t.tips.toFixed(2)} tips + ${t.extra.toFixed(2)} extra + ${t.toll.toFixed(2)} toll − ${t.fee.toFixed(2)} fee
+                            </span>
+                            <span className="font-mono-jet text-[15px] font-bold text-[#facc15] flex-shrink-0">
+                              = ${liveTotal.toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => handleInlineSave(t.id)} className="flex-1 h-9 rounded-full bg-[#facc15] text-black text-[12px] font-bold">Save</button>
+                            <button onClick={() => setInlineEditId(null)} className="flex-1 h-9 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-400 text-[12px]">Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-3 gap-2 pt-1">
+                          <button onClick={() => handleInlineEditStart(t)}
+                            className="h-9 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-white text-[11px] font-semibold hover:bg-[#252525] transition-colors">
+                            ✏️ Quick
+                          </button>
+                          <button onClick={() => handleEditToEntry(t)}
+                            className="h-9 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-[#f6dd8c] text-[11px] font-semibold hover:bg-[#252525] transition-colors">
+                            Full Edit
+                          </button>
+                          <button onClick={() => handleDelete(t.id)}
+                            className="h-9 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-[#f87171] text-[11px] font-semibold hover:bg-[#2a1a1a] transition-colors">
+                            Delete
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-3 gap-2 pt-1">
-                    <button onClick={() => handleInlineEditStart(t)}
-                      className="h-10 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-white text-[12px] font-semibold hover:bg-[#252525] transition-colors">
-                      ✏️ Quick
-                    </button>
-                    <button onClick={() => handleEditToEntry(t)}
-                      className="h-10 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-[#f6dd8c] text-[12px] font-semibold hover:bg-[#252525] transition-colors">
-                      Full Edit
-                    </button>
-                    <button onClick={() => handleDelete(t.id)}
-                      className="h-10 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-[#f87171] text-[12px] font-semibold hover:bg-[#2a1a1a] transition-colors">
-                      Delete
-                    </button>
-                  </div>
-                )}
+                  );
+                })}
               </div>
             );
           })}
         </div>
       )}
 
-      {trips.length > 0 && (
-        <div className="bg-[#141414] border border-[#222] rounded-2xl p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-[13px] font-bold tracking-[0.12em] text-white uppercase">Day Summary</h3>
-            <span className="font-mono-jet text-[12px] text-[#4ade80]">✓ Auto-saved</span>
-          </div>
-          <div className="grid grid-cols-3 gap-0 bg-black border border-[#1a1a1a] rounded-xl overflow-hidden">
-            {[["Trips", trips.length], ["Today", `$${todayEarnings.toFixed(2)}`], ["Total", `$${trips.reduce((a, b) => a + b.grandTotal, 0).toFixed(2)}`]].map(([label, val]) => (
-              <div key={String(label)} className="p-3 border-r border-[#1a1a1a] last:border-0 text-center">
-                <p className="text-[9px] text-neutral-500 tracking-widest">{label}</p>
-                <p className="font-mono-jet text-[13px] font-semibold mt-1 text-[#f5c518]">{val}</p>
+      {/* Floating POST TO LEDGER button */}
+      {selectedCount > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-[440px] px-4 pointer-events-none">
+          <button
+            onClick={handlePostToLedger}
+            style={{ pointerEvents: "auto" }}
+            className="w-full h-14 rounded-2xl bg-[#facc15] hover:bg-[#fde047] active:scale-[0.98] text-black font-bold text-[14px] tracking-[0.06em] shadow-[0_0_32px_rgba(250,204,21,0.45)] transition-all flex items-center justify-center gap-3">
+            <span>POST {selectedCount} TO LEDGER</span>
+            <span className="font-mono-jet opacity-80">${selectedAmt.toFixed(2)}</span>
+            <span>→</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  // ─── Ledger ───────────────────────────────────────────────────
+  const ledgerByDate: Record<string, Trip[]> = {};
+  for (const t of postedTrips) {
+    if (!ledgerByDate[t.date]) ledgerByDate[t.date] = [];
+    ledgerByDate[t.date].push(t);
+  }
+  const ledgerSortedDates = Object.keys(ledgerByDate).sort((a, b) => b.localeCompare(a));
+  const postedTotal = postedTrips.reduce((a, b) => a + b.grandTotal, 0);
+
+  const LedgerContent = (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-[22px] font-bold text-white tracking-tight">Ledger</h2>
+        <span className="font-mono-jet text-[12px] text-[#4ade80]">{postedTrips.length} posted</span>
+      </div>
+
+      {/* Sticky totals bar */}
+      <div className="sticky top-[112px] z-20 -mx-4 px-4 pt-2 pb-3 bg-black/96 backdrop-blur-sm border-b border-[#1a1a1a]">
+        <div className="grid grid-cols-2 gap-2">
+          {([
+            ["POSTED TRIPS", String(postedTrips.length)],
+            ["LEDGER TOTAL", "$" + postedTotal.toFixed(2)],
+          ] as [string, string][]).map(([lbl, val]) => (
+            <div key={lbl} className="bg-[#0d140d] border border-[#1a3a1a] rounded-xl p-2.5 text-center">
+              <p className="text-[8px] tracking-[0.15em] text-[#4ade80]/50 font-bold uppercase">{lbl}</p>
+              <p className="font-mono-jet text-[15px] font-bold text-[#4ade80] mt-0.5">{val}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {postedTrips.length === 0 ? (
+        <div className="bg-[#141414] border border-[#222] rounded-2xl p-10 text-center space-y-2">
+          <p className="text-[15px] font-semibold text-white">Ledger is empty</p>
+          <p className="text-[12px] text-neutral-500">Review trips in Register and post them here</p>
+          <button onClick={() => setActiveTab("REGISTER")}
+            className="mt-3 h-10 px-6 rounded-full border border-[#166534]/60 text-[#4ade80] text-[12px] font-semibold hover:bg-[#4ade80]/10 transition-colors">
+            Go to Register →
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {ledgerSortedDates.map(date => {
+            const dayTrips = ledgerByDate[date];
+            const dayTotal = dayTrips.reduce((a, b) => a + b.grandTotal, 0);
+            const dayLabel = new Date(date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+            return (
+              <div key={date} className="space-y-2">
+                {/* Day header */}
+                <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#4ade80]" />
+                    <span className="text-[11px] font-bold tracking-[0.12em] text-[#4ade80]/70 uppercase">{dayLabel}</span>
+                  </div>
+                  <span className="font-mono-jet text-[11px] text-[#4ade80]/60">{dayTrips.length} trip{dayTrips.length !== 1 ? "s" : ""} · ${dayTotal.toFixed(2)}</span>
+                </div>
+
+                {/* Posted trip cards — read-only */}
+                {dayTrips.map(t => {
+                  const pm = getPlatformMeta(t.platform);
+                  return (
+                    <div key={t.id} className="bg-[#0c140c] border border-[#1a2e1a] rounded-2xl p-4 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 flex-wrap min-w-0">
+                          <span className="font-mono-jet text-[11px] text-neutral-500">{t.time}</span>
+                          <PlatformAvatar meta={pm} size="sm" />
+                          <span className="px-2 py-0.5 rounded-full bg-[#0d1f0d] border border-[#1a3a1a] text-[#4ade80] text-[9px] font-bold tracking-[0.12em]">{t.platform.toUpperCase()}</span>
+                          <span className="px-2 py-0.5 rounded-full bg-[#052e16] border border-[#166534] text-[#4ade80] text-[8px] font-bold tracking-widest">✓ POSTED</span>
+                        </div>
+                        <span className="font-mono-jet text-[17px] font-bold text-[#4ade80] flex-shrink-0">${t.grandTotal.toFixed(2)}</span>
+                      </div>
+                      {t.reference && <p className="font-mono-jet text-[10px] text-neutral-600">REF: {t.reference}</p>}
+                      <p className="text-[13px] text-white/70 font-medium leading-[1.3] break-words">
+                        {t.pickup || "—"} <span className="text-neutral-600 mx-1">→</span> {t.dropoff || "—"}
+                      </p>
+                      <div className="flex gap-2 font-mono-jet text-[9px] text-neutral-600 flex-wrap">
+                        <span>Fare ${t.earnings.toFixed(2)}</span>
+                        {t.tips > 0  && <span>Tips ${t.tips.toFixed(2)}</span>}
+                        {t.extra > 0 && <span>Extra ${t.extra.toFixed(2)}</span>}
+                        {t.toll > 0  && <span>Toll ${t.toll.toFixed(2)}</span>}
+                        {t.fee > 0   && <span>Fee −${t.fee.toFixed(2)}</span>}
+                        {t.postedAt  && <span>📋 Posted {new Date(t.postedAt).toLocaleDateString()}</span>}
+                      </div>
+                      {t.notes && <p className="text-[11px] text-neutral-600 leading-[1.4] break-words">{t.notes}</p>}
+                    </div>
+                  );
+                })}
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -1340,9 +1569,10 @@ export default function App() {
   );
 
   // ─── Reports ──────────────────────────────────────────────────
-  const grossAll = trips.reduce((a, b) => a + b.grandTotal, 0);
+  // Only posted (Ledger) trips count toward the financial statement
+  const grossAll    = postedTrips.reduce((a, b) => a + b.grandTotal, 0);
   const expensesAll = expenses.reduce((a, b) => a + b.amount, 0);
-  const netAll = grossAll - expensesAll;
+  const netAll      = grossAll - expensesAll;
 
   const ReportsContent = (
     <div className="space-y-4">
@@ -1355,8 +1585,15 @@ export default function App() {
             {currentTime.toLocaleDateString()} · {hoursLog.length} shifts
           </span>
         </div>
+        {/* Source note */}
+        <div className="flex items-center gap-2 -mt-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#4ade80]" />
+          <p className="text-[10px] text-[#4ade80]/70 font-mono-jet">
+            {postedTrips.length} posted (Ledger) · {pendingTrips.length} pending (Register, excluded)
+          </p>
+        </div>
         <div className="space-y-3">
-          {[["Gross Earnings", `$${grossAll.toFixed(2)}`, "text-white"], ["Operating Expenses", `−$${expensesAll.toFixed(2)}`, "text-[#ff6b6b]"], ["Hours Today / Week", `${cumulative.hoy.toFixed(1)}h / ${cumulative.semana.toFixed(1)}h`, "text-white"]].map(([label, val, cls]) => (
+          {([["Gross Earnings (Ledger)", `$${grossAll.toFixed(2)}`, "text-white"], ["Operating Expenses", `−$${expensesAll.toFixed(2)}`, "text-[#ff6b6b]"], ["Hours Today / Week", `${cumulative.hoy.toFixed(1)}h / ${cumulative.semana.toFixed(1)}h`, "text-white"]] as [string,string,string][]).map(([label, val, cls]) => (
             <div key={String(label)} className="flex justify-between">
               <span className="text-[13px] text-neutral-400">{label}</span>
               <span className={`font-mono-jet text-[13px] font-semibold ${cls}`}>{val}</span>
@@ -1443,12 +1680,22 @@ export default function App() {
         {/* Tab bar */}
         <div className="sticky top-[68px] z-30 bg-black border-b border-[#1a1a1a]">
           <div className="flex overflow-x-auto gold-scroll px-2 gap-1">
-            {(["DASHBOARD", "ENTRY", "REGISTER", "EXPENSES", "REPORTS"] as Tab[]).map(tab => {
+            {(["DASHBOARD", "ENTRY", "REGISTER", "LEDGER", "EXPENSES", "REPORTS"] as Tab[]).map(tab => {
               const active = activeTab === tab;
+              const badge = tab === "REGISTER" ? pendingTrips.length
+                          : tab === "LEDGER"   ? postedTrips.length
+                          : 0;
               return (
                 <button key={tab} onClick={() => setActiveTab(tab)}
-                  className={`whitespace-nowrap px-4 py-3.5 text-[11px] tracking-[0.14em] font-semibold transition-colors relative ${active ? "text-[#f6dd8c]" : "text-neutral-500 hover:text-neutral-300"}`}>
+                  className={`whitespace-nowrap px-4 py-3.5 text-[11px] tracking-[0.14em] font-semibold transition-colors relative flex items-center gap-1.5 ${active ? "text-[#f6dd8c]" : "text-neutral-500 hover:text-neutral-300"}`}>
                   {tab}
+                  {badge > 0 && (
+                    <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold leading-none ${
+                      tab === "LEDGER"
+                        ? "bg-[#4ade80]/20 text-[#4ade80]"
+                        : "bg-[#facc15]/20 text-[#f6dd8c]"
+                    }`}>{badge > 99 ? "99+" : badge}</span>
+                  )}
                   {active && <span className="absolute bottom-0 left-3 right-3 h-[2px] bg-gradient-to-r from-[#f6dd8c] to-[#d9b64f] rounded-full" />}
                 </button>
               );
@@ -1458,11 +1705,12 @@ export default function App() {
 
         {/* Content */}
         <div className="px-4 pb-28 pt-5">
-          {activeTab === "DASHBOARD" && DashboardContent}
-          {activeTab === "ENTRY" && EntryFormContent}
-          {activeTab === "REGISTER" && RegisterContent}
-          {activeTab === "EXPENSES" && ExpensesContent}
-          {activeTab === "REPORTS" && ReportsContent}
+          {activeTab === "DASHBOARD"  && DashboardContent}
+          {activeTab === "ENTRY"      && EntryFormContent}
+          {activeTab === "REGISTER"   && RegisterContent}
+          {activeTab === "LEDGER"     && LedgerContent}
+          {activeTab === "EXPENSES"   && ExpensesContent}
+          {activeTab === "REPORTS"    && ReportsContent}
         </div>
 
         {/* Toast */}
