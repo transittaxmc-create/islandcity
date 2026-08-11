@@ -511,12 +511,16 @@ export default function App() {
   const [newCustomCat,    setNewCustomCat]    = useState("");
   const [newCustomVendor, setNewCustomVendor] = useState("");
 
-  // FINANCES — goal + working days (persisted)
+  // FINANCES — goal + working days + per-day targets (persisted)
   const [dailyGoal, setDailyGoal] = useState<number>(() => {
-    try { return parseInt(localStorage.getItem("ic-daily-goal") || "500") || 500; } catch { return 500; }
+    try { return parseInt(localStorage.getItem("ic-daily-goal") || "400") || 400; } catch { return 400; }
   });
   const [workDays, setWorkDays] = useState<number[]>(() => {
     try { return JSON.parse(localStorage.getItem("ic-work-days") || "[1,2,3,4,5]"); } catch { return [1,2,3,4,5]; }
+  });
+  // Per-day income targets: key = ISO day (1=Mon…7=Sun), value = planned $ for that day
+  const [dayTargets, setDayTargets] = useState<Record<number,number>>(() => {
+    try { return JSON.parse(localStorage.getItem("ic-day-targets") || "{}"); } catch { return {}; }
   });
 
   // Live clock
@@ -565,6 +569,7 @@ export default function App() {
   // Persist FINANCES settings
   useEffect(() => { try { localStorage.setItem("ic-daily-goal", String(dailyGoal)); } catch {} }, [dailyGoal]);
   useEffect(() => { try { localStorage.setItem("ic-work-days", JSON.stringify(workDays)); } catch {} }, [workDays]);
+  useEffect(() => { try { localStorage.setItem("ic-day-targets", JSON.stringify(dayTargets)); } catch {} }, [dayTargets]);
 
   // Keep refs in sync so the pagehide listener always has the latest state
   useEffect(() => { tripsRef.current    = trips;    }, [trips]);
@@ -920,13 +925,15 @@ export default function App() {
     [trips, currentTime]
   );
 
-  // ── Daily goal (driven by FINANCES settings) ─────────────────
-  const goalPct        = Math.min((grossToday / dailyGoal) * 100, 100);
-  const remainingToGoal = Math.max(dailyGoal - grossToday, 0);
+  // ── Today's goal — uses per-day target if set, else default ──
+  const _curISO      = currentTime.getDay() === 0 ? 7 : currentTime.getDay();
+  const todayGoal    = dayTargets[_curISO] ?? dailyGoal;
+  const goalPct        = Math.min((grossToday / todayGoal) * 100, 100);
+  const remainingToGoal = Math.max(todayGoal - grossToday, 0);
   const projectedFinish = useMemo(() => {
-    if (perHourGross <= 0 || grossToday >= dailyGoal) return null;
+    if (perHourGross <= 0 || grossToday >= todayGoal) return null;
     return new Date(Date.now() + (remainingToGoal / perHourGross) * 3600000);
-  }, [perHourGross, remainingToGoal, grossToday, dailyGoal]);
+  }, [perHourGross, remainingToGoal, grossToday, todayGoal]);
 
   // ── Smart suggestion (time-of-day + pace) ────────────────────
   const smartSuggestion = useMemo(() => {
@@ -934,8 +941,8 @@ export default function App() {
     const dow = currentTime.getDay();
     const wd  = dow >= 1 && dow <= 5;
     const we  = !wd;
-    if (grossToday >= dailyGoal)
-      return { emoji: "🏆", text: "$500 goal reached! Outstanding shift.", type: "gold" };
+    if (grossToday >= todayGoal)
+      return { emoji: "🏆", text: `$${todayGoal} goal reached! Outstanding shift.`, type: "gold" };
     if (wd && h >= 7 && h < 9)
       return { emoji: "🔥", text: "Morning rush — Midtown, Queens→Manhattan, Penn Station. Stay on the move.", type: "hot" };
     if (h >= 12 && h < 14)
@@ -1267,12 +1274,12 @@ export default function App() {
           </div>
           <div className="flex items-center justify-between text-[10px] font-mono-jet">
             <span className="text-neutral-500">
-              {grossToday >= dailyGoal ? "🏆 Goal reached!" : `Faltan $${remainingToGoal.toFixed(2)}`}
+              {grossToday >= todayGoal ? "🏆 Goal reached!" : `Faltan $${remainingToGoal.toFixed(2)}`}
             </span>
             <span className="text-neutral-400">
               {projectedFinish
                 ? `Llegas ~${projectedFinish.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
-                : grossToday >= dailyGoal ? "✓ Done" : "—"}
+                : grossToday >= todayGoal ? "✓ Done" : "—"}
             </span>
           </div>
         </div>
@@ -1320,7 +1327,7 @@ export default function App() {
             <span className="text-[16px] flex-shrink-0 mt-0.5">{smartSuggestion.emoji}</span>
             <p className="text-[11px] leading-[1.5] text-neutral-200">{smartSuggestion.text}</p>
           </div>
-          {perHourGross > 0 && grossToday < dailyGoal && (
+          {perHourGross > 0 && grossToday < todayGoal && (
             <p className="text-[10px] font-mono-jet text-neutral-500 mt-2">
               A este ritmo necesitas {perHourGross > 0 ? `${(remainingToGoal / perHourGross).toFixed(1)}h` : "—"} más para $500
             </p>
@@ -2372,31 +2379,34 @@ export default function App() {
 
   // Weekly bar chart (Mon i=0 … Sun i=6)
   const _DAY = ['L','M','M','J','V','S','D'] as const;
+  const _DAY_FULL = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'] as const;
   const _weekChart = Array.from({length:7},(_,i)=>{
     const d=new Date(_finMon); d.setDate(_finMon.getDate()+i);
     const ds=toYYYYMMDD(d);
     const actual=trips.filter(t=>t.date===ds).reduce((a,t)=>a+_tripNet(t),0);
-    const isoDay=i===6?7:i+1; // Mon=1…Sat=6,Sun=7
-    return {day:_DAY[i],actual,projected:workDays.includes(isoDay)?dailyGoal:0,ds};
+    const isoDay=i===6?7:i+1;
+    const dayPlan=workDays.includes(isoDay)?(dayTargets[isoDay]??dailyGoal):0;
+    return {day:_DAY[i],actual,projected:dayPlan,ds};
   });
 
-  // Projections
-  const _todayISO    = _finWd===0?7:_finWd;
-  const _dWk  = new Set(trips.filter(t=>t.date>=_finWeekStart&&t.date<=_finToday).map(t=>t.date)).size;
-  const _avgWk = _dWk>0?_earnWeek/_dWk:dailyGoal;
-  const _projWeek  = _earnWeek + _avgWk * workDays.filter(d=>d>_todayISO).length;
+  // Projections — use per-day targets
+  const _todayISO      = _finWd===0?7:_finWd;
+  const _weekPlanTotal = workDays.reduce((s,iso)=>s+(dayTargets[iso]??dailyGoal),0);
+  const _avgDayTarget  = workDays.length>0?_weekPlanTotal/workDays.length:dailyGoal;
+  // Week: actual so far + planned targets for remaining work days this week
+  const _remainWkPlan  = workDays.filter(d=>d>_todayISO).reduce((s,iso)=>s+(dayTargets[iso]??dailyGoal),0);
+  const _projWeek      = _earnWeek + _remainWkPlan;
 
-  const _dMo  = new Set(trips.filter(t=>t.date>=_finMonthStart&&t.date<=_finToday).map(t=>t.date)).size;
-  const _avgMo = _dMo>0?_earnMonth/_dMo:dailyGoal;
-  const _dimM  = new Date(currentTime.getFullYear(),currentTime.getMonth()+1,0).getDate();
-  const _projMonth = _earnMonth + _avgMo*Math.round((_dimM-currentTime.getDate())*(workDays.length/7));
+  // Month: actual + estimated remaining work days × avg daily target
+  const _dimM      = new Date(currentTime.getFullYear(),currentTime.getMonth()+1,0).getDate();
+  const _remainDaysM = _dimM - currentTime.getDate();
+  const _projMonth = _earnMonth + _avgDayTarget*Math.round(_remainDaysM*(workDays.length/7));
 
-  const _dYr  = new Set(trips.filter(t=>t.date>=_finYearStart&&t.date<=_finToday).map(t=>t.date)).size;
-  const _avgYr = _dYr>0?_earnYear/_dYr:dailyGoal;
-  const _doy   = Math.ceil((currentTime.getTime()-new Date(_finYearStart+'T00:00:00').getTime())/86400000);
-  const _projYear  = _earnYear + _avgYr*Math.round((365-_doy)*(workDays.length/7));
-  const _annTarget = dailyGoal*workDays.length*52;
-  const _yearPct   = Math.min(_projYear/_annTarget,1);
+  // Year: actual + estimated remaining work days × avg daily target
+  const _doy       = Math.ceil((currentTime.getTime()-new Date(_finYearStart+'T00:00:00').getTime())/86400000);
+  const _projYear  = _earnYear + _avgDayTarget*Math.round((365-_doy)*(workDays.length/7));
+  const _annTarget = _weekPlanTotal*52;
+  const _yearPct   = _annTarget>0?Math.min(_projYear/_annTarget,1):0;
 
   // Platform table
   const _byPlat: Record<string,{today:number,week:number,month:number}>={};
@@ -2419,8 +2429,9 @@ export default function App() {
   const _expMonth=expenses.filter(e=>e.date>=_finMonthStart).reduce((s,e)=>s+e.amount,0);
   const _netProj=_projMonth-(_expMonth+_monthFixed);
 
-  // Ring
-  const _ringPct=Math.min(_earnToday/dailyGoal,1);
+  // Ring — uses today's specific per-day target
+  const _todayPlan = workDays.includes(_todayISO)?(dayTargets[_todayISO]??dailyGoal):dailyGoal;
+  const _ringPct=Math.min(_earnToday/Math.max(_todayPlan,1),1);
   const _R=52,_CX=60,_CY=60,_circ=2*Math.PI*_R,_arc=_circ*_ringPct;
 
   const FinancesContent = (
@@ -2442,7 +2453,7 @@ export default function App() {
               stroke={_ringPct>=1?"#4ade80":"#d9b64f"} strokeWidth="10" strokeLinecap="round"
               strokeDasharray={`${_arc} ${_circ}`} transform={`rotate(-90 ${_CX} ${_CY})`}/>
             <text x={_CX} y={_CY-7} textAnchor="middle" fill="#f6dd8c" fontSize="17" fontWeight="bold" fontFamily="monospace">{Math.round(_ringPct*100)}%</text>
-            <text x={_CX} y={_CY+10} textAnchor="middle" fill="#6b7280" fontSize="8">${_earnToday.toFixed(0)} / ${dailyGoal}</text>
+            <text x={_CX} y={_CY+10} textAnchor="middle" fill="#6b7280" fontSize="8">${_earnToday.toFixed(0)} / ${_todayPlan}</text>
           </svg>
           <div className="flex-1 space-y-2.5">
             <div>
@@ -2452,7 +2463,7 @@ export default function App() {
             <div className="grid grid-cols-2 gap-2">
               <div className="bg-black rounded-lg p-2">
                 <p className="text-[8px] text-neutral-600">Falta</p>
-                <p className="text-[13px] font-bold text-white">${Math.max(dailyGoal-_earnToday,0).toFixed(0)}</p>
+                <p className="text-[13px] font-bold text-white">${Math.max(_todayPlan-_earnToday,0).toFixed(0)}</p>
               </div>
               <div className="bg-black rounded-lg p-2">
                 <p className="text-[8px] text-neutral-600">$/hora</p>
@@ -2478,7 +2489,7 @@ export default function App() {
         <ResponsiveContainer width="100%" height={130}>
           <BarChart data={_weekChart} barGap={2} barSize={16} margin={{top:0,right:0,bottom:0,left:0}}>
             <XAxis dataKey="day" tick={{fill:'#6b7280',fontSize:10}} axisLine={false} tickLine={false}/>
-            <YAxis hide domain={[0,Math.max(dailyGoal*1.15,1)]}/>
+            <YAxis hide domain={[0,Math.max(..._weekChart.map(d=>Math.max(d.projected,d.actual)),1)*1.15]}/>
             <Tooltip contentStyle={{background:'#1a1a1a',border:'1px solid #2a2a2a',borderRadius:8,fontSize:11}}
               labelStyle={{color:'#f6dd8c'}} formatter={(v:number)=>[`$${v.toFixed(0)}`]}/>
             <Bar dataKey="projected" fill="#d9b64f22" radius={[4,4,0,0]}/>
@@ -2523,7 +2534,7 @@ export default function App() {
             <div className="h-full rounded-full transition-all duration-700"
               style={{width:`${_yearPct*100}%`,background:'linear-gradient(to right,#d9b64f,#f6dd8c)'}}/>
           </div>
-          <p className="text-[8px] text-neutral-600 mt-1.5">Basado en ${dailyGoal}/día · {workDays.length} día{workDays.length!==1?'s':''}/semana</p>
+          <p className="text-[8px] text-neutral-600 mt-1.5">Basado en plan semanal · {workDays.length} día{workDays.length!==1?'s':''}/semana</p>
         </div>
       </div>
 
@@ -2590,46 +2601,85 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── CONFIGURAR METAS ── */}
+      {/* ── PLAN SEMANAL DE INGRESOS ── */}
       <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
-        <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-4">CONFIGURAR METAS</p>
-        <div className="space-y-4">
-          {/* Daily goal slider */}
-          <div>
-            <div className="flex justify-between items-center mb-1.5">
-              <p className="text-[12px] text-neutral-200">Meta diaria</p>
-              <p className="text-[17px] font-bold text-[#f6dd8c] font-mono-jet">${dailyGoal.toLocaleString()}</p>
-            </div>
-            <input type="range" min={100} max={1500} step={25} value={dailyGoal}
-              onChange={e=>setDailyGoal(parseInt(e.target.value))}
-              className="w-full accent-[#f6dd8c]"/>
-            <div className="flex justify-between text-[8px] text-neutral-600 mt-0.5"><span>$100</span><span>$1,500</span></div>
+        <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-0.5">PLAN SEMANAL DE INGRESOS</p>
+        <p className="text-[10px] text-neutral-600 mb-4 leading-relaxed">
+          Activa los días que trabajas y escribe tu meta de ingreso diario para calcular tus proyecciones
+        </p>
+
+        <div className="space-y-2">
+          {([1,2,3,4,5,6,7] as const).map((iso,i)=>{
+            const on = workDays.includes(iso);
+            const target = dayTargets[iso] ?? dailyGoal;
+            return (
+              <div key={iso}
+                className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-all ${
+                  on ? 'bg-black border-[#2a2a2a]' : 'bg-[#0a0a0a] border-[#141414]'
+                }`}>
+                {/* Day label */}
+                <div className="w-[72px] flex-shrink-0">
+                  <p className="text-[7px] text-neutral-700 font-mono leading-none mb-0.5">[{iso}]</p>
+                  <p className={`text-[12px] font-semibold leading-none ${on?'text-white':'text-neutral-600'}`}>
+                    {_DAY_FULL[i]}
+                  </p>
+                </div>
+
+                {/* Toggle pill */}
+                <button
+                  onClick={()=>setWorkDays(prev=>on?prev.filter(x=>x!==iso):[...prev,iso].sort())}
+                  className={`flex-shrink-0 w-10 h-[22px] rounded-full relative transition-colors ${on?'bg-[#f6dd8c]':'bg-[#2a2a2a]'}`}>
+                  <span className={`absolute top-[3px] w-4 h-4 rounded-full transition-all ${on?'left-[22px] bg-black':'left-[3px] bg-neutral-500'}`}/>
+                </button>
+
+                <p className={`text-[9px] flex-shrink-0 w-[50px] ${on?'text-neutral-500':'text-neutral-700'}`}>
+                  {on ? 'Trabajo' : 'Descanso'}
+                </p>
+
+                {/* Dollar input */}
+                <div className={`flex-1 flex items-center justify-end gap-1 ${!on?'opacity-25':''}`}>
+                  <span className="text-[11px] text-neutral-500">$</span>
+                  <input
+                    type="number" min="0" max="9999" step="10"
+                    value={on ? target : 0}
+                    disabled={!on}
+                    onChange={e=>setDayTargets(prev=>({...prev,[iso]:parseFloat(e.target.value)||0}))}
+                    className="w-16 text-right bg-transparent text-[15px] font-bold font-mono-jet text-[#f6dd8c] focus:outline-none disabled:text-neutral-700 border-b border-[#2a2a2a] pb-0.5"
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Weekly total — big like reference */}
+        <div className="mt-5 pt-4 border-t border-[#1e1e1e] text-center">
+          <p className="text-[9px] text-neutral-500 uppercase tracking-[0.2em] mb-1">TOTAL PROYECTADO SEMANAL</p>
+          <p className="text-[32px] font-bold text-[#f6dd8c] font-mono-jet leading-none">
+            ${_weekPlanTotal.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
+          </p>
+          <p className="text-[9px] text-neutral-600 mt-1">{workDays.length} día{workDays.length!==1?'s':''} de trabajo · avg ${_avgDayTarget.toFixed(0)}/día</p>
+        </div>
+
+        {/* Monthly / Annual estimates */}
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          <div className="bg-black border border-[#1e1e1e] rounded-xl p-3 text-center">
+            <p className="text-[8px] text-neutral-600 uppercase tracking-widest mb-0.5">Est. mensual</p>
+            <p className="text-[14px] font-bold text-white font-mono-jet">${(_weekPlanTotal*4.33/1000).toFixed(1)}k</p>
           </div>
-          {/* Working days */}
-          <div>
-            <p className="text-[12px] text-neutral-200 mb-2">Días que trabajo</p>
-            <div className="flex gap-1.5">
-              {(['L','M','M','J','V','S','D'] as const).map((d,i)=>{
-                const iso=i===6?7:i+1;
-                const on=workDays.includes(iso);
-                return (
-                  <button key={d+i} onClick={()=>setWorkDays(prev=>on?prev.filter(x=>x!==iso):[...prev,iso].sort())}
-                    className={`flex-1 h-9 rounded-lg text-[11px] font-bold transition-colors ${on?'bg-[#f6dd8c] text-black':'bg-[#1e1e1e] text-neutral-500 border border-[#2a2a2a] hover:text-white'}`}>
-                    {d}
-                  </button>
-                );
-              })}
-            </div>
+          <div className="bg-black border border-[#1e1e1e] rounded-xl p-3 text-center">
+            <p className="text-[8px] text-neutral-600 uppercase tracking-widest mb-0.5">Est. anual</p>
+            <p className="text-[14px] font-bold text-white font-mono-jet">${(_annTarget/1000).toFixed(0)}k</p>
           </div>
-          {/* Summary pill */}
-          <div className="bg-black border border-[#1e1e1e] rounded-xl p-3 flex justify-between items-center">
-            <p className="text-[10px] text-neutral-500">Meta semanal estimada</p>
-            <p className="text-[15px] font-bold text-[#f6dd8c] font-mono-jet">${(dailyGoal*workDays.length).toLocaleString()}</p>
-          </div>
-          <div className="bg-black border border-[#1e1e1e] rounded-xl p-3 flex justify-between items-center">
-            <p className="text-[10px] text-neutral-500">Meta anual estimada</p>
-            <p className="text-[15px] font-bold text-[#f6dd8c] font-mono-jet">${(_annTarget/1000).toFixed(0)}k</p>
-          </div>
+        </div>
+
+        {/* Default rate helper */}
+        <div className="mt-3 bg-[#0f0a00] border border-[#d9b64f]/20 rounded-xl p-3 flex items-center gap-2">
+          <span className="text-[#d9b64f] text-[14px]">💡</span>
+          <p className="text-[9px] text-[#a07820] leading-relaxed">
+            Los días sin meta específica usan la tasa base de <strong className="text-[#d9b64f]">${dailyGoal}/día</strong>.
+            Ajusta cada día según tus horas planeadas.
+          </p>
         </div>
       </div>
 
