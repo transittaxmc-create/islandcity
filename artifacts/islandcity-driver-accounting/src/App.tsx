@@ -460,6 +460,11 @@ export default function App() {
   const [tollManuallyEdited, setTollManuallyEdited] = useState(false);
   const lastDetectedPlazaRef = useRef<string | null>(null);
 
+  // Refs that always hold the latest state — used by the iOS pagehide/
+  // visibilitychange listener so it never captures a stale closure.
+  const tripsRef     = useRef<Trip[]>([]);
+  const expensesRef  = useRef<Expense[]>([]);
+
   // Storage state
   const [lastSavedAt, setLastSavedAt] = useState<string>(() => {
     try { return localStorage.getItem("island-city-last-saved") || "—"; } catch { return "—"; }
@@ -543,6 +548,29 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem("island-city-hours", JSON.stringify(hoursLog)); } catch {}
   }, [hoursLog]);
+
+  // Keep refs in sync so the pagehide listener always has the latest state
+  useEffect(() => { tripsRef.current    = trips;    }, [trips]);
+  useEffect(() => { expensesRef.current = expenses; }, [expenses]);
+
+  // iOS PWA safety net: when the user swipes the app away or switches apps,
+  // iOS kills JS before useEffect can run. This listener fires synchronously
+  // on hide/close and writes the latest state directly to localStorage.
+  useEffect(() => {
+    const flush = () => {
+      try {
+        localStorage.setItem("island-city-trips",    JSON.stringify(tripsRef.current));
+        localStorage.setItem("island-city-expenses", JSON.stringify(expensesRef.current));
+      } catch {}
+    };
+    const onVisibility = () => { if (document.visibilityState === "hidden") flush(); };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, []); // set up once — refs always point to current state
 
   // Initial storage check
   useEffect(() => {
@@ -949,20 +977,28 @@ export default function App() {
     setActiveTab("ENTRY");
   };
 
+  // Helper: compute new trips array, write to localStorage IMMEDIATELY (sync),
+  // then call setTrips so React re-renders. This survives iOS force-killing the
+  // process before the useEffect persistence layer gets a chance to run.
+  const deleteAndSave = (newTrips: Trip[]) => {
+    try { localStorage.setItem("island-city-trips", JSON.stringify(newTrips)); } catch {}
+    setTrips(newTrips);
+  };
+
   const handleDelete = (id: string) => {
     if (!window.confirm("Delete this trip? This cannot be undone.")) return;
-    setTrips(prev => prev.filter(t => t.id !== id));   // functional form — never stale
+    deleteAndSave(trips.filter(t => t.id !== id));
     showToast("Trip deleted");
   };
 
   const handleUnpostTrip = (id: string) => {
-    setTrips(prev => prev.map(t => t.id !== id ? t : { ...t, status: "pending" as const, reviewed: false, postedAt: undefined }));
+    deleteAndSave(trips.map(t => t.id !== id ? t : { ...t, status: "pending" as const, reviewed: false, postedAt: undefined }));
     showToast("Trip moved back to Register");
   };
 
   const handleDeletePostedTrip = (id: string) => {
     if (!window.confirm("Delete this posted trip permanently? This cannot be undone.")) return;
-    setTrips(prev => prev.filter(t => t.id !== id));   // functional form — never stale
+    deleteAndSave(trips.filter(t => t.id !== id));
     showToast("Posted trip deleted");
   };
 
