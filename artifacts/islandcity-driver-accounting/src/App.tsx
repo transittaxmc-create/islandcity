@@ -363,6 +363,26 @@ function PlatformAvatar({
   );
 }
 
+// ── One-time clean slate ──────────────────────────────────────────────────────
+// Change this version string any time you need a forced wipe.
+// The app checks on every load; if the stored version differs, it clears all
+// data keys and sets the new version — then normal initialization runs fresh.
+const CLEAN_SLATE_VERSION = "2026-08-11-v2";
+(function enforceCleanSlate() {
+  try {
+    if (localStorage.getItem("ic-app-version") !== CLEAN_SLATE_VERSION) {
+      const keys = [
+        "island-city-trips", "island-city-expenses", "island-city-hours",
+        "island-city-last-saved", "island-city-trips-count",
+        "ic-custom-exp-types", "ic-custom-exp-cats", "ic-custom-vendors",
+        "ic-last-shift-date",
+      ];
+      keys.forEach(k => localStorage.removeItem(k));
+      localStorage.setItem("ic-app-version", CLEAN_SLATE_VERSION);
+    }
+  } catch {}
+})();
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("DASHBOARD");
   const [goal, setGoal] = useState(60);
