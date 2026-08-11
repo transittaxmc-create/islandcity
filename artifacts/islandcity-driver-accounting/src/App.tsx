@@ -2355,6 +2355,287 @@ export default function App() {
     </div>
   );
 
+  // ─── FINANCES computed ────────────────────────────────────────
+  const _finToday   = toYYYYMMDD(currentTime);
+  const _finWd      = currentTime.getDay(); // JS: 0=Sun
+  const _finMon     = new Date(currentTime);
+  _finMon.setDate(currentTime.getDate() + (_finWd === 0 ? -6 : 1 - _finWd));
+  const _finWeekStart  = toYYYYMMDD(_finMon);
+  const _finMonthStart = `${currentTime.getFullYear()}-${String(currentTime.getMonth()+1).padStart(2,'0')}-01`;
+  const _finYearStart  = `${currentTime.getFullYear()}-01-01`;
+  const _tripNet = (t: Trip) => (t.earnings||0)+(t.tips||0)+(t.extra||0)+(t.toll||0);
+
+  const _earnToday = trips.filter(t=>t.date===_finToday).reduce((a,t)=>a+_tripNet(t),0);
+  const _earnWeek  = trips.filter(t=>t.date>=_finWeekStart).reduce((a,t)=>a+_tripNet(t),0);
+  const _earnMonth = trips.filter(t=>t.date>=_finMonthStart).reduce((a,t)=>a+_tripNet(t),0);
+  const _earnYear  = trips.filter(t=>t.date>=_finYearStart).reduce((a,t)=>a+_tripNet(t),0);
+
+  // Weekly bar chart (Mon i=0 … Sun i=6)
+  const _DAY = ['L','M','M','J','V','S','D'] as const;
+  const _weekChart = Array.from({length:7},(_,i)=>{
+    const d=new Date(_finMon); d.setDate(_finMon.getDate()+i);
+    const ds=toYYYYMMDD(d);
+    const actual=trips.filter(t=>t.date===ds).reduce((a,t)=>a+_tripNet(t),0);
+    const isoDay=i===6?7:i+1; // Mon=1…Sat=6,Sun=7
+    return {day:_DAY[i],actual,projected:workDays.includes(isoDay)?dailyGoal:0,ds};
+  });
+
+  // Projections
+  const _todayISO    = _finWd===0?7:_finWd;
+  const _dWk  = new Set(trips.filter(t=>t.date>=_finWeekStart&&t.date<=_finToday).map(t=>t.date)).size;
+  const _avgWk = _dWk>0?_earnWeek/_dWk:dailyGoal;
+  const _projWeek  = _earnWeek + _avgWk * workDays.filter(d=>d>_todayISO).length;
+
+  const _dMo  = new Set(trips.filter(t=>t.date>=_finMonthStart&&t.date<=_finToday).map(t=>t.date)).size;
+  const _avgMo = _dMo>0?_earnMonth/_dMo:dailyGoal;
+  const _dimM  = new Date(currentTime.getFullYear(),currentTime.getMonth()+1,0).getDate();
+  const _projMonth = _earnMonth + _avgMo*Math.round((_dimM-currentTime.getDate())*(workDays.length/7));
+
+  const _dYr  = new Set(trips.filter(t=>t.date>=_finYearStart&&t.date<=_finToday).map(t=>t.date)).size;
+  const _avgYr = _dYr>0?_earnYear/_dYr:dailyGoal;
+  const _doy   = Math.ceil((currentTime.getTime()-new Date(_finYearStart+'T00:00:00').getTime())/86400000);
+  const _projYear  = _earnYear + _avgYr*Math.round((365-_doy)*(workDays.length/7));
+  const _annTarget = dailyGoal*workDays.length*52;
+  const _yearPct   = Math.min(_projYear/_annTarget,1);
+
+  // Platform table
+  const _byPlat: Record<string,{today:number,week:number,month:number}>={};
+  trips.forEach(t=>{
+    if(!_byPlat[t.platform])_byPlat[t.platform]={today:0,week:0,month:0};
+    const a=_tripNet(t);
+    if(t.date===_finToday)_byPlat[t.platform].today+=a;
+    if(t.date>=_finWeekStart)_byPlat[t.platform].week+=a;
+    if(t.date>=_finMonthStart)_byPlat[t.platform].month+=a;
+  });
+  const _platRows=Object.entries(_byPlat).sort((a,b)=>b[1].week-a[1].week);
+
+  // Expense health
+  const _monthFixed=expenses.reduce((s,e)=>{
+    if(e.frequency==='daily')return s+e.amount*30;
+    if(e.frequency==='weekly')return s+e.amount*4.33;
+    if(e.frequency==='monthly')return s+e.amount;
+    return s;
+  },0);
+  const _expMonth=expenses.filter(e=>e.date>=_finMonthStart).reduce((s,e)=>s+e.amount,0);
+  const _netProj=_projMonth-(_expMonth+_monthFixed);
+
+  // Ring
+  const _ringPct=Math.min(_earnToday/dailyGoal,1);
+  const _R=52,_CX=60,_CY=60,_circ=2*Math.PI*_R,_arc=_circ*_ringPct;
+
+  const FinancesContent = (
+    <div className="space-y-4">
+
+      {/* ── Label ── */}
+      <div>
+        <p className="text-[10px] tracking-[0.22em] text-neutral-500 font-semibold uppercase">Financial Intelligence</p>
+        <p className="text-[10px] text-neutral-600 mt-0.5">Real vs. proyectado · actualizado en vivo</p>
+      </div>
+
+      {/* ── HOY — anillo de progreso ── */}
+      <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+        <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">HOY — META DIARIA</p>
+        <div className="flex items-center gap-4">
+          <svg width="120" height="120" viewBox="0 0 120 120" className="flex-shrink-0">
+            <circle cx={_CX} cy={_CY} r={_R} fill="none" stroke="#1e1e1e" strokeWidth="10"/>
+            <circle cx={_CX} cy={_CY} r={_R} fill="none"
+              stroke={_ringPct>=1?"#4ade80":"#d9b64f"} strokeWidth="10" strokeLinecap="round"
+              strokeDasharray={`${_arc} ${_circ}`} transform={`rotate(-90 ${_CX} ${_CY})`}/>
+            <text x={_CX} y={_CY-7} textAnchor="middle" fill="#f6dd8c" fontSize="17" fontWeight="bold" fontFamily="monospace">{Math.round(_ringPct*100)}%</text>
+            <text x={_CX} y={_CY+10} textAnchor="middle" fill="#6b7280" fontSize="8">${_earnToday.toFixed(0)} / ${dailyGoal}</text>
+          </svg>
+          <div className="flex-1 space-y-2.5">
+            <div>
+              <p className="text-[9px] text-neutral-500 uppercase tracking-widest">Ganado hoy</p>
+              <p className="text-[24px] font-bold text-[#f6dd8c] font-mono-jet leading-none">${_earnToday.toFixed(2)}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-black rounded-lg p-2">
+                <p className="text-[8px] text-neutral-600">Falta</p>
+                <p className="text-[13px] font-bold text-white">${Math.max(dailyGoal-_earnToday,0).toFixed(0)}</p>
+              </div>
+              <div className="bg-black rounded-lg p-2">
+                <p className="text-[8px] text-neutral-600">$/hora</p>
+                <p className="text-[13px] font-bold text-white">${perHourGross.toFixed(2)}</p>
+              </div>
+            </div>
+            {projectedFinish && (
+              <p className="text-[9px] text-[#4ade80]">✓ Meta ≈ {projectedFinish.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── ESTA SEMANA — barras ── */}
+      <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">ESTA SEMANA</p>
+          <div className="flex gap-3 text-[8px] text-neutral-600">
+            <span className="flex items-center gap-1"><span className="inline-block w-2 h-1.5 rounded bg-[#d9b64f]/30"/>Proyectado</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-2 h-1.5 rounded bg-[#f6dd8c]"/>Real</span>
+          </div>
+        </div>
+        <ResponsiveContainer width="100%" height={130}>
+          <BarChart data={_weekChart} barGap={2} barSize={16} margin={{top:0,right:0,bottom:0,left:0}}>
+            <XAxis dataKey="day" tick={{fill:'#6b7280',fontSize:10}} axisLine={false} tickLine={false}/>
+            <YAxis hide domain={[0,Math.max(dailyGoal*1.15,1)]}/>
+            <Tooltip contentStyle={{background:'#1a1a1a',border:'1px solid #2a2a2a',borderRadius:8,fontSize:11}}
+              labelStyle={{color:'#f6dd8c'}} formatter={(v:number)=>[`$${v.toFixed(0)}`]}/>
+            <Bar dataKey="projected" fill="#d9b64f22" radius={[4,4,0,0]}/>
+            <Bar dataKey="actual"    fill="#f6dd8c"   radius={[4,4,0,0]}/>
+          </BarChart>
+        </ResponsiveContainer>
+        <div className="flex justify-between mt-2 pt-2 border-t border-[#1e1e1e]">
+          <div>
+            <p className="text-[9px] text-neutral-500">Acumulado</p>
+            <p className="text-[15px] font-bold text-[#f6dd8c] font-mono-jet">${_earnWeek.toFixed(2)}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-[9px] text-neutral-500">Proyección fin de semana</p>
+            <p className="text-[15px] font-bold text-white font-mono-jet">${_projWeek.toFixed(2)}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── PROYECCIONES ── */}
+      <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+        <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">PROYECCIONES · A ESTE RITMO</p>
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          {([
+            {label:'Fin Semana',val:_projWeek,  sub:new Date(_finMon.getTime()+6*86400000).toLocaleDateString('es',{month:'short',day:'numeric'})},
+            {label:'Fin Mes',   val:_projMonth, sub:new Date(currentTime.getFullYear(),currentTime.getMonth()+1,0).toLocaleDateString('es',{month:'short',day:'numeric'})},
+            {label:'Fin Año',   val:_projYear,  sub:'31 dic'},
+          ] as {label:string,val:number,sub:string}[]).map(({label,val,sub})=>(
+            <div key={label} className="bg-black border border-[#1e1e1e] rounded-xl p-2.5 text-center">
+              <p className="text-[8px] text-neutral-500 uppercase tracking-widest leading-tight mb-1">{label}</p>
+              <p className="text-[15px] font-bold text-[#f6dd8c] font-mono-jet leading-none">${(val/1000).toFixed(1)}k</p>
+              <p className="text-[8px] text-neutral-600 mt-0.5">{sub}</p>
+            </div>
+          ))}
+        </div>
+        {/* Annual progress bar */}
+        <div className="bg-black border border-[#1e1e1e] rounded-xl p-3">
+          <div className="flex justify-between items-center mb-1.5">
+            <p className="text-[9px] text-neutral-500">Meta anual · Super Plus</p>
+            <p className="text-[9px] text-[#f6dd8c]">${(_annTarget/1000).toFixed(0)}k · {Math.round(_yearPct*100)}%</p>
+          </div>
+          <div className="h-2 bg-[#1e1e1e] rounded-full overflow-hidden">
+            <div className="h-full rounded-full transition-all duration-700"
+              style={{width:`${_yearPct*100}%`,background:'linear-gradient(to right,#d9b64f,#f6dd8c)'}}/>
+          </div>
+          <p className="text-[8px] text-neutral-600 mt-1.5">Basado en ${dailyGoal}/día · {workDays.length} día{workDays.length!==1?'s':''}/semana</p>
+        </div>
+      </div>
+
+      {/* ── INGRESOS POR PLATAFORMA ── */}
+      {_platRows.length>0 && (
+        <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+          <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">INGRESOS POR PLATAFORMA</p>
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="text-[8px] text-neutral-600 uppercase tracking-widest border-b border-[#1e1e1e]">
+                <th className="text-left pb-2 font-semibold">Plataforma</th>
+                <th className="text-right pb-2 font-semibold">Hoy</th>
+                <th className="text-right pb-2 font-semibold">Semana</th>
+                <th className="text-right pb-2 font-semibold">Mes</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#1a1a1a]">
+              {_platRows.map(([platform,d])=>{
+                const meta=getPlatformMeta(platform);
+                return (
+                  <tr key={platform}>
+                    <td className="py-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`w-5 h-5 rounded-full ${meta.bg} flex items-center justify-center text-[7px] font-bold text-black flex-shrink-0`}>{meta.initial}</span>
+                        <span className="text-neutral-300 text-[10px] truncate max-w-[70px]">{platform}</span>
+                      </div>
+                    </td>
+                    <td className="py-2 text-right font-mono-jet text-neutral-500 text-[10px]">{d.today>0?`$${d.today.toFixed(0)}`:'—'}</td>
+                    <td className="py-2 text-right font-mono-jet text-[#f6dd8c] font-semibold text-[10px]">${d.week.toFixed(0)}</td>
+                    <td className="py-2 text-right font-mono-jet text-white text-[10px]">${d.month.toFixed(0)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── SALUD FINANCIERA ── */}
+      <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+        <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">
+          SALUD FINANCIERA · {currentTime.toLocaleDateString('es',{month:'long'}).toUpperCase()}
+        </p>
+        <div className="space-y-2.5">
+          {([
+            {label:'Ingresos reales este mes',        val:_earnMonth,   color:'text-[#4ade80]'},
+            {label:'Proyección fin de mes',            val:_projMonth,   color:'text-[#f6dd8c]'},
+            {label:'Gastos reales este mes',           val:-_expMonth,   color:'text-red-400'},
+            {label:'Gastos recurrentes proyectados',   val:-_monthFixed, color:'text-orange-400'},
+          ] as {label:string,val:number,color:string}[]).map(({label,val,color})=>(
+            <div key={label} className="flex justify-between items-center gap-2">
+              <p className="text-[11px] text-neutral-400 leading-tight">{label}</p>
+              <p className={`font-mono-jet text-[13px] font-bold flex-shrink-0 ${color}`}>
+                {val<0?`-$${Math.abs(val).toFixed(2)}`:`$${val.toFixed(2)}`}
+              </p>
+            </div>
+          ))}
+          <div className="pt-2.5 border-t border-[#2a2a2a] flex justify-between items-center">
+            <p className="text-[12px] font-bold text-white">NET PROYECTADO</p>
+            <p className={`font-mono-jet text-[19px] font-bold ${_netProj>=0?'text-[#4ade80]':'text-red-400'}`}>
+              {_netProj<0?`-$${Math.abs(_netProj).toFixed(2)}`:`$${_netProj.toFixed(2)}`}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── CONFIGURAR METAS ── */}
+      <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+        <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-4">CONFIGURAR METAS</p>
+        <div className="space-y-4">
+          {/* Daily goal slider */}
+          <div>
+            <div className="flex justify-between items-center mb-1.5">
+              <p className="text-[12px] text-neutral-200">Meta diaria</p>
+              <p className="text-[17px] font-bold text-[#f6dd8c] font-mono-jet">${dailyGoal.toLocaleString()}</p>
+            </div>
+            <input type="range" min={100} max={1500} step={25} value={dailyGoal}
+              onChange={e=>setDailyGoal(parseInt(e.target.value))}
+              className="w-full accent-[#f6dd8c]"/>
+            <div className="flex justify-between text-[8px] text-neutral-600 mt-0.5"><span>$100</span><span>$1,500</span></div>
+          </div>
+          {/* Working days */}
+          <div>
+            <p className="text-[12px] text-neutral-200 mb-2">Días que trabajo</p>
+            <div className="flex gap-1.5">
+              {(['L','M','M','J','V','S','D'] as const).map((d,i)=>{
+                const iso=i===6?7:i+1;
+                const on=workDays.includes(iso);
+                return (
+                  <button key={d+i} onClick={()=>setWorkDays(prev=>on?prev.filter(x=>x!==iso):[...prev,iso].sort())}
+                    className={`flex-1 h-9 rounded-lg text-[11px] font-bold transition-colors ${on?'bg-[#f6dd8c] text-black':'bg-[#1e1e1e] text-neutral-500 border border-[#2a2a2a] hover:text-white'}`}>
+                    {d}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {/* Summary pill */}
+          <div className="bg-black border border-[#1e1e1e] rounded-xl p-3 flex justify-between items-center">
+            <p className="text-[10px] text-neutral-500">Meta semanal estimada</p>
+            <p className="text-[15px] font-bold text-[#f6dd8c] font-mono-jet">${(dailyGoal*workDays.length).toLocaleString()}</p>
+          </div>
+          <div className="bg-black border border-[#1e1e1e] rounded-xl p-3 flex justify-between items-center">
+            <p className="text-[10px] text-neutral-500">Meta anual estimada</p>
+            <p className="text-[15px] font-bold text-[#f6dd8c] font-mono-jet">${(_annTarget/1000).toFixed(0)}k</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  );
+
   // ─── Render ───────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-black text-white selection:bg-[#d9b64f]/30">
@@ -2392,7 +2673,7 @@ export default function App() {
         <div className="sticky z-30 bg-black border-b border-[#1a1a1a]"
           style={{ top: 'calc(68px + env(safe-area-inset-top))' }}>
           <div className="flex overflow-x-auto gold-scroll px-2 gap-1">
-            {(["DASHBOARD", "ENTRY", "REGISTER", "LEDGER", "EXPENSES", "REPORTS"] as Tab[]).map(tab => {
+            {(["DASHBOARD", "FINANCES", "ENTRY", "REGISTER", "LEDGER", "EXPENSES", "REPORTS"] as Tab[]).map(tab => {
               const active = activeTab === tab;
               const badge = tab === "REGISTER" ? pendingTrips.length
                           : tab === "LEDGER"   ? postedTrips.length
@@ -2418,6 +2699,7 @@ export default function App() {
         {/* Content */}
         <div className="px-4 pb-28 pt-5">
           {activeTab === "DASHBOARD"  && DashboardContent}
+          {activeTab === "FINANCES"   && FinancesContent}
           {activeTab === "ENTRY"      && EntryFormContent}
           {activeTab === "REGISTER"   && RegisterContent}
           {activeTab === "LEDGER"     && LedgerContent}
