@@ -102,7 +102,7 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-type PlatformMeta = { initial: string; bg: string; tags: string[]; note?: string };
+type PlatformMeta = { initial: string; bg: string; tags: string[]; note?: string; logo?: string; logoBg?: string };
 
 const TAG_STYLES: Record<string, string> = {
   "ACCESS-A-RIDE": "bg-[#dbeafe] text-[#1e40af] border-[#bfdbfe]",
@@ -112,13 +112,13 @@ const TAG_STYLES: Record<string, string> = {
 const platformMeta: Record<string, PlatformMeta> = {
   "EcoRide - 10% fee": { initial: "E", bg: "bg-[#22c55e]", tags: ["ACCESS-A-RIDE", "VOUCHER"] },
   EcoRide: { initial: "E", bg: "bg-[#22c55e]", tags: ["ACCESS-A-RIDE", "VOUCHER"] },
-  Uber: { initial: "U", bg: "bg-[#111111]", tags: [] },
-  Lyft: { initial: "L", bg: "bg-[#FF00BF]", tags: [] },
-  Empower: { initial: "E", bg: "bg-[#3b82f6]", tags: [] },
-  Gallant: { initial: "G", bg: "bg-[#f97316]", tags: ["VOUCHER"] },
-  "Aventus Ride": { initial: "A", bg: "bg-[#8b5cf6]", tags: ["VOUCHER"] },
-  "Classic Ride": { initial: "C", bg: "bg-[#14b8a6]", tags: ["VOUCHER"] },
-  "Aki Technology": { initial: "AKI", bg: "bg-[#0ea5e9]", tags: ["ACCESS-A-RIDE", "VOUCHER"], note: "Medical Transportation NYC" },
+  Uber: { initial: "U", bg: "bg-white", logoBg: "bg-white", tags: [], logo: "/logos/uber.png" },
+  Lyft: { initial: "L", bg: "bg-[#FF00BF]", tags: [], logo: "/logos/lyft.png", logoBg: "bg-black" },
+  Empower: { initial: "E", bg: "bg-[#3b82f6]", tags: [], logo: "/logos/empower.png", logoBg: "bg-white" },
+  Gallant: { initial: "G", bg: "bg-[#f97316]", tags: ["VOUCHER"], logo: "/logos/gallant.png", logoBg: "bg-white" },
+  "Aventus Ride": { initial: "A", bg: "bg-[#8b5cf6]", tags: ["VOUCHER"], logo: "/logos/aventus.png", logoBg: "bg-white" },
+  "Classic Ryde": { initial: "CR", bg: "bg-[#14b8a6]", tags: ["VOUCHER"], logo: "/logos/classicryde.png", logoBg: "bg-white" },
+  "Aki Technology": { initial: "AKI", bg: "bg-[#0ea5e9]", tags: ["ACCESS-A-RIDE", "VOUCHER"], note: "Medical Transportation NYC", logo: "/logos/aki.png", logoBg: "bg-white" },
   "Street Hail": { initial: "SH", bg: "bg-[#6b7280]", tags: [] },
   Other: { initial: "O", bg: "bg-[#9ca3af]", tags: [] },
 };
@@ -170,6 +170,36 @@ function LogoIcon({ className = "" }: { className?: string }) {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
       <path d="M5 17h14M6 17l1.2-6.5A2 2 0 0 1 9.2 9h5.6a2 2 0 0 1 2 1.5L18 17M8 17v2m8-2v2M8 13h8M6.5 15h.01M17.5 15h.01" />
     </svg>
+  );
+}
+
+function PlatformAvatar({
+  meta,
+  size = "sm",
+}: {
+  meta: PlatformMeta;
+  size?: "sm" | "md" | "lg";
+}) {
+  const base = import.meta.env.BASE_URL ?? "/";
+  const dim = size === "lg" ? "w-8 h-8" : size === "md" ? "w-6 h-6" : "w-5 h-5";
+  const textSize = size === "lg" ? "text-[11px]" : "text-[9px]";
+
+  if (meta.logo) {
+    const src = base.replace(/\/$/, "") + meta.logo;
+    return (
+      <span
+        className={`${dim} rounded-full ${meta.logoBg ?? "bg-white"} flex items-center justify-center shrink-0 overflow-hidden border border-white/10`}
+      >
+        <img src={src} alt="" className="w-full h-full object-contain p-[2px]" />
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`${dim} rounded-full ${meta.bg} flex items-center justify-center text-white ${textSize} font-bold shrink-0`}
+    >
+      {meta.initial}
+    </span>
   );
 }
 
@@ -807,7 +837,7 @@ export default function App() {
       <div className="space-y-1.5">
         <label className="text-[11px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">PLATFORM</label>
         <div className="flex items-center gap-2 mb-2 flex-wrap">
-          <span className={`w-5 h-5 rounded-full ${meta.bg} flex items-center justify-center text-white text-[10px] font-bold shrink-0`}>{meta.initial}</span>
+          <PlatformAvatar meta={meta} size="md" />
           <span className="text-[13px] font-semibold text-white truncate">{tripForm.platform}</span>
           {meta.tags.map(tg => (
             <span key={tg} className={`text-[9px] font-bold uppercase tracking-[0.1em] px-2 py-0.5 rounded-full border ${getTagStyle(tg)}`}>{tg}</span>
@@ -823,7 +853,7 @@ export default function App() {
             <option>Empower</option>
             <option>Gallant</option>
             <option>Aventus Ride</option>
-            <option>Classic Ride</option>
+            <option>Classic Ryde</option>
             <option>Aki Technology</option>
             <option>Street Hail</option>
             <option>Other</option>
@@ -1048,7 +1078,7 @@ export default function App() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-mono-jet text-[12px] text-neutral-400">{t.time} · {t.date}</span>
-                    <span className={`w-5 h-5 rounded-full ${pm.bg} flex items-center justify-center text-white text-[10px] font-bold shrink-0`}>{pm.initial}</span>
+                    <PlatformAvatar meta={pm} size="sm" />
                     <span className="px-3 py-1 rounded-full bg-[#1e1e1e] border border-[#333] text-[#e8c766] text-[10px] font-bold tracking-[0.12em]">{t.platform.toUpperCase()}</span>
                     {pm.tags.map(tg => (
                       <span key={tg} className={`text-[9px] font-bold uppercase tracking-[0.1em] px-2 py-0.5 rounded-full border ${getTagStyle(tg)}`}>{tg}</span>
