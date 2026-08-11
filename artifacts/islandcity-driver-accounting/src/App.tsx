@@ -667,13 +667,6 @@ export default function App() {
   const activeHoursFormatted = useMemo(() => formatHHMMSS(activeMsLive), [activeMsLive]);
   const activeHoursDecimal = activeMsLive / 3600000;
 
-  // $/h uses GROSS only — not influenced by expenses
-  const perHourGross = useMemo(() => {
-    if (activeHoursDecimal > 0.05) return grossToday / activeHoursDecimal;
-    return 0;
-  }, [grossToday, activeHoursDecimal]);
-  const perHourLive = perHourGross; // alias kept for compatibility
-
   const weeklyTrips = useMemo(() => {
     const weekAgo = new Date(currentTime);
     weekAgo.setDate(weekAgo.getDate() - 7);
@@ -706,6 +699,15 @@ export default function App() {
     }
     return { hoy, semana, mes, año };
   }, [hoursLog, currentTime, shiftActive, activeMsLive]);
+
+  // $/h uses GROSS only — not influenced by expenses
+  // Starts as soon as there's any shift time (live) OR logged hours today
+  const perHourGross = useMemo(() => {
+    const h = activeHoursDecimal > 0 ? activeHoursDecimal : (cumulative.hoy ?? 0);
+    if (h > 0.002 && grossToday > 0) return grossToday / h;
+    return 0;
+  }, [grossToday, activeHoursDecimal, cumulative.hoy]);
+  const perHourLive = perHourGross; // alias kept for compatibility
 
   // ── Expenses today (from Expenses section) ────────────────────
   const expensesToday = useMemo(() => {
@@ -921,46 +923,46 @@ export default function App() {
       </div>
 
       {/* Main status card */}
-      <div className="bg-[#141414] border border-[#222] rounded-[20px] p-4 overflow-hidden relative">
+      <div className="bg-[#141414] border border-[#222] rounded-[20px] px-4 pt-3.5 pb-3 overflow-hidden relative">
         <div className="flex items-center justify-between">
-          <p className="font-mono-jet text-[11px] text-neutral-400">
+          <p className="font-mono-jet text-[10px] text-neutral-400">
             {currentTime.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} ·{" "}
             {currentTime.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
           </p>
-          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] tracking-[0.12em] font-semibold ${
+          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[9px] tracking-[0.12em] font-semibold ${
             shiftActive ? "bg-[#2ecc71]/15 border-[#2ecc71]/30 text-[#6ee7a8]" : "bg-[#1e1e1e] border-[#2a2a2a] text-neutral-500"
           }`}>
             <span className={`w-1.5 h-1.5 rounded-full ${shiftActive ? "bg-[#2ecc71] animate-pulse" : "bg-neutral-600"}`} />
             {shiftStatusLabel}
           </span>
         </div>
-        <div className="mt-3.5">
-          <p className="font-mono-jet text-[12px] text-neutral-400">
+        <div className="mt-2">
+          <p className="font-mono-jet text-[11px] text-neutral-400">
             {gps.lat && gps.lng ? `${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)}` : "GPS not active"}{gps.acc ? ` · ±${Math.round(gps.acc)}m` : ""}
           </p>
-          {gpsAddress && <p className="text-[12px] text-neutral-300 mt-0.5 truncate">{gpsAddress}</p>}
-          {gpsAirport && <p className="font-mono-jet text-[11px] text-[#f6dd8c] mt-0.5">✈ {gpsAirport}</p>}
+          {gpsAddress && <p className="text-[11px] text-neutral-300 mt-0.5 truncate">{gpsAddress}</p>}
+          {gpsAirport && <p className="font-mono-jet text-[10px] text-[#f6dd8c] mt-0.5">✈ {gpsAirport}</p>}
         </div>
-        <p className="font-mono-jet text-[34px] font-bold text-[#f5c518] mt-3 tracking-tight">${grossToday.toFixed(2)}</p>
-        <p className="font-mono-jet text-[11px] text-neutral-500 mt-1">{todayTrips.length} {todayTrips.length === 1 ? "trip" : "trips"} · fare + tips + toll</p>
-        <div className="mt-4 h-px bg-[#222]" />
-        <div className="mt-3 flex items-center gap-1.5">
+        <p className="font-mono-jet text-[28px] font-bold text-[#f5c518] mt-2 tracking-tight">${grossToday.toFixed(2)}</p>
+        <p className="font-mono-jet text-[10px] text-neutral-500 mt-0.5">{todayTrips.length} {todayTrips.length === 1 ? "trip" : "trips"} · fare + tips + toll</p>
+        <div className="mt-3 h-px bg-[#222]" />
+        <div className="mt-2.5 flex items-center gap-1.5">
           <span className={`w-1.5 h-1.5 rounded-full ${shiftActive ? "bg-[#2ecc71]" : "bg-neutral-700"}`} />
-          <span className={`text-[11px] font-mono-jet ${shiftActive ? "text-[#6ee7a8]" : "text-neutral-500"}`}>
+          <span className={`text-[10px] font-mono-jet ${shiftActive ? "text-[#6ee7a8]" : "text-neutral-500"}`}>
             {shiftActive ? (isOnBreak ? "On break" : "On track") : "Shift ended"}
           </span>
-          <span className="ml-auto text-[10px] text-neutral-600 font-mono-jet flex items-center gap-1">
+          <span className="ml-auto text-[9px] text-neutral-600 font-mono-jet flex items-center gap-1">
             <span className={`w-1 h-1 rounded-full ${gps.status === "active" ? "bg-[#2ecc71]" : gps.status === "searching" ? "bg-yellow-400 animate-pulse" : "bg-neutral-600"}`} />
             GPS {gps.status}
           </span>
         </div>
-        <div className="mt-4 grid grid-cols-3 gap-2">
+        <div className="mt-3 grid grid-cols-3 gap-2">
           {(["START", "BREAK", "END"] as TurnStatus[]).map(s => {
             const isActive = (s === "START" && shiftActive && !isOnBreak) || (s === "BREAK" && isOnBreak) || (s === "END" && !shiftActive);
             const disabled = s === "BREAK" && !shiftActive;
             return (
               <button key={s} onClick={() => handleTurnButton(s)} disabled={disabled}
-                className={`h-[44px] rounded-full border text-[12px] tracking-[0.12em] font-bold transition-all ${
+                className={`h-[38px] rounded-full border text-[11px] tracking-[0.12em] font-bold transition-all ${
                   disabled ? "border-[#1a1a1a] bg-[#0a0a0a] text-neutral-600 cursor-not-allowed"
                   : isActive ? "border-[#d9b64f] text-black"
                   : "border-[#d9b64f]/60 text-[#f6dd8c] bg-transparent hover:bg-[#f6dd8c]/10"
