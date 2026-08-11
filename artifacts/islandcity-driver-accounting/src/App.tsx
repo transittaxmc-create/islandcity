@@ -967,7 +967,7 @@ export default function App() {
       reviewed: false,
     };
     const updated = editingId ? trips.map(p => p.id === editingId ? newTrip : p) : [newTrip, ...trips];
-    setTrips(updated);
+    syncSaveTrips(updated);
     resetForm();
     showToast(editingId ? `Trip updated ✓` : `Trip saved ✓ $${newTrip.grandTotal.toFixed(2)}`);
     setActiveTab("REGISTER");
@@ -983,13 +983,20 @@ export default function App() {
     setActiveTab("ENTRY");
   };
 
-  // Helper: compute new trips array, write to localStorage IMMEDIATELY (sync),
-  // then call setTrips so React re-renders. This survives iOS force-killing the
-  // process before the useEffect persistence layer gets a chance to run.
-  const deleteAndSave = (newTrips: Trip[]) => {
+  // Sync-save helpers — write to localStorage BEFORE calling the React setter.
+  // iOS can kill the JS process within ~100ms of a user action (swipe-up to
+  // close, home button, phone call), before the async useEffect ever runs.
+  // Writing synchronously here guarantees the data survives any timing window.
+  const syncSaveTrips = (newTrips: Trip[]) => {
     try { localStorage.setItem("island-city-trips", JSON.stringify(newTrips)); } catch {}
     setTrips(newTrips);
   };
+  const syncSaveExpenses = (newExpenses: Expense[]) => {
+    try { localStorage.setItem("island-city-expenses", JSON.stringify(newExpenses)); } catch {}
+    setExpenses(newExpenses);
+  };
+  // Keep the old name as an alias so no other call sites break
+  const deleteAndSave = syncSaveTrips;
 
   const handleDelete = (id: string) => {
     if (!window.confirm("Delete this trip? This cannot be undone.")) return;
@@ -1059,9 +1066,9 @@ export default function App() {
         : false,
     };
     if (editingExpenseId) {
-      setExpenses(expenses.map(e => e.id === editingExpenseId ? newExpense : e));
+      syncSaveExpenses(expenses.map(e => e.id === editingExpenseId ? newExpense : e));
     } else {
-      setExpenses([newExpense, ...expenses]);
+      syncSaveExpenses([newExpense, ...expenses]);
     }
     resetExpenseForm();
     setEditingExpenseId(null);
@@ -1071,12 +1078,12 @@ export default function App() {
 
   const handleDeleteExpense = (id: string) => {
     if (!window.confirm("¿Eliminar este gasto?")) return;
-    setExpenses(prev => prev.filter(e => e.id !== id));
+    syncSaveExpenses(expenses.filter(e => e.id !== id));
     showToast("Gasto eliminado");
   };
 
   const handleToggleExpenseVerified = (id: string) => {
-    setExpenses(prev => prev.map(e => e.id === id ? { ...e, verified: !e.verified } : e));
+    syncSaveExpenses(expenses.map(e => e.id === id ? { ...e, verified: !e.verified } : e));
   };
 
   const goldGradientStyle = {
