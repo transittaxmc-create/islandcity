@@ -91,6 +91,91 @@ const AIRPORTS = [
 
 const EXPENSE_CATEGORIES = ["Fuel", "Maintenance", "Supplies", "Insurance", "Parking", "Tolls", "Other"];
 
+const STATE_ABBR: Record<string, string> = {
+  "New York": "NY", "New Jersey": "NJ", "Connecticut": "CT",
+  "Pennsylvania": "PA", "Florida": "FL", "California": "CA",
+  "Massachusetts": "MA", "Texas": "TX", "Illinois": "IL",
+  "Georgia": "GA", "Maryland": "MD", "Virginia": "VA",
+  "North Carolina": "NC", "Ohio": "OH", "Michigan": "MI",
+};
+
+async function reverseGeocodeRich(
+  lat: number, lng: number, signal?: AbortSignal
+): Promise<string> {
+  // 1. Airport proximity (within 5 km → likely at the airport)
+  let nearAirport: { name: string; dist: number } | null = null;
+  for (const ap of AIRPORTS) {
+    const d = haversineKm(lat, lng, ap.lat, ap.lng);
+    if (d < 5 && (!nearAirport || d < nearAirport.dist))
+      nearAirport = { name: ap.name, dist: d };
+  }
+
+  // 2. Nominatim reverse geocode – zoom 18 = building level
+  const url =
+    `https://nominatim.openstreetmap.org/reverse?format=jsonv2` +
+    `&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
+  const res = await fetch(url, {
+    signal,
+    headers: { "User-Agent": "IslandCity-Driver-App/1.0" },
+  });
+  if (!res.ok) return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  const data = await res.json();
+  const addr: Record<string, string> = data.address || {};
+  const placeName: string = data.name || "";
+
+  const parts: string[] = [];
+
+  // 3. Named POI
+  if (addr.aeroway === "terminal" && placeName) {
+    const airport = addr.aerodrome || nearAirport?.name || "Airport";
+    parts.push(`${airport} – ${placeName}`);
+  } else if (addr.aeroway === "aerodrome" || addr.aerodrome) {
+    parts.push(nearAirport?.name || addr.aerodrome || placeName || "Airport");
+  } else if (nearAirport && nearAirport.dist < 2) {
+    parts.push(nearAirport.name);
+  } else if (
+    placeName &&
+    (addr.amenity || addr.tourism || addr.building ||
+      addr.leisure || addr.shop || addr.office || addr.healthcare)
+  ) {
+    parts.push(placeName);
+  }
+
+  // 4. Street address
+  const houseNum = addr.house_number || "";
+  const road =
+    addr.road || addr.pedestrian || addr.footway || addr.path || "";
+  if (road) {
+    parts.push(houseNum ? `${houseNum} ${road}` : road);
+  } else if (!parts.length && placeName) {
+    parts.push(placeName);
+  }
+
+  // 5. Neighbourhood / borough
+  const nbhd =
+    addr.neighbourhood || addr.suburb || addr.quarter || addr.borough || "";
+  if (nbhd) parts.push(nbhd);
+
+  // 6. City
+  const city =
+    addr.city || addr.town || addr.village || addr.county || "";
+  if (city) parts.push(city);
+
+  // 7. State abbreviation
+  const st = STATE_ABBR[addr.state] || "";
+  if (st) parts.push(st);
+
+  // 8. Coordinates suffix (always included)
+  const coord = `${lat.toFixed(5)},${lng.toFixed(5)}`;
+
+  const label =
+    parts.filter(Boolean).join(", ") ||
+    data.display_name?.split(",").slice(0, 3).join(",").trim() ||
+    coord;
+
+  return `${label} · ${coord}`;
+}
+
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
   const toRad = (d: number) => (d * Math.PI) / 180;
   const R = 6371;
@@ -255,6 +340,8 @@ export default function App() {
 
   const [showPickupMenu, setShowPickupMenu] = useState(false);
   const [showDropoffMenu, setShowDropoffMenu] = useState(false);
+  const [pickupResolving, setPickupResolving] = useState(false);
+  const [dropoffResolving, setDropoffResolving] = useState(false);
 
   // Storage state
   const [lastSavedAt, setLastSavedAt] = useState<string>(() => {
@@ -332,14 +419,8 @@ export default function App() {
     const controller = new AbortController();
     (async () => {
       try {
-        const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${gps.lat}&lon=${gps.lng}`;
-        const res = await fetch(url, { signal: controller.signal });
-        if (!res.ok) return;
-        const data = await res.json();
-        const addr = data?.address || {};
-        const town = addr.city || addr.town || addr.village || addr.county || addr.state || "";
-        const short = town ? `${town}${addr.road ? ", " + addr.road : ""}` : (data?.display_name || "");
-        if (short) setGpsAddress(short);
+        const rich = await reverseGeocodeRich(gps.lat!, gps.lng!, controller.signal);
+        setGpsAddress(rich);
       } catch {}
     })();
     return () => controller.abort();
@@ -873,13 +954,19 @@ export default function App() {
             onChange={e => setTripForm(s => ({ ...s, pickup: e.target.value }))}
             placeholder={gps.lat ? `GPS: ${gps.lat.toFixed(4)},${gps.lng?.toFixed(4)}` : "Address or place"}
             className="w-full h-16 rounded-2xl bg-black border border-[#262626] pl-4 pr-[52px] text-white text-[14px] font-medium placeholder:text-[#6b7280] focus:outline-none focus:border-[#14532d]" />
-          <button type="button" onClick={() => {
-            if (gps.lat && gps.lng) {
-              setTripForm(s => ({ ...s, pickup: `GPS ${gps.lat!.toFixed(4)},${gps.lng!.toFixed(4)}` }));
-              showToast("Pickup set from GPS");
-            } else { startGPS(); showToast("GPS searching… tap again when ready"); }
+          <button type="button" onClick={async () => {
+            if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
+            setPickupResolving(true);
+            try {
+              const rich = await reverseGeocodeRich(gps.lat, gps.lng);
+              setTripForm(s => ({ ...s, pickup: rich }));
+              showToast("Pickup location resolved ✓");
+            } catch {
+              setTripForm(s => ({ ...s, pickup: `${gps.lat!.toFixed(5)},${gps.lng!.toFixed(5)}` }));
+              showToast("GPS coordinates saved (sin conexión)");
+            } finally { setPickupResolving(false); }
           }} className="absolute right-1.5 top-1.5 w-[42px] h-[52px] rounded-xl bg-[#052e16] border border-[#166534] flex items-center justify-center text-[16px] hover:bg-[#0a3a1f] transition-colors">
-            📍
+            {pickupResolving ? <span className="animate-spin text-[13px]">⏳</span> : "📍"}
           </button>
         </div>
         {gps.lat && (
@@ -902,13 +989,19 @@ export default function App() {
             onChange={e => setTripForm(s => ({ ...s, dropoff: e.target.value }))}
             placeholder="Address or place"
             className="w-full h-16 rounded-2xl bg-black border border-[#262626] pl-4 pr-[52px] text-white text-[14px] font-medium placeholder:text-[#6b7280] focus:outline-none focus:border-[#1e3a8a]" />
-          <button type="button" onClick={() => {
-            if (gps.lat && gps.lng) {
-              setTripForm(s => ({ ...s, dropoff: `GPS ${gps.lat!.toFixed(4)},${gps.lng!.toFixed(4)}` }));
-              showToast("Drop-off set from GPS");
-            } else { startGPS(); showToast("GPS searching… tap again when ready"); }
+          <button type="button" onClick={async () => {
+            if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
+            setDropoffResolving(true);
+            try {
+              const rich = await reverseGeocodeRich(gps.lat, gps.lng);
+              setTripForm(s => ({ ...s, dropoff: rich }));
+              showToast("Drop-off location resolved ✓");
+            } catch {
+              setTripForm(s => ({ ...s, dropoff: `${gps.lat!.toFixed(5)},${gps.lng!.toFixed(5)}` }));
+              showToast("GPS coordinates saved (sin conexión)");
+            } finally { setDropoffResolving(false); }
           }} className="absolute right-1.5 top-1.5 w-[42px] h-[52px] rounded-xl bg-[#0c1a33] border border-[#1e3a8a] flex items-center justify-center text-[16px] hover:bg-[#132a5a] transition-colors">
-            📍
+            {dropoffResolving ? <span className="animate-spin text-[13px]">⏳</span> : "📍"}
           </button>
         </div>
       </div>
