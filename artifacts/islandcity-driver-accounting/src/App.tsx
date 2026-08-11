@@ -581,6 +581,12 @@ export default function App() {
   const todayEarnings = useMemo(() => todayTrips.reduce((a, b) => a + b.grandTotal, 0), [todayTrips]);
   const totalTollsToday = useMemo(() => todayTrips.reduce((a, b) => a + b.toll, 0), [todayTrips]);
 
+  // GROSS = fare + tips + extra + toll (everything customer paid, before platform fee)
+  const grossToday = useMemo(() =>
+    todayTrips.reduce((a, b) => a + b.earnings + b.tips + b.extra + b.toll, 0),
+    [todayTrips]
+  );
+
   const activeMsLive = useMemo(() => {
     if (!shiftActive || !clockInTime) return 0;
     const nowMs = currentTime.getTime();
@@ -592,10 +598,12 @@ export default function App() {
   const activeHoursFormatted = useMemo(() => formatHHMMSS(activeMsLive), [activeMsLive]);
   const activeHoursDecimal = activeMsLive / 3600000;
 
-  const perHourLive = useMemo(() => {
-    if (activeHoursDecimal > 0.05) return todayEarnings / activeHoursDecimal;
-    return todayTrips.length > 0 ? todayEarnings / 1.21 : 0;
-  }, [todayEarnings, activeHoursDecimal, todayTrips.length]);
+  // $/h uses GROSS only — not influenced by expenses
+  const perHourGross = useMemo(() => {
+    if (activeHoursDecimal > 0.05) return grossToday / activeHoursDecimal;
+    return 0;
+  }, [grossToday, activeHoursDecimal]);
+  const perHourLive = perHourGross; // alias kept for compatibility
 
   const weeklyTrips = useMemo(() => {
     const weekAgo = new Date(currentTime);
@@ -629,6 +637,69 @@ export default function App() {
     }
     return { hoy, semana, mes, año };
   }, [hoursLog, currentTime, shiftActive, activeMsLive]);
+
+  // ── Expenses today (from Expenses section) ────────────────────
+  const expensesToday = useMemo(() => {
+    const todayYMD = toYYYYMMDD(currentTime);
+    return expenses.filter(e => e.date === todayYMD).reduce((a, b) => a + b.amount, 0);
+  }, [expenses, currentTime]);
+
+  const netToday = useMemo(() => grossToday - expensesToday, [grossToday, expensesToday]);
+
+  // ── Toll aggregates across periods ───────────────────────────
+  const tollsWeek = useMemo(() => {
+    const weekAgo = new Date(currentTime); weekAgo.setDate(weekAgo.getDate() - 7);
+    return trips.filter(t => { try { return new Date(t.timestamp || t.date) >= weekAgo; } catch { return true; } })
+      .reduce((a, b) => a + b.toll, 0);
+  }, [trips, currentTime]);
+  const tollsMonth = useMemo(() => {
+    const m = currentTime.getMonth(), y = currentTime.getFullYear();
+    return trips.filter(t => { try { const d = new Date(t.timestamp || t.date); return d.getMonth() === m && d.getFullYear() === y; } catch { return true; } })
+      .reduce((a, b) => a + b.toll, 0);
+  }, [trips, currentTime]);
+  const tollsYear = useMemo(() =>
+    trips.filter(t => { try { return new Date(t.timestamp || t.date).getFullYear() === currentTime.getFullYear(); } catch { return true; } })
+      .reduce((a, b) => a + b.toll, 0),
+    [trips, currentTime]
+  );
+
+  // ── $500 daily goal ──────────────────────────────────────────
+  const DAILY_GOAL_USD = 500;
+  const goalPct        = Math.min((grossToday / DAILY_GOAL_USD) * 100, 100);
+  const remainingToGoal = Math.max(DAILY_GOAL_USD - grossToday, 0);
+  const projectedFinish = useMemo(() => {
+    if (perHourGross <= 0 || grossToday >= DAILY_GOAL_USD) return null;
+    return new Date(Date.now() + (remainingToGoal / perHourGross) * 3600000);
+  }, [perHourGross, remainingToGoal, grossToday]);
+
+  // ── Smart suggestion (time-of-day + pace) ────────────────────
+  const smartSuggestion = useMemo(() => {
+    const h   = currentTime.getHours();
+    const dow = currentTime.getDay();
+    const wd  = dow >= 1 && dow <= 5;
+    const we  = !wd;
+    if (grossToday >= DAILY_GOAL_USD)
+      return { emoji: "🏆", text: "$500 goal reached! Outstanding shift.", type: "gold" };
+    if (wd && h >= 7 && h < 9)
+      return { emoji: "🔥", text: "Morning rush — Midtown, Queens→Manhattan, Penn Station. Stay on the move.", type: "hot" };
+    if (h >= 12 && h < 14)
+      return { emoji: "🍽", text: "Lunch surge — Midtown, FiDi, Brooklyn Heights. Fast short trips.", type: "warm" };
+    if (wd && h >= 17 && h < 20)
+      return { emoji: "⚡", text: "Evening peak — best time of day. JFK/LGA also busy. Be aggressive.", type: "hot" };
+    if (we && (h >= 22 || h < 2))
+      return { emoji: "🌙", text: "Weekend night — LES, Williamsburg, Midtown. High surge potential.", type: "purple" };
+    if (h >= 2 && h < 6)
+      return { emoji: "😴", text: "Dead zone 2–6 AM — very low demand. Rest or reposition. Protect your rate.", type: "cold" };
+    if (wd && h >= 9 && h < 11)
+      return { emoji: "📉", text: "Post-rush valley. Good time for a break or airport queue (JFK/LGA).", type: "warn" };
+    if (perHourGross > 0 && perHourGross < 60)
+      return { emoji: "📊", text: `Pace $${perHourGross.toFixed(0)}/h — below $60 minimum. Check surge areas or reposition.`, type: "warn" };
+    if (perHourGross >= 60 && perHourGross < 70)
+      return { emoji: "👍", text: `Pace $${perHourGross.toFixed(0)}/h — close to $70 target. Stay in high-demand zones.`, type: "warm" };
+    if (perHourGross >= 70)
+      return { emoji: "💪", text: `Strong at $${perHourGross.toFixed(0)}/h. You're on track for a great shift.`, type: "good" };
+    return { emoji: "📍", text: "Start your shift to begin tracking performance.", type: "neutral" };
+  }, [currentTime, grossToday, perHourGross]);
 
   const resetForm = () => {
     setTripForm({ reference: "", earnings: "", tips: "", extraCash: "", toll: "", platformFee: "", platform: "Uber", pickup: "", dropoff: "", notes: "" });
@@ -787,8 +858,11 @@ export default function App() {
           {gpsAddress && <p className="text-[12px] text-neutral-300 mt-0.5 truncate">{gpsAddress}</p>}
           {gpsAirport && <p className="font-mono-jet text-[11px] text-[#f6dd8c] mt-0.5">✈ {gpsAirport}</p>}
         </div>
-        <p className="font-mono-jet text-[34px] font-bold text-[#f5c518] mt-3 tracking-tight">${todayEarnings.toFixed(2)}</p>
-        <p className="font-mono-jet text-[11px] text-neutral-500 mt-1">{todayTrips.length} trips today</p>
+        <p className="font-mono-jet text-[34px] font-bold text-[#f5c518] mt-3 tracking-tight">${grossToday.toFixed(2)}</p>
+        <div className="flex items-center gap-3 mt-1">
+          <p className="font-mono-jet text-[11px] text-neutral-500">{todayTrips.length} trips · gross</p>
+          <p className="font-mono-jet text-[11px] text-neutral-400">NET <span className={netToday >= 0 ? "text-[#4ade80]" : "text-[#ff6b6b]"}>${netToday.toFixed(2)}</span></p>
+        </div>
         <div className="mt-4 h-px bg-[#222]" />
         <div className="mt-3 flex items-center gap-1.5">
           <span className={`w-1.5 h-1.5 rounded-full ${shiftActive ? "bg-[#2ecc71]" : "bg-neutral-700"}`} />
@@ -823,34 +897,42 @@ export default function App() {
       <div>
         <p className="text-[10px] tracking-[0.22em] text-neutral-500 font-semibold mb-2.5">PERFORMANCE</p>
         <div className="grid grid-cols-2 gap-3">
+          {/* GROSS HOY */}
           <div className="bg-[#141414] border border-[#222] rounded-xl p-3.5">
-            <p className="text-[9px] tracking-[0.18em] text-neutral-500 font-semibold">TODAY'S EARNINGS</p>
-            <p className="font-mono-jet text-[20px] font-semibold text-[#f5c518] mt-2">${todayEarnings.toFixed(2)}</p>
-            <p className="text-[10px] text-neutral-600 mt-1 font-mono-jet">{todayTrips.length} trips · live</p>
+            <p className="text-[9px] tracking-[0.18em] text-neutral-500 font-semibold">GROSS HOY</p>
+            <p className="font-mono-jet text-[20px] font-semibold text-[#f5c518] mt-2">${grossToday.toFixed(2)}</p>
+            <p className="text-[10px] text-neutral-600 mt-1 font-mono-jet">{todayTrips.length} trips · fare+tip+toll</p>
           </div>
+          {/* $/HORA GROSS */}
           <div className="bg-[#141414] border border-[#222] rounded-xl p-3.5">
-            <p className="text-[9px] tracking-[0.18em] text-neutral-500 font-semibold">ACTIVE HOURS</p>
-            <p className="font-mono-jet text-[18px] font-semibold text-white mt-2 tracking-tight">
-              {shiftActive ? activeHoursFormatted : cumulative.hoy > 0 ? `${cumulative.hoy.toFixed(2)}h today` : "00:00:00"}
+            <p className="text-[9px] tracking-[0.18em] text-neutral-500 font-semibold">$/HORA GROSS</p>
+            <p className={`font-mono-jet text-[20px] font-semibold mt-2 ${perHourGross >= 70 ? "text-[#4ade80]" : perHourGross >= 60 ? "text-[#f6dd8c]" : perHourGross > 0 ? "text-[#ff6b6b]" : "text-white"}`}>
+              {perHourGross > 0 ? `$${perHourGross.toFixed(2)}` : "—"}
             </p>
-            <div className="mt-2 space-y-0.5">
-              <div className="flex items-center gap-1">
-                <span className={`w-1.5 h-1.5 rounded-full ${shiftActive ? "bg-[#2ecc71] animate-pulse" : "bg-neutral-600"}`} />
-                <span className="text-[10px] text-[#6ee7a8] font-mono-jet">{shiftActive ? (isOnBreak ? "Break" : "On route") : "Shift idle"}</span>
-              </div>
-              <p className="text-[9px] font-mono-jet text-neutral-500">Today {cumulative.hoy.toFixed(1)}h · Week {cumulative.semana.toFixed(1)}h</p>
-              <p className="text-[9px] font-mono-jet text-neutral-600">Month {cumulative.mes.toFixed(1)}h · Year {cumulative.año.toFixed(1)}h</p>
+            <div className="mt-1 space-y-0.5">
+              <p className="text-[10px] text-neutral-500 font-mono-jet">
+                {shiftActive ? activeHoursFormatted : cumulative.hoy > 0 ? `${cumulative.hoy.toFixed(2)}h hoy` : "sin turno"}
+              </p>
+              <p className="text-[9px] font-mono-jet text-neutral-600">Sem {cumulative.semana.toFixed(1)}h · Mes {cumulative.mes.toFixed(1)}h</p>
             </div>
           </div>
+          {/* GASTOS HOY */}
           <div className="bg-[#141414] border border-[#222] rounded-xl p-3.5">
-            <p className="text-[9px] tracking-[0.18em] text-neutral-500 font-semibold">$/HOUR LIVE</p>
-            <p className="font-mono-jet text-[20px] font-semibold text-white mt-2">${perHourLive.toFixed(2)}</p>
-            <p className="text-[10px] text-neutral-500 mt-1">Live calc{shiftActive ? " · active" : ""}</p>
+            <p className="text-[9px] tracking-[0.18em] text-neutral-500 font-semibold">GASTOS HOY</p>
+            <p className="font-mono-jet text-[20px] font-semibold text-[#ff6b6b] mt-2">
+              {expensesToday > 0 ? `−$${expensesToday.toFixed(2)}` : "$0.00"}
+            </p>
+            <p className="text-[10px] text-neutral-600 mt-1 font-mono-jet">
+              {expenses.filter(e => e.date === toYYYYMMDD(currentTime)).length} items hoy
+            </p>
           </div>
+          {/* NET HOY */}
           <div className="bg-[#141414] border border-[#222] rounded-xl p-3.5">
-            <p className="text-[9px] tracking-[0.18em] text-neutral-500 font-semibold">WEEKLY TOTAL</p>
-            <p className="font-mono-jet text-[20px] font-semibold text-white mt-2">${weeklyTotal.toFixed(2)}</p>
-            <p className="text-[10px] text-neutral-600 mt-1 font-mono-jet">{weeklyTrips.length} trips · 7 days</p>
+            <p className="text-[9px] tracking-[0.18em] text-neutral-500 font-semibold">NET HOY</p>
+            <p className={`font-mono-jet text-[20px] font-semibold mt-2 ${netToday >= 0 ? "text-[#4ade80]" : "text-[#ff6b6b]"}`}>
+              ${netToday.toFixed(2)}
+            </p>
+            <p className="text-[10px] text-neutral-600 mt-1 font-mono-jet">gross − gastos · ref. semanal ${weeklyTotal.toFixed(0)}</p>
           </div>
         </div>
       </div>
@@ -859,56 +941,123 @@ export default function App() {
       <div className="bg-[#141414] border border-[#222] rounded-[20px] p-4 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-[11px] tracking-[0.18em] font-bold text-white">TODAY'S PERFORMANCE</h3>
-          <span className="text-[10px] tracking-[0.18em] font-bold" style={goldGradientStyle}>GOAL $/H</span>
+          <span className="font-mono-jet text-[11px] font-bold text-[#f6dd8c]">${grossToday.toFixed(2)} / $500</span>
         </div>
+
+        {/* $500 daily goal progress bar */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-[10px]">
+            <span className="text-neutral-500 font-mono-jet">DAILY GOAL $500</span>
+            <span className={`font-mono-jet font-bold ${goalPct >= 100 ? "text-[#4ade80]" : goalPct >= 70 ? "text-[#f6dd8c]" : "text-neutral-400"}`}>
+              {goalPct.toFixed(0)}%
+            </span>
+          </div>
+          <div className="h-3 bg-[#1a1a1a] rounded-full overflow-hidden border border-[#2a2a2a]">
+            <div className="h-full rounded-full transition-all duration-500"
+              style={{
+                width: `${goalPct}%`,
+                background: goalPct >= 100 ? "#4ade80" : goalPct >= 70 ? "linear-gradient(90deg,#f6dd8c,#d9b64f)" : "linear-gradient(90deg,#374151,#f6dd8c)"
+              }} />
+          </div>
+          <div className="flex items-center justify-between text-[10px] font-mono-jet">
+            <span className="text-neutral-500">
+              {grossToday >= DAILY_GOAL_USD ? "🏆 Goal reached!" : `Faltan $${remainingToGoal.toFixed(2)}`}
+            </span>
+            <span className="text-neutral-400">
+              {projectedFinish
+                ? `Llegas ~${projectedFinish.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+                : grossToday >= DAILY_GOAL_USD ? "✓ Done" : "—"}
+            </span>
+          </div>
+        </div>
+
+        {/* $/hr goal slider */}
         <div className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-3.5">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-neutral-500">Target per hour</span>
-            <span className="font-mono-jet text-[20px] font-bold" style={goldGradientStyle}>${goal}/h</span>
+            <span className="text-[11px] text-neutral-500">Target $/hora (gross)</span>
+            <span className="font-mono-jet text-[18px] font-bold" style={goldGradientStyle}>${goal}/h</span>
           </div>
           <input type="range" min={50} max={100} step={1} value={goal}
-            onChange={e => setGoal(parseInt(e.target.value))} className="w-full mt-4" />
+            onChange={e => setGoal(parseInt(e.target.value))} className="w-full mt-3" />
           <div className="flex justify-between mt-1">
             <span className="text-[10px] font-mono-jet text-neutral-600">$50</span>
             <span className="text-[10px] font-mono-jet text-neutral-600">$100</span>
           </div>
         </div>
+
+        {/* Actual vs Goal vs Delta */}
         <div className="grid grid-cols-3 gap-2">
-          {[["ACTUAL", `$${perHourLive.toFixed(2)}`, "text-white"], ["GOAL", `$${goal.toFixed(2)}`, "text-[#f6dd8c]"], ["DELTA", `${perHourLive >= goal ? "+" : ""}$${(perHourLive - goal).toFixed(2)}/h`, perHourLive >= goal ? "text-[#4ade80]" : "text-[#ff6b6b]"]].map(([label, val, cls]) => (
+          {([
+            ["ACTUAL/h", perHourGross > 0 ? `$${perHourGross.toFixed(2)}` : "—", perHourGross >= goal ? "text-[#4ade80]" : perHourGross >= 60 ? "text-[#f6dd8c]" : "text-[#ff6b6b]"],
+            ["GOAL/h",   `$${goal.toFixed(0)}`,                             "text-[#f6dd8c]"],
+            ["DELTA",    perHourGross > 0 ? `${perHourGross >= goal ? "+" : ""}$${(perHourGross - goal).toFixed(0)}/h` : "—", perHourGross >= goal ? "text-[#4ade80]" : "text-[#ff6b6b]"],
+          ] as [string,string,string][]).map(([label, val, cls]) => (
             <div key={label} className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-3">
               <p className="text-[9px] tracking-[0.14em] text-neutral-500">{label}</p>
               <p className={`font-mono-jet text-[15px] font-semibold ${cls} mt-1`}>{val}</p>
             </div>
           ))}
         </div>
-        <span className={`inline-flex items-center px-3 py-1.5 rounded-full border text-[10px] tracking-[0.12em] font-semibold font-mono-jet ${
-          perHourLive >= goal ? "bg-[#4ade80]/10 border-[#4ade80]/30 text-[#4ade80]" : "bg-[#ff4d4f]/10 border-[#ff4d4f]/30 text-[#ff6b6b]"
+
+        {/* Smart suggestion */}
+        <div className={`rounded-xl p-3.5 border-l-[3px] ${
+          smartSuggestion.type === "gold"    ? "bg-[#1a1600] border border-[#2a2200] border-l-[#f6dd8c]"
+          : smartSuggestion.type === "hot"  ? "bg-[#1a0800] border border-[#2a1000] border-l-[#fb923c]"
+          : smartSuggestion.type === "warm" ? "bg-[#1a1200] border border-[#2a1e00] border-l-[#fbbf24]"
+          : smartSuggestion.type === "good" ? "bg-[#052e16] border border-[#166534] border-l-[#4ade80]"
+          : smartSuggestion.type === "purple" ? "bg-[#1a1625] border border-[#2a2340] border-l-[#a78bfa]"
+          : smartSuggestion.type === "cold" ? "bg-[#0a0a14] border border-[#1a1a2a] border-l-[#60a5fa]"
+          : smartSuggestion.type === "warn" ? "bg-[#1a0f00] border border-[#2a1800] border-l-[#f59e0b]"
+          : "bg-[#141414] border border-[#222] border-l-[#374151]"
         }`}>
-          <span className={`w-1 h-1 rounded-full mr-2 animate-pulse ${perHourLive >= goal ? "bg-[#4ade80]" : "bg-[#ff4d4f]"}`} />
-          {perHourLive >= goal ? "ON GOAL" : "BELOW GOAL · Pick up pace"}
-        </span>
+          <div className="flex items-start gap-2">
+            <span className="text-[16px] flex-shrink-0 mt-0.5">{smartSuggestion.emoji}</span>
+            <p className="text-[11px] leading-[1.5] text-neutral-200">{smartSuggestion.text}</p>
+          </div>
+          {perHourGross > 0 && grossToday < DAILY_GOAL_USD && (
+            <p className="text-[10px] font-mono-jet text-neutral-500 mt-2">
+              A este ritmo necesitas {perHourGross > 0 ? `${(remainingToGoal / perHourGross).toFixed(1)}h` : "—"} más para $500
+            </p>
+          )}
+        </div>
+
+        {/* Trip stats strip */}
         <div className="grid grid-cols-3 gap-0 bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl overflow-hidden">
           <div className="p-3 border-r border-[#1f1f1f] text-center">
-            <p className="text-[9px] text-neutral-500 tracking-widest">TOLLS</p>
-            <p className="font-mono-jet text-[13px] font-semibold mt-1 text-white">${totalTollsToday.toFixed(2)}</p>
-          </div>
-          <div className="p-3 border-r border-[#1f1f1f] text-center">
-            <p className="text-[9px] text-neutral-500 tracking-widest">TRIPS</p>
+            <p className="text-[9px] text-neutral-500 tracking-widest">TRIPS HOY</p>
             <p className="font-mono-jet text-[13px] font-semibold mt-1 text-white">{todayTrips.length}</p>
           </div>
+          <div className="p-3 border-r border-[#1f1f1f] text-center">
+            <p className="text-[9px] text-neutral-500 tracking-widest">$/VIAJE</p>
+            <p className="font-mono-jet text-[13px] font-semibold mt-1 text-[#f6dd8c]">
+              ${todayTrips.length ? (grossToday / todayTrips.length).toFixed(2) : "0.00"}
+            </p>
+          </div>
           <div className="p-3 text-center">
-            <p className="text-[9px] text-neutral-500 tracking-widest">NET TODAY</p>
-            <p className="font-mono-jet text-[13px] font-semibold mt-1 text-[#f5c518]">${todayEarnings.toFixed(2)}</p>
+            <p className="text-[9px] text-neutral-500 tracking-widest">GROSS HOY</p>
+            <p className="font-mono-jet text-[13px] font-semibold mt-1 text-[#f5c518]">${grossToday.toFixed(2)}</p>
           </div>
         </div>
+
+        {/* E-ZPass toll tracking */}
         <div className="rounded-xl bg-[#1a1625] border border-[#2a2340] border-l-[3px] border-l-[#8b5cf6] p-3.5">
-          <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-[#8b5cf6]" />
-            <p className="text-[10px] tracking-[0.18em] font-bold text-[#a78bfa]">E-ZPASS 2026 · {TOLL_PLAZAS.length} PLAZAS</p>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-[#8b5cf6]" />
+              <p className="text-[10px] tracking-[0.18em] font-bold text-[#a78bfa]">E-ZPASS {TOLL_YEAR} · TOLLS USADOS</p>
+            </div>
+            <span className="font-mono-jet text-[11px] font-bold text-[#c4b5fd]">${totalTollsToday.toFixed(2)} hoy</span>
           </div>
-          <p className="text-[12px] leading-[1.5] text-[#c4b5fd]/90 mt-2">
-            MTA ${TOLL_PLAZAS[3].rate} · Port Authority $16.79 peak · Geofencing active.{" "}
-            {shiftActive ? "GPS live tracking." : "Start shift to enable auto-tagging."}
+          <div className="grid grid-cols-3 gap-2">
+            {([["SEMANA", tollsWeek], ["MES", tollsMonth], ["AÑO", tollsYear]] as [string,number][]).map(([label, val]) => (
+              <div key={label} className="text-center">
+                <p className="text-[8px] text-[#6d5a9c] tracking-widest">{label}</p>
+                <p className="font-mono-jet text-[12px] font-semibold text-[#c4b5fd] mt-0.5">${val.toFixed(2)}</p>
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] text-[#c4b5fd]/70 mt-2">
+            {shiftActive ? "⚡ Geofencing activo — auto-detectando peajes" : "Inicia turno para auto-detección de peajes"}
           </p>
         </div>
       </div>
