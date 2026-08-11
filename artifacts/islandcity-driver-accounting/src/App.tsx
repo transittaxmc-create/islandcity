@@ -231,21 +231,25 @@ type PlatformMeta = { initial: string; bg: string; tags: string[]; note?: string
 
 const TAG_STYLES: Record<string, string> = {
   "ACCESS-A-RIDE": "bg-[#dbeafe] text-[#1e40af] border-[#bfdbfe]",
-  VOUCHER: "bg-[#f3f4f6] text-[#374151] border-[#e5e7eb]",
+  "VOUCHER":        "bg-[#f3f4f6] text-[#374151] border-[#e5e7eb]",
+  "PRIVATE":        "bg-[#1f2937] text-[#d1d5db] border-[#374151]",
+  "TAX":            "bg-[#fef3c7] text-[#92400e] border-[#fde68a]",
 };
 
 const platformMeta: Record<string, PlatformMeta> = {
   "EcoRide - 10% fee": { initial: "E", bg: "bg-[#22c55e]", tags: ["ACCESS-A-RIDE", "VOUCHER"] },
-  EcoRide: { initial: "E", bg: "bg-[#22c55e]", tags: ["ACCESS-A-RIDE", "VOUCHER"] },
-  Uber: { initial: "U", bg: "bg-white", logoBg: "bg-white", tags: [], logo: "/logos/uber.png" },
-  Lyft: { initial: "L", bg: "bg-[#FF00BF]", tags: [], logo: "/logos/lyft.png", logoBg: "bg-black" },
-  Empower: { initial: "E", bg: "bg-[#3b82f6]", tags: [], logo: "/logos/empower.png", logoBg: "bg-white" },
-  Gallant: { initial: "G", bg: "bg-[#f97316]", tags: ["VOUCHER"], logo: "/logos/gallant.png", logoBg: "bg-white" },
-  "Aventus Ride": { initial: "A", bg: "bg-[#8b5cf6]", tags: ["VOUCHER"], logo: "/logos/aventus.png", logoBg: "bg-white" },
-  "Classic Ryde": { initial: "CR", bg: "bg-[#14b8a6]", tags: ["VOUCHER"], logo: "/logos/classicryde.png", logoBg: "bg-white" },
-  "Aki Technology": { initial: "AKI", bg: "bg-[#0ea5e9]", tags: ["ACCESS-A-RIDE", "VOUCHER"], note: "Medical Transportation NYC", logo: "/logos/aki.png", logoBg: "bg-white" },
-  "Street Hail": { initial: "SH", bg: "bg-[#6b7280]", tags: [] },
-  Other: { initial: "O", bg: "bg-[#9ca3af]", tags: [] },
+  "EcoRide":           { initial: "E", bg: "bg-[#22c55e]", tags: ["ACCESS-A-RIDE", "VOUCHER"] },
+  "Uber":              { initial: "U", bg: "bg-white",     logoBg: "bg-white", tags: [], logo: "/logos/uber.png" },
+  "Lyft":              { initial: "L", bg: "bg-[#ff00bf]", logoBg: "bg-black", tags: [], logo: "/logos/lyft.png" },
+  "Empower":           { initial: "E", bg: "bg-[#3b82f6]", logoBg: "bg-white", tags: [], logo: "/logos/empower.png" },
+  "Gallant":           { initial: "G", bg: "bg-[#f97316]", logoBg: "bg-white", tags: ["VOUCHER"], logo: "/logos/gallant.png" },
+  "Aventus Ride":      { initial: "A", bg: "bg-[#8b5cf6]", logoBg: "bg-white", tags: ["VOUCHER"], logo: "/logos/aventus.png" },
+  "Classic Ryde":      { initial: "CR", bg: "bg-[#14b8a6]", logoBg: "bg-white", tags: ["VOUCHER"], logo: "/logos/classicryde.png" },
+  "Aki Technology":    { initial: "AKI", bg: "bg-[#0ea5e9]", logoBg: "bg-white", tags: ["ACCESS-A-RIDE", "VOUCHER"], note: "Medical", logo: "/logos/aki.png" },
+  "Street Hail":       { initial: "SH", bg: "bg-[#6b7280]", tags: [], logo: "/logos/streethail.png" },
+  "Island City Transit": { initial: "ICT", bg: "bg-[#1f2937]", tags: ["PRIVATE"] },
+  "Transit Tax":       { initial: "TT", bg: "bg-[#374151]", tags: ["TAX"] },
+  "Other":             { initial: "O", bg: "bg-[#9ca3af]", tags: [] },
 };
 
 const getPlatformMeta = (name: string): PlatformMeta =>
@@ -1437,6 +1441,7 @@ export default function App() {
           <select value={tripForm.platform} onChange={e => setTripForm(s => ({ ...s, platform: e.target.value }))}
             className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 pr-8 text-white text-[14px] font-bold appearance-none focus:outline-none focus:border-[#3a3a3a]">
             <option>EcoRide - 10% fee</option>
+            <option>EcoRide</option>
             <option>Uber</option>
             <option>Lyft</option>
             <option>Empower</option>
@@ -1445,6 +1450,8 @@ export default function App() {
             <option>Classic Ryde</option>
             <option>Aki Technology</option>
             <option>Street Hail</option>
+            <option>Island City Transit</option>
+            <option>Transit Tax</option>
             <option>Other</option>
           </select>
           <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 text-[12px]">▼</span>
