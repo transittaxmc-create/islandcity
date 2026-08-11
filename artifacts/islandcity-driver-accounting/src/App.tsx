@@ -859,10 +859,7 @@ export default function App() {
           {gpsAirport && <p className="font-mono-jet text-[11px] text-[#f6dd8c] mt-0.5">✈ {gpsAirport}</p>}
         </div>
         <p className="font-mono-jet text-[34px] font-bold text-[#f5c518] mt-3 tracking-tight">${grossToday.toFixed(2)}</p>
-        <div className="flex items-center gap-3 mt-1">
-          <p className="font-mono-jet text-[11px] text-neutral-500">{todayTrips.length} trips · gross</p>
-          <p className="font-mono-jet text-[11px] text-neutral-400">NET <span className={netToday >= 0 ? "text-[#4ade80]" : "text-[#ff6b6b]"}>${netToday.toFixed(2)}</span></p>
-        </div>
+        <p className="font-mono-jet text-[11px] text-neutral-500 mt-1">{todayTrips.length} {todayTrips.length === 1 ? "trip" : "trips"} · fare + tips + toll</p>
         <div className="mt-4 h-px bg-[#222]" />
         <div className="mt-3 flex items-center gap-1.5">
           <span className={`w-1.5 h-1.5 rounded-full ${shiftActive ? "bg-[#2ecc71]" : "bg-neutral-700"}`} />
@@ -897,11 +894,21 @@ export default function App() {
       <div>
         <p className="text-[10px] tracking-[0.22em] text-neutral-500 font-semibold mb-2.5">PERFORMANCE</p>
         <div className="grid grid-cols-2 gap-3">
-          {/* GROSS HOY */}
+          {/* HOY BREAKDOWN */}
           <div className="bg-[#141414] border border-[#222] rounded-xl p-3.5">
-            <p className="text-[9px] tracking-[0.18em] text-neutral-500 font-semibold">GROSS HOY</p>
-            <p className="font-mono-jet text-[20px] font-semibold text-[#f5c518] mt-2">${grossToday.toFixed(2)}</p>
-            <p className="text-[10px] text-neutral-600 mt-1 font-mono-jet">{todayTrips.length} trips · fare+tip+toll</p>
+            <p className="text-[9px] tracking-[0.18em] text-neutral-500 font-semibold">HOY BREAKDOWN</p>
+            <div className="mt-2 space-y-1">
+              {([
+                ["Fare", todayTrips.reduce((a,b) => a + b.earnings, 0)],
+                ["Tips", todayTrips.reduce((a,b) => a + b.tips + b.extra, 0)],
+                ["Tolls", totalTollsToday],
+              ] as [string,number][]).map(([label, val]) => (
+                <div key={label} className="flex justify-between items-center">
+                  <span className="text-[10px] text-neutral-500 font-mono-jet">{label}</span>
+                  <span className="font-mono-jet text-[12px] font-semibold text-neutral-200">${val.toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
           </div>
           {/* $/HORA GROSS */}
           <div className="bg-[#141414] border border-[#222] rounded-xl p-3.5">
@@ -941,7 +948,9 @@ export default function App() {
       <div className="bg-[#141414] border border-[#222] rounded-[20px] p-4 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-[11px] tracking-[0.18em] font-bold text-white">TODAY'S PERFORMANCE</h3>
-          <span className="font-mono-jet text-[11px] font-bold text-[#f6dd8c]">${grossToday.toFixed(2)} / $500</span>
+          <span className={`font-mono-jet text-[11px] font-bold ${goalPct >= 100 ? "text-[#4ade80]" : "text-neutral-500"}`}>
+            {goalPct.toFixed(0)}% del día
+          </span>
         </div>
 
         {/* $500 daily goal progress bar */}
@@ -1034,8 +1043,8 @@ export default function App() {
             </p>
           </div>
           <div className="p-3 text-center">
-            <p className="text-[9px] text-neutral-500 tracking-widest">GROSS HOY</p>
-            <p className="font-mono-jet text-[13px] font-semibold mt-1 text-[#f5c518]">${grossToday.toFixed(2)}</p>
+            <p className="text-[9px] text-neutral-500 tracking-widest">SEMANAL</p>
+            <p className="font-mono-jet text-[13px] font-semibold mt-1 text-[#f5c518]">${weeklyTotal.toFixed(2)}</p>
           </div>
         </div>
 
@@ -1848,16 +1857,15 @@ export default function App() {
           </div>
         )}
 
-        {/* E-ZPass advisory */}
+        {/* Toll deduction note */}
         <div className="rounded-xl bg-[#1a1625] border-l-[3px] border-l-[#8b5cf6] border border-[#2a2340] p-3.5">
           <div className="flex items-center gap-2">
             <div className="w-1.5 h-1.5 rounded-full bg-[#8b5cf6]" />
-            <p className="text-[10px] tracking-[0.18em] font-bold text-[#a78bfa]">AI INSIGHT · E-ZPASS 2026 · {TOLL_PLAZAS.length} PLAZAS</p>
+            <p className="text-[10px] tracking-[0.18em] font-bold text-[#a78bfa]">IRS DEDUCTIONS · TOLLS {TOLL_YEAR}</p>
           </div>
           <p className="text-[12px] text-[#c4b5fd]/90 mt-1.5 leading-[1.5]">
-            MTA $6.94 · Minor $3.18/$2.60 · Port Authority $16.79 peak.
-            Today {todayTrips.length} trips · {cumulative.hoy.toFixed(1)}h active.
-            Avg per trip: ${todayTrips.length ? (todayEarnings / todayTrips.length).toFixed(2) : "0.00"}.
+            Los peajes de E-ZPass son 100% deducibles como gasto de negocio (Schedule C, Line 9).
+            Guarda tus estados de cuenta de E-ZPass mensuales como respaldo para taxes.
           </p>
         </div>
       </div>
