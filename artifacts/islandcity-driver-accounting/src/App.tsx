@@ -370,16 +370,17 @@ function PlatformAvatar({
 // One-time reset: bump version string below to wipe all data on the next load.
 // After clearing it forces a real page reload so React can't write stale
 // in-memory state back into the freshly-cleared localStorage.
-const CLEAN_SLATE_VERSION = "2026-08-11-v4";
+const CLEAN_SLATE_VERSION = "2026-08-11-v5";
 (function enforceCleanSlate() {
   try {
     if (localStorage.getItem("ic-app-version") !== CLEAN_SLATE_VERSION) {
+      // Flag checked by the pagehide/visibilitychange flush listener so it does NOT
+      // write stale React state back into the just-cleared storage during the reload.
+      (window as any).__ic_wiping = true;
       // localStorage.clear() — nukes everything, no partial key list that can miss entries.
       // Set version immediately after so the next load sees a match and skips the wipe.
       localStorage.clear();
       localStorage.setItem("ic-app-version", CLEAN_SLATE_VERSION);
-      // Hard reload forces React to re-initialise from the now-empty storage instead
-      // of writing the old in-memory state back (HMR race condition).
       window.location.reload();
     }
   } catch {}
@@ -554,6 +555,10 @@ export default function App() {
   // on hide/close and writes the latest state directly to localStorage.
   useEffect(() => {
     const flush = () => {
+      // Skip flush when a clean-slate wipe is in progress — otherwise the stale
+      // React state gets written back into the freshly-cleared localStorage before
+      // the page reloads, making the wipe appear to do nothing.
+      if ((window as any).__ic_wiping) return;
       try {
         localStorage.setItem("island-city-trips",    JSON.stringify(tripsRef.current));
         localStorage.setItem("island-city-expenses", JSON.stringify(expensesRef.current));
@@ -673,6 +678,9 @@ export default function App() {
   ];
 
   const handleFactoryReset = () => {
+    // Flag checked by the pagehide/visibilitychange flush listener so it does NOT
+    // write stale React state back into the just-cleared storage during the reload.
+    (window as any).__ic_wiping = true;
     // localStorage.clear() nukes EVERYTHING — no key list that can be incomplete.
     // Then we immediately re-set the version so the IIFE doesn't fire an extra
     // reload on the fresh page load.
