@@ -253,32 +253,11 @@ const getPlatformMeta = (name: string): PlatformMeta =>
 
 const getTagStyle = (tag: string) => TAG_STYLES[tag] || "bg-[#f3f4f6] text-[#374151] border-[#e5e7eb]";
 
-const initialTrips: Trip[] = [
-  {
-    id: "1", reference: "IC-8821", earnings: 18.5, tips: 4, extra: 0, toll: 2.75, fee: 3.2,
-    platform: "Uber", pickup: "Times Sq / Theatre District", dropoff: "Brooklyn Heights",
-    notes: "Surge x1.5", grandTotal: 22.05,
-    time: "7:12 PM", date: new Date().toISOString().slice(0, 10),
-    timestamp: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
-    gps: { lat: 40.758, lng: -73.9855 },
-    status: "pending" as const, reviewed: false,
-  },
-  {
-    id: "2", reference: "IC-8822", earnings: 12.0, tips: 2, extra: 5, toll: 0, fee: 1.8,
-    platform: "Lyft", pickup: "Midtown East", dropoff: "Times Sq / Theatre District",
-    notes: "Quick hop", grandTotal: 17.2,
-    time: "8:31 PM", date: new Date().toISOString().slice(0, 10),
-    timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-    gps: { lat: 40.76, lng: -73.97 },
-    status: "pending" as const, reviewed: false,
-  },
-];
-
-const initialExpenses: Expense[] = [
-  { id: "e1", date: new Date().toISOString().slice(0,10), category: "Vehicle & Fuel", vendor: "BP - Queens Blvd", amount: 42.30, note: "", type: "Gasoline / Fuel", verified: false },
-  { id: "e2", date: new Date(Date.now()-86400000).toISOString().slice(0,10), category: "Tolls & Parking", vendor: "E-ZPass replenishment", amount: 30.00, note: "Monthly top-up", type: "E-ZPass Replenishment", verified: true },
-  { id: "e3", date: new Date(Date.now()-86400000*2).toISOString().slice(0,10), category: "Vehicle & Fuel", vendor: "Mister Car Wash", amount: 12.00, note: "", type: "Car Wash (single)", verified: true },
-];
+// No seed/sample data — app always starts empty so real driver data is never
+// mixed with test entries. Storage initializers fall back to [] when storage
+// is missing or invalid.
+const initialTrips: Trip[] = [];
+const initialExpenses: Expense[] = [];
 
 function formatHHMMSS(ms: number) {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
@@ -370,7 +349,7 @@ function PlatformAvatar({
 // One-time reset: bump version string below to wipe all data on the next load.
 // After clearing it forces a real page reload so React can't write stale
 // in-memory state back into the freshly-cleared localStorage.
-const CLEAN_SLATE_VERSION = "2026-08-11-v5";
+const CLEAN_SLATE_VERSION = "2026-08-11-v6";
 (function enforceCleanSlate() {
   try {
     if (localStorage.getItem("ic-app-version") !== CLEAN_SLATE_VERSION) {
@@ -422,10 +401,7 @@ export default function App() {
       const raw = localStorage.getItem("island-city-hours");
       if (raw) return JSON.parse(raw);
     } catch {}
-    return [
-      { date: toYYYYMMDD(new Date(Date.now() - 86400000 * 2)), hours: 5.5, clockIn: "", clockOut: "", breakMs: 0 },
-      { date: toYYYYMMDD(new Date(Date.now() - 86400000)), hours: 6.2, clockIn: "", clockOut: "", breakMs: 0 },
-    ];
+    return [];
   });
 
   // Settings / reset panel
