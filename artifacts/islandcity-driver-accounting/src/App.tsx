@@ -733,11 +733,21 @@ export default function App() {
   }, [tripForm.earnings, tripForm.tips, tripForm.extraCash, tripForm.toll, tripForm.platformFee]);
 
   const todayTrips = useMemo(() => {
+    // When a shift is active: only count trips entered AFTER the shift started.
+    // This prevents pre-shift trips from inflating grossToday and making $/hr
+    // show astronomically high numbers (e.g. $144 ÷ 40 seconds = $12,000/hr).
+    // When no shift is active: show all trips for today's calendar date.
+    if (shiftActive && clockInTime) {
+      const shiftStartMs = clockInTime.getTime();
+      return trips.filter(t => {
+        try { return new Date(t.timestamp || t.date).getTime() >= shiftStartMs; } catch { return false; }
+      });
+    }
     const todayStr = currentTime.toDateString();
     return trips.filter(t => {
       try { return new Date(t.timestamp || t.date).toDateString() === todayStr; } catch { return true; }
     });
-  }, [trips, currentTime]);
+  }, [trips, currentTime, shiftActive, clockInTime]);
 
   const todayEarnings = useMemo(() => todayTrips.reduce((a, b) => a + b.grandTotal, 0), [todayTrips]);
   const totalTollsToday = useMemo(() => todayTrips.reduce((a, b) => a + b.toll, 0), [todayTrips]);
