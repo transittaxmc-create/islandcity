@@ -1623,7 +1623,7 @@ export default function App() {
       </div>
 
       {/* Sticky totals bar — always visible while scrolling */}
-      <div className="sticky top-[112px] z-20 -mx-4 px-4 pt-2 pb-3 bg-black/96 backdrop-blur-sm border-b border-[#1a1a1a]">
+      <div className="sticky z-20 -mx-4 px-4 pt-2 pb-3 bg-black/96 backdrop-blur-sm border-b border-[#1a1a1a]" style={{ top: 'calc(112px + env(safe-area-inset-top))' }}>
         <div className="grid grid-cols-3 gap-2">
           {([
             ["PENDING", pendingTrips.length + (pendingTrips.length === 1 ? " trip" : " trips")],
@@ -1836,7 +1836,7 @@ export default function App() {
       </div>
 
       {/* Sticky totals bar */}
-      <div className="sticky top-[112px] z-20 -mx-4 px-4 pt-2 pb-3 bg-black/96 backdrop-blur-sm border-b border-[#1a1a1a]">
+      <div className="sticky z-20 -mx-4 px-4 pt-2 pb-3 bg-black/96 backdrop-blur-sm border-b border-[#1a1a1a]" style={{ top: 'calc(112px + env(safe-area-inset-top))' }}>
         <div className="grid grid-cols-2 gap-2">
           {([
             ["POSTED TRIPS", String(postedTrips.length)],
@@ -2251,8 +2251,10 @@ export default function App() {
     <div className="min-h-screen bg-black text-white selection:bg-[#d9b64f]/30">
       <div className="w-full max-w-[480px] mx-auto min-h-screen bg-black border-x border-[#121212] relative">
 
-        {/* Header */}
-        <div className="sticky top-0 z-40 bg-black/95 backdrop-blur-xl border-b border-[#1a1a1a] px-4 h-[68px] flex items-center justify-between">
+        {/* Header — paddingTop pushes content below the iOS/Android status bar */}
+        <div className="sticky top-0 z-40 bg-black/95 backdrop-blur-xl border-b border-[#1a1a1a]"
+          style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+        <div className="px-4 h-[68px] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             {/* Brand mark — bridge + skyline in gold circle */}
             <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
@@ -2274,10 +2276,12 @@ export default function App() {
             <button onClick={() => { setShowSettings(true); setResetStep(0); }}
               className="w-8 h-8 rounded-full bg-[#141414] border border-[#222] flex items-center justify-center text-[12px] font-semibold text-[#f6dd8c] hover:border-[#d9b64f]/50 transition-colors">M</button>
           </div>
-        </div>
+        </div>{/* end inner h-[68px] row */}
+        </div>{/* end sticky header wrapper */}
 
         {/* Tab bar */}
-        <div className="sticky top-[68px] z-30 bg-black border-b border-[#1a1a1a]">
+        <div className="sticky z-30 bg-black border-b border-[#1a1a1a]"
+          style={{ top: 'calc(68px + env(safe-area-inset-top))' }}>
           <div className="flex overflow-x-auto gold-scroll px-2 gap-1">
             {(["DASHBOARD", "ENTRY", "REGISTER", "LEDGER", "EXPENSES", "REPORTS"] as Tab[]).map(tab => {
               const active = activeTab === tab;
