@@ -2209,10 +2209,10 @@ export default function App() {
             </div>
             {/* Brand name */}
             <div className="flex flex-col leading-none">
-              <span className="font-cinzel text-[16px] tracking-[0.2em] font-bold" style={goldGradientStyle}>
+              <span className="font-cinzel text-[22px] tracking-[0.04em] font-bold" style={goldGradientStyle}>
                 ISLANDCITY
               </span>
-              <span className="text-[8px] tracking-[0.32em] text-[#a07820] font-semibold mt-[2px]">
+              <span className="text-[7.5px] tracking-[0.38em] text-[#a07820] font-semibold mt-[3px] pl-[1px]">
                 TRANSIT SERVICES
               </span>
             </div>
