@@ -293,9 +293,42 @@ function toYYYYMMDD(d: Date) {
 }
 
 function LogoIcon({ className = "" }: { className?: string }) {
+  // Bridge + skyline inspired by IslandCity Transport Services brand mark
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
-      <path d="M5 17h14M6 17l1.2-6.5A2 2 0 0 1 9.2 9h5.6a2 2 0 0 1 2 1.5L18 17M8 17v2m8-2v2M8 13h8M6.5 15h.01M17.5 15h.01" />
+    <svg viewBox="0 0 48 48" fill="none" className={className}>
+      {/* Water / road sweep */}
+      <path d="M4 35 Q12 31 24 33 Q36 35 44 31" stroke="url(#lg)" strokeWidth="1.4" strokeLinecap="round" fill="none" opacity="0.7"/>
+      <path d="M6 38 Q16 34 24 36 Q34 38 42 34" stroke="url(#lg)" strokeWidth="1" strokeLinecap="round" fill="none" opacity="0.4"/>
+
+      {/* Bridge left tower */}
+      <rect x="8" y="18" width="2" height="14" fill="url(#lg)" rx="0.5"/>
+      {/* Bridge right tower */}
+      <rect x="22" y="20" width="2" height="12" fill="url(#lg)" rx="0.5"/>
+      {/* Bridge deck */}
+      <path d="M4 30 H26" stroke="url(#lg)" strokeWidth="1.2" strokeLinecap="round"/>
+      {/* Bridge cables left tower */}
+      <path d="M9 18 L4 30" stroke="url(#lg)" strokeWidth="0.8" opacity="0.8"/>
+      <path d="M9 18 L14 30" stroke="url(#lg)" strokeWidth="0.8" opacity="0.8"/>
+      <path d="M9 18 L19 30" stroke="url(#lg)" strokeWidth="0.8" opacity="0.8"/>
+      {/* Bridge cables right tower */}
+      <path d="M23 20 L14 30" stroke="url(#lg)" strokeWidth="0.8" opacity="0.8"/>
+      <path d="M23 20 L26 30" stroke="url(#lg)" strokeWidth="0.8" opacity="0.8"/>
+
+      {/* City skyline (right side) */}
+      <rect x="28" y="26" width="3" height="6" fill="url(#lg)" rx="0.3" opacity="0.9"/>
+      <rect x="32" y="22" width="3" height="10" fill="url(#lg)" rx="0.3" opacity="0.9"/>
+      {/* Empire State style spire */}
+      <rect x="36" y="18" width="3" height="14" fill="url(#lg)" rx="0.3"/>
+      <rect x="37" y="14" width="1.2" height="5" fill="url(#lg)" rx="0.3"/>
+      <rect x="40" y="24" width="3" height="8" fill="url(#lg)" rx="0.3" opacity="0.9"/>
+      <rect x="44" y="27" width="2" height="5" fill="url(#lg)" rx="0.3" opacity="0.8"/>
+
+      <defs>
+        <linearGradient id="lg" x1="4" y1="14" x2="44" y2="38" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#f6dd8c"/>
+          <stop offset="100%" stopColor="#b8860b"/>
+        </linearGradient>
+      </defs>
     </svg>
   );
 }
@@ -2167,14 +2200,22 @@ export default function App() {
       <div className="w-full max-w-[480px] mx-auto min-h-screen bg-black border-x border-[#121212] relative">
 
         {/* Header */}
-        <div className="sticky top-0 z-40 bg-black/95 backdrop-blur-xl border-b border-[#1a1a1a] px-5 h-[68px] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-[#111] border border-[#222] flex items-center justify-center text-[#f6dd8c]">
-              <LogoIcon className="w-5 h-5" />
+        <div className="sticky top-0 z-40 bg-black/95 backdrop-blur-xl border-b border-[#1a1a1a] px-4 h-[68px] flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            {/* Brand mark — bridge + skyline in gold circle */}
+            <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
+              style={{ background: "radial-gradient(circle at 40% 40%, #1a1500, #000)", border: "1px solid #d9b64f44" }}>
+              <LogoIcon className="w-8 h-8" />
             </div>
-            <h1 className="font-cinzel text-[18px] tracking-[0.18em] font-bold" style={goldGradientStyle}>
-              ISLAND CITY
-            </h1>
+            {/* Brand name */}
+            <div className="flex flex-col leading-none">
+              <span className="font-cinzel text-[16px] tracking-[0.2em] font-bold" style={goldGradientStyle}>
+                ISLANDCITY
+              </span>
+              <span className="text-[8px] tracking-[0.32em] text-[#a07820] font-semibold mt-[2px]">
+                TRANSIT SERVICES
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <span className="font-mono-jet text-[10px] text-neutral-500 hidden sm:block">{currentTime.toLocaleTimeString()}</span>
