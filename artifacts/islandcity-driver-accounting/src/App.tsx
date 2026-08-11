@@ -425,10 +425,15 @@ export default function App() {
   const [customExpenseCategories, setCustomExpenseCategories] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem("ic-custom-exp-cats") || "[]"); } catch { return []; }
   });
-  const [addingCustomType, setAddingCustomType] = useState(false);
-  const [addingCustomCat,  setAddingCustomCat]  = useState(false);
-  const [newCustomType, setNewCustomType] = useState("");
-  const [newCustomCat,  setNewCustomCat]  = useState("");
+  const [customVendors, setCustomVendors] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("ic-custom-vendors") || "[]"); } catch { return []; }
+  });
+  const [addingCustomType,   setAddingCustomType]   = useState(false);
+  const [addingCustomCat,    setAddingCustomCat]    = useState(false);
+  const [addingCustomVendor, setAddingCustomVendor] = useState(false);
+  const [newCustomType,   setNewCustomType]   = useState("");
+  const [newCustomCat,    setNewCustomCat]    = useState("");
+  const [newCustomVendor, setNewCustomVendor] = useState("");
 
   // Live clock
   useEffect(() => {
@@ -461,6 +466,9 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem("ic-custom-exp-cats", JSON.stringify(customExpenseCategories)); } catch {}
   }, [customExpenseCategories]);
+  useEffect(() => {
+    try { localStorage.setItem("ic-custom-vendors", JSON.stringify(customVendors)); } catch {}
+  }, [customVendors]);
 
   // Persist hours
   useEffect(() => {
@@ -1783,8 +1791,9 @@ export default function App() {
     const ym = toYYYYMMDD(currentTime).slice(0, 7);
     return expenses.filter(e => e.date.startsWith(ym)).reduce((a, e) => a + e.amount, 0);
   }, [expenses, currentTime]);
-  const allExpenseTypes = useMemo(() => [...EXPENSE_TYPES, ...customExpenseTypes], [customExpenseTypes]);
+  const allExpenseTypes      = useMemo(() => [...EXPENSE_TYPES,      ...customExpenseTypes],      [customExpenseTypes]);
   const allExpenseCategories = useMemo(() => [...EXPENSE_CATEGORIES, ...customExpenseCategories], [customExpenseCategories]);
+  const allVendors           = useMemo(() => [...customVendors], [customVendors]);
 
   const ExpensesContent = (
     <div className="space-y-4">
@@ -1798,21 +1807,11 @@ export default function App() {
         <button
           onClick={() => {
             if (showExpenseForm && !editingExpenseId) { setShowExpenseForm(false); }
-            else { setShowExpenseForm(true); setEditingExpenseId(null); resetExpenseForm(); setAddingCustomType(false); setAddingCustomCat(false); }
+            else { setShowExpenseForm(true); setEditingExpenseId(null); resetExpenseForm(); setAddingCustomType(false); setAddingCustomCat(false); setAddingCustomVendor(false); }
           }}
           className="h-10 px-4 rounded-full bg-[#facc15] text-black text-[12px] font-bold tracking-wide hover:bg-[#fde047] transition-colors">
           {showExpenseForm && !editingExpenseId ? "✕ Cerrar" : "+ Nuevo Gasto"}
         </button>
-      </div>
-
-      {/* Summary strip */}
-      <div className="grid grid-cols-4 gap-2">
-        {([["Hoy", todayExpenseTotal], ["Semana", expensesWeek], ["Mes", expensesMonth], ["Total", totalExpenses]] as [string,number][]).map(([label, val]) => (
-          <div key={label} className="bg-[#141414] border border-[#222] rounded-xl p-2.5 text-center">
-            <p className="text-[8px] tracking-widest text-neutral-500">{label}</p>
-            <p className="font-mono-jet text-[12px] font-bold text-[#ff6b6b] mt-1">${val.toFixed(0)}</p>
-          </div>
-        ))}
       </div>
 
       {/* Entry / Edit form */}
@@ -1828,12 +1827,32 @@ export default function App() {
             )}
           </div>
 
-          {/* Name */}
+          {/* Vendor / Name dropdown */}
           <div>
-            <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest mb-1 block">Nombre del gasto</label>
-            <input value={expenseForm.name} onChange={e => setExpenseForm(s => ({ ...s, name: e.target.value }))}
-              placeholder="Ej: BP Queens Blvd, Jiffy Lube, Amazon..."
-              className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[14px] placeholder:text-neutral-600 focus:outline-none focus:border-[#facc15]/40" />
+            <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest mb-1 block">Vendor / Nombre del gasto</label>
+            <div className="relative">
+              <select value={expenseForm.name}
+                onChange={e => { if (e.target.value === "__add__") { setAddingCustomVendor(true); } else { setExpenseForm(s => ({ ...s, name: e.target.value })); } }}
+                className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 pr-8 text-white text-[13px] appearance-none focus:outline-none">
+                <option value="" disabled>Selecciona un vendor...</option>
+                {allVendors.map(v => <option key={v} value={v}>{v}</option>)}
+                {allVendors.length > 0 && <option disabled>──────────</option>}
+                <option value="__add__">➕ Añadir vendor...</option>
+              </select>
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 text-[10px]">▼</span>
+            </div>
+            {addingCustomVendor && (
+              <div className="flex gap-2 mt-2">
+                <input value={newCustomVendor} onChange={e => setNewCustomVendor(e.target.value)}
+                  placeholder="Ej: BP Queens Blvd, Jiffy Lube..."
+                  onKeyDown={e => { if (e.key === "Enter" && newCustomVendor.trim()) { const v = newCustomVendor.trim(); setCustomVendors(p => [...p, v]); setExpenseForm(s => ({ ...s, name: v })); setNewCustomVendor(""); setAddingCustomVendor(false); } }}
+                  className="flex-1 h-10 rounded-xl bg-black border border-[#facc15]/40 px-3 text-white text-[13px] focus:outline-none" autoFocus />
+                <button onClick={() => { if (newCustomVendor.trim()) { const v = newCustomVendor.trim(); setCustomVendors(p => [...p, v]); setExpenseForm(s => ({ ...s, name: v })); setNewCustomVendor(""); setAddingCustomVendor(false); } }}
+                  className="h-10 px-3 rounded-xl bg-[#facc15] text-black text-[12px] font-bold">Añadir</button>
+                <button onClick={() => { setAddingCustomVendor(false); setNewCustomVendor(""); }}
+                  className="h-10 px-3 rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-400 text-[12px]">✕</button>
+              </div>
+            )}
           </div>
 
           {/* Type dropdown */}
@@ -1899,18 +1918,18 @@ export default function App() {
           </div>
 
           {/* Amount + Date */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
+          <div className="flex gap-3">
+            <div className="flex-1">
               <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest mb-1 block">Cantidad ($)</label>
               <input inputMode="decimal" value={expenseForm.amount}
                 onChange={e => { if (numericFilter(e.target.value)) setExpenseForm(s => ({ ...s, amount: e.target.value })); }}
                 placeholder="0.00"
                 className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[18px] font-bold font-mono-jet placeholder:text-neutral-600 focus:outline-none" />
             </div>
-            <div>
+            <div className="w-[130px] flex-shrink-0">
               <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest mb-1 block">Fecha</label>
               <input type="date" value={expenseForm.date} onChange={e => setExpenseForm(s => ({ ...s, date: e.target.value }))}
-                className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[13px] focus:outline-none" />
+                className="w-full h-11 rounded-xl bg-black border border-[#262626] px-2 text-white text-[11px] focus:outline-none" />
             </div>
           </div>
 
@@ -1920,7 +1939,7 @@ export default function App() {
               className="flex-1 h-12 rounded-full bg-[#facc15] text-black text-[13px] font-bold tracking-wide hover:bg-[#fde047] transition-colors">
               {editingExpenseId ? "Actualizar" : "Guardar Gasto"}
             </button>
-            <button onClick={() => { setShowExpenseForm(false); setEditingExpenseId(null); resetExpenseForm(); setAddingCustomType(false); setAddingCustomCat(false); }}
+            <button onClick={() => { setShowExpenseForm(false); setEditingExpenseId(null); resetExpenseForm(); setAddingCustomType(false); setAddingCustomCat(false); setAddingCustomVendor(false); }}
               className="h-12 px-5 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-400 text-[13px] hover:text-white transition-colors">
               Cancelar
             </button>
