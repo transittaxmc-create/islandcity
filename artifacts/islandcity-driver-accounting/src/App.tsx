@@ -63,7 +63,7 @@ type Expense = {
   type?: string;        // expense type (dropdown)
   verified?: boolean;   // audit flag
 };
-
+type ProjectionEntry = { date: string; projectedRevenue: number; projectedSavings: number; }; type FinancialSummary = { totalRevenue: number; totalExpenses: number; netIncome: number; projections: ProjectionEntry[]; };
 // ── Toll plaza list — update rates each January ───────────────────────────
 // Last updated: 2026 · E-ZPass · passenger car · per crossing
 // Sources: MTA Bridges & Tunnels 2026; Port Authority 2026 schedule
@@ -449,7 +449,30 @@ export default function App() {
   const [storageVerified, setStorageVerified] = useState(false);
   const [storageBytes, setStorageBytes] = useState(0);
 
-  // Trip form
+  const financialSummary = useMemo(() => {
+    const totalRevenue = trips.reduce((sum, trip) => {
+      const earnings = typeof trip.earnings === 'number' ? trip.earnings : 0;
+      const tips = typeof trip.tips === 'number' ? trip.tips : 0;
+      const extra = typeof trip.extra === 'number' ? trip.extra : 0;
+      const toll = typeof trip.toll === 'number' ? trip.toll : 0;
+      return sum + earnings + tips + extra + toll;
+    }, 0);
+
+    const totalExpenses = expenses.reduce((sum, expense) => {
+      const amount = typeof expense.amount === 'number' ? expense.amount : 0;
+      return sum + amount;
+    }, 0);
+
+    const netIncome = totalRevenue - totalExpenses;
+
+    return {
+      totalRevenue,
+      totalExpenses,
+      netIncome,
+      projections: [] 
+    };
+  }, [trips, expenses]);
+
   const [tripForm, setTripForm] = useState<TripForm>({
     reference: "", earnings: "", tips: "", extraCash: "", toll: "",
     platformFee: "", platform: "Uber", pickup: "", dropoff: "", notes: "",
