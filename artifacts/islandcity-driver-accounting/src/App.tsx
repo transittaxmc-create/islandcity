@@ -677,7 +677,13 @@ export default function App() {
   ];
 
   const handleFactoryReset = () => {
-    STORAGE_KEYS.forEach(k => { try { localStorage.removeItem(k); } catch {} });
+    // localStorage.clear() nukes EVERYTHING — no key list that can be incomplete.
+    // Then we immediately re-set the version so the IIFE doesn't fire an extra
+    // reload on the fresh page load.
+    try {
+      localStorage.clear();
+      localStorage.setItem("ic-app-version", CLEAN_SLATE_VERSION);
+    } catch {}
     window.location.reload();
   };
 
