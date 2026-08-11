@@ -57,9 +57,11 @@ type Expense = {
   id: string;
   date: string;
   category: string;
-  vendor: string;
+  vendor: string;       // expense name (label kept for localStorage compat)
   amount: number;
-  note: string;
+  note: string;         // description (label kept for localStorage compat)
+  type?: string;        // expense type (dropdown)
+  verified?: boolean;   // audit flag
 };
 
 // ── Toll plaza list — update rates each January ───────────────────────────
@@ -102,7 +104,45 @@ const AIRPORTS = [
   { name: "ISP Airport", lat: 40.7952, lng: -73.1002 },
 ] as const;
 
-const EXPENSE_CATEGORIES = ["Fuel", "Maintenance", "Supplies", "Insurance", "Parking", "Tolls", "Other"];
+// IRS Schedule C–aligned categories for rideshare drivers
+const EXPENSE_CATEGORIES = [
+  "Vehicle & Fuel",
+  "Maintenance & Repairs",
+  "Technology & Equipment",
+  "Tolls & Parking",
+  "Insurance",
+  "Phone & Data",
+  "Supplies & Amenities",
+  "Professional Services",
+  "Other",
+];
+
+// Rideshare-specific expense types
+const EXPENSE_TYPES = [
+  "Gasoline / Fuel",
+  "E-ZPass Replenishment",
+  "Toll Payment",
+  "Car Wash (single)",
+  "Car Wash Membership",
+  "Oil Change",
+  "Tire Service",
+  "Brake Service",
+  "Vehicle Inspection",
+  "Dashboard Camera",
+  "Phone Mount / Holder",
+  "Phone Charger / Cable",
+  "Air Freshener",
+  "Water & Snacks (passengers)",
+  "Cleaning Supplies",
+  "Parking Fee",
+  "Vehicle Insurance",
+  "Rideshare Insurance Rider",
+  "Phone Plan (business %)",
+  "Vehicle Registration",
+  "Background Check Fee",
+  "First Aid Kit",
+  "Other",
+];
 
 const STATE_ABBR: Record<string, string> = {
   "New York": "NY", "New Jersey": "NJ", "Connecticut": "CT",
@@ -235,9 +275,9 @@ const initialTrips: Trip[] = [
 ];
 
 const initialExpenses: Expense[] = [
-  { id: "e1", date: new Date().toISOString().slice(0, 10), category: "Fuel", vendor: "BP - Queens Blvd", amount: 42.3, note: "" },
-  { id: "e2", date: new Date(Date.now() - 86400000).toISOString().slice(0, 10), category: "Tolls", vendor: "E-ZPass replenishment", amount: 30, note: "" },
-  { id: "e3", date: new Date(Date.now() - 86400000 * 2).toISOString().slice(0, 10), category: "Supplies", vendor: "Car Wash - Main St", amount: 12, note: "" },
+  { id: "e1", date: new Date().toISOString().slice(0,10), category: "Vehicle & Fuel", vendor: "BP - Queens Blvd", amount: 42.30, note: "", type: "Gasoline / Fuel", verified: false },
+  { id: "e2", date: new Date(Date.now()-86400000).toISOString().slice(0,10), category: "Tolls & Parking", vendor: "E-ZPass replenishment", amount: 30.00, note: "Monthly top-up", type: "E-ZPass Replenishment", verified: true },
+  { id: "e3", date: new Date(Date.now()-86400000*2).toISOString().slice(0,10), category: "Vehicle & Fuel", vendor: "Mister Car Wash", amount: 12.00, note: "", type: "Car Wash (single)", verified: true },
 ];
 
 function formatHHMMSS(ms: number) {
@@ -372,8 +412,23 @@ export default function App() {
 
   // Expense form
   const [showExpenseForm, setShowExpenseForm] = useState(false);
-  const [expenseForm, setExpenseForm] = useState({ category: "Fuel", vendor: "", amount: "", note: "" });
+  const [expenseForm, setExpenseForm] = useState({
+    name: "", type: "Gasoline / Fuel", category: "Vehicle & Fuel",
+    description: "", amount: "", date: new Date().toISOString().slice(0, 10),
+  });
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+
+  // Custom expense types & categories (user-added items, persisted)
+  const [customExpenseTypes, setCustomExpenseTypes] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("ic-custom-exp-types") || "[]"); } catch { return []; }
+  });
+  const [customExpenseCategories, setCustomExpenseCategories] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("ic-custom-exp-cats") || "[]"); } catch { return []; }
+  });
+  const [addingCustomType, setAddingCustomType] = useState(false);
+  const [addingCustomCat,  setAddingCustomCat]  = useState(false);
+  const [newCustomType, setNewCustomType] = useState("");
+  const [newCustomCat,  setNewCustomCat]  = useState("");
 
   // Live clock
   useEffect(() => {
@@ -400,6 +455,12 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem("island-city-expenses", JSON.stringify(expenses)); } catch {}
   }, [expenses]);
+  useEffect(() => {
+    try { localStorage.setItem("ic-custom-exp-types", JSON.stringify(customExpenseTypes)); } catch {}
+  }, [customExpenseTypes]);
+  useEffect(() => {
+    try { localStorage.setItem("ic-custom-exp-cats", JSON.stringify(customExpenseCategories)); } catch {}
+  }, [customExpenseCategories]);
 
   // Persist hours
   useEffect(() => {
@@ -787,32 +848,46 @@ export default function App() {
     setActiveTab("LEDGER");
   };
 
+  const resetExpenseForm = () => setExpenseForm({
+    name: "", type: "Gasoline / Fuel", category: "Vehicle & Fuel",
+    description: "", amount: "", date: new Date().toISOString().slice(0, 10),
+  });
+
   const handleSaveExpense = () => {
-    if (!expenseForm.vendor || !expenseForm.amount) { showToast("Enter vendor and amount"); return; }
-    const now = new Date();
+    if (!expenseForm.name.trim() || !expenseForm.amount) {
+      showToast("Ingresa nombre y cantidad"); return;
+    }
     const newExpense: Expense = {
       id: editingExpenseId || Date.now().toString(),
-      date: toYYYYMMDD(now),
+      date: expenseForm.date || toYYYYMMDD(new Date()),
       category: expenseForm.category,
-      vendor: expenseForm.vendor.trim(),
+      vendor: expenseForm.name.trim(),
       amount: parseFloat(expenseForm.amount) || 0,
-      note: expenseForm.note.trim(),
+      note: expenseForm.description.trim(),
+      type: expenseForm.type,
+      verified: editingExpenseId
+        ? (expenses.find(e => e.id === editingExpenseId)?.verified ?? false)
+        : false,
     };
     if (editingExpenseId) {
       setExpenses(expenses.map(e => e.id === editingExpenseId ? newExpense : e));
     } else {
       setExpenses([newExpense, ...expenses]);
     }
-    setExpenseForm({ category: "Fuel", vendor: "", amount: "", note: "" });
+    resetExpenseForm();
     setEditingExpenseId(null);
     setShowExpenseForm(false);
-    showToast(`Expense saved ✓ $${newExpense.amount.toFixed(2)}`);
+    showToast(`Gasto guardado ✓ $${newExpense.amount.toFixed(2)}`);
   };
 
   const handleDeleteExpense = (id: string) => {
-    if (!window.confirm("Delete this expense?")) return;
+    if (!window.confirm("¿Eliminar este gasto?")) return;
     setExpenses(expenses.filter(e => e.id !== id));
-    showToast("Expense deleted");
+    showToast("Gasto eliminado");
+  };
+
+  const handleToggleExpenseVerified = (id: string) => {
+    setExpenses(expenses.map(e => e.id === id ? { ...e, verified: !e.verified } : e));
   };
 
   const goldGradientStyle = {
@@ -1697,91 +1772,225 @@ export default function App() {
   );
 
   // ─── Expenses ─────────────────────────────────────────────────
-  const totalExpenses = expenses.reduce((a, e) => a + e.amount, 0);
-  const todayExpenses = expenses.filter(e => e.date === toYYYYMMDD(currentTime));
+  const totalExpenses    = expenses.reduce((a, e) => a + e.amount, 0);
+  const todayExpenses    = expenses.filter(e => e.date === toYYYYMMDD(currentTime));
   const todayExpenseTotal = todayExpenses.reduce((a, e) => a + e.amount, 0);
+  const expensesWeek = useMemo(() => {
+    const weekAgo = new Date(currentTime); weekAgo.setDate(weekAgo.getDate() - 7);
+    return expenses.filter(e => e.date >= weekAgo.toISOString().slice(0, 10)).reduce((a, e) => a + e.amount, 0);
+  }, [expenses, currentTime]);
+  const expensesMonth = useMemo(() => {
+    const ym = toYYYYMMDD(currentTime).slice(0, 7);
+    return expenses.filter(e => e.date.startsWith(ym)).reduce((a, e) => a + e.amount, 0);
+  }, [expenses, currentTime]);
+  const allExpenseTypes = useMemo(() => [...EXPENSE_TYPES, ...customExpenseTypes], [customExpenseTypes]);
+  const allExpenseCategories = useMemo(() => [...EXPENSE_CATEGORIES, ...customExpenseCategories], [customExpenseCategories]);
 
   const ExpensesContent = (
     <div className="space-y-4">
+
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-[22px] font-bold text-white">Expenses</h2>
-        <button onClick={() => { setShowExpenseForm(v => !v); setEditingExpenseId(null); setExpenseForm({ category: "Fuel", vendor: "", amount: "", note: "" }); }}
+        <div>
+          <h2 className="text-[22px] font-bold text-white">Gastos</h2>
+          <p className="text-[11px] text-neutral-500 mt-0.5 font-mono-jet">{expenses.length} registros · −${totalExpenses.toFixed(2)}</p>
+        </div>
+        <button
+          onClick={() => {
+            if (showExpenseForm && !editingExpenseId) { setShowExpenseForm(false); }
+            else { setShowExpenseForm(true); setEditingExpenseId(null); resetExpenseForm(); setAddingCustomType(false); setAddingCustomCat(false); }
+          }}
           className="h-10 px-4 rounded-full bg-[#facc15] text-black text-[12px] font-bold tracking-wide hover:bg-[#fde047] transition-colors">
-          + Add Expense
+          {showExpenseForm && !editingExpenseId ? "✕ Cerrar" : "+ Nuevo Gasto"}
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        {[["All Time", `$${totalExpenses.toFixed(2)}`], ["Today", `$${todayExpenseTotal.toFixed(2)}`], ["Entries", expenses.length]].map(([label, val]) => (
-          <div key={String(label)} className="bg-[#141414] border border-[#222] rounded-xl p-3 text-center">
-            <p className="text-[9px] tracking-widest text-neutral-500">{label}</p>
-            <p className="font-mono-jet text-[14px] font-bold text-white mt-1">{val}</p>
+      {/* Summary strip */}
+      <div className="grid grid-cols-4 gap-2">
+        {([["Hoy", todayExpenseTotal], ["Semana", expensesWeek], ["Mes", expensesMonth], ["Total", totalExpenses]] as [string,number][]).map(([label, val]) => (
+          <div key={label} className="bg-[#141414] border border-[#222] rounded-xl p-2.5 text-center">
+            <p className="text-[8px] tracking-widest text-neutral-500">{label}</p>
+            <p className="font-mono-jet text-[12px] font-bold text-[#ff6b6b] mt-1">${val.toFixed(0)}</p>
           </div>
         ))}
       </div>
 
+      {/* Entry / Edit form */}
       {showExpenseForm && (
-        <div className="bg-[#101010] border border-[#222] rounded-2xl p-4 space-y-3">
-          <h3 className="text-[13px] font-bold tracking-[0.12em] text-white uppercase">{editingExpenseId ? "Edit Expense" : "New Expense"}</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest">Category</label>
-              <div className="relative">
-                <select value={expenseForm.category} onChange={e => setExpenseForm(s => ({ ...s, category: e.target.value }))}
-                  className="w-full h-12 rounded-xl bg-black border border-[#262626] px-3 pr-8 text-white text-[14px] appearance-none focus:outline-none">
-                  {EXPENSE_CATEGORIES.map(c => <option key={c}>{c}</option>)}
-                </select>
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500">▼</span>
-              </div>
+        <div className="bg-[#101010] border border-[#2a2a2a] rounded-2xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-[11px] font-bold tracking-[0.16em] text-white uppercase">
+              {editingExpenseId ? "✏️ Editando gasto" : "Nuevo Gasto"}
+            </h3>
+            {editingExpenseId && (
+              <button onClick={() => { setEditingExpenseId(null); resetExpenseForm(); setShowExpenseForm(false); }}
+                className="text-[10px] text-neutral-500 hover:text-white transition-colors">← Cancelar</button>
+            )}
+          </div>
+
+          {/* Name */}
+          <div>
+            <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest mb-1 block">Nombre del gasto</label>
+            <input value={expenseForm.name} onChange={e => setExpenseForm(s => ({ ...s, name: e.target.value }))}
+              placeholder="Ej: BP Queens Blvd, Jiffy Lube, Amazon..."
+              className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[14px] placeholder:text-neutral-600 focus:outline-none focus:border-[#facc15]/40" />
+          </div>
+
+          {/* Type dropdown */}
+          <div>
+            <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest mb-1 block">Tipo de gasto</label>
+            <div className="relative">
+              <select value={expenseForm.type}
+                onChange={e => { if (e.target.value === "__add__") { setAddingCustomType(true); } else { setExpenseForm(s => ({ ...s, type: e.target.value })); } }}
+                className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 pr-8 text-white text-[13px] appearance-none focus:outline-none">
+                {allExpenseTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                <option disabled>──────────</option>
+                <option value="__add__">➕ Añadir nuevo tipo...</option>
+              </select>
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 text-[10px]">▼</span>
             </div>
-            <div className="space-y-1">
-              <label className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest">Amount ($)</label>
-              <input inputMode="decimal" value={expenseForm.amount} onChange={e => { if (numericFilter(e.target.value)) setExpenseForm(s => ({ ...s, amount: e.target.value })); }}
-                placeholder="0.00" className="w-full h-12 rounded-xl bg-black border border-[#262626] px-3 text-white text-[16px] font-bold font-mono-jet placeholder:text-[#6b7280] focus:outline-none" />
+            {addingCustomType && (
+              <div className="flex gap-2 mt-2">
+                <input value={newCustomType} onChange={e => setNewCustomType(e.target.value)}
+                  placeholder="Nombre del nuevo tipo..."
+                  onKeyDown={e => { if (e.key === "Enter" && newCustomType.trim()) { const t = newCustomType.trim(); setCustomExpenseTypes(p => [...p, t]); setExpenseForm(s => ({ ...s, type: t })); setNewCustomType(""); setAddingCustomType(false); } }}
+                  className="flex-1 h-10 rounded-xl bg-black border border-[#facc15]/40 px-3 text-white text-[13px] focus:outline-none" autoFocus />
+                <button onClick={() => { if (newCustomType.trim()) { const t = newCustomType.trim(); setCustomExpenseTypes(p => [...p, t]); setExpenseForm(s => ({ ...s, type: t })); setNewCustomType(""); setAddingCustomType(false); } }}
+                  className="h-10 px-3 rounded-xl bg-[#facc15] text-black text-[12px] font-bold">Añadir</button>
+                <button onClick={() => { setAddingCustomType(false); setNewCustomType(""); }}
+                  className="h-10 px-3 rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-400 text-[12px]">✕</button>
+              </div>
+            )}
+          </div>
+
+          {/* Category dropdown */}
+          <div>
+            <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest mb-1 block">Categoría (IRS Schedule C)</label>
+            <div className="relative">
+              <select value={expenseForm.category}
+                onChange={e => { if (e.target.value === "__add__") { setAddingCustomCat(true); } else { setExpenseForm(s => ({ ...s, category: e.target.value })); } }}
+                className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 pr-8 text-white text-[13px] appearance-none focus:outline-none">
+                {allExpenseCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                <option disabled>──────────</option>
+                <option value="__add__">➕ Añadir categoría...</option>
+              </select>
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 text-[10px]">▼</span>
+            </div>
+            {addingCustomCat && (
+              <div className="flex gap-2 mt-2">
+                <input value={newCustomCat} onChange={e => setNewCustomCat(e.target.value)}
+                  placeholder="Nueva categoría..."
+                  onKeyDown={e => { if (e.key === "Enter" && newCustomCat.trim()) { const c = newCustomCat.trim(); setCustomExpenseCategories(p => [...p, c]); setExpenseForm(s => ({ ...s, category: c })); setNewCustomCat(""); setAddingCustomCat(false); } }}
+                  className="flex-1 h-10 rounded-xl bg-black border border-[#facc15]/40 px-3 text-white text-[13px] focus:outline-none" autoFocus />
+                <button onClick={() => { if (newCustomCat.trim()) { const c = newCustomCat.trim(); setCustomExpenseCategories(p => [...p, c]); setExpenseForm(s => ({ ...s, category: c })); setNewCustomCat(""); setAddingCustomCat(false); } }}
+                  className="h-10 px-3 rounded-xl bg-[#facc15] text-black text-[12px] font-bold">Añadir</button>
+                <button onClick={() => { setAddingCustomCat(false); setNewCustomCat(""); }}
+                  className="h-10 px-3 rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-400 text-[12px]">✕</button>
+              </div>
+            )}
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest mb-1 block">Descripción (opcional)</label>
+            <input value={expenseForm.description} onChange={e => setExpenseForm(s => ({ ...s, description: e.target.value }))}
+              placeholder="Notas adicionales sobre este gasto..."
+              className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[14px] placeholder:text-neutral-600 focus:outline-none" />
+          </div>
+
+          {/* Amount + Date */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest mb-1 block">Cantidad ($)</label>
+              <input inputMode="decimal" value={expenseForm.amount}
+                onChange={e => { if (numericFilter(e.target.value)) setExpenseForm(s => ({ ...s, amount: e.target.value })); }}
+                placeholder="0.00"
+                className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[18px] font-bold font-mono-jet placeholder:text-neutral-600 focus:outline-none" />
+            </div>
+            <div>
+              <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest mb-1 block">Fecha</label>
+              <input type="date" value={expenseForm.date} onChange={e => setExpenseForm(s => ({ ...s, date: e.target.value }))}
+                className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[13px] focus:outline-none" />
             </div>
           </div>
-          <input value={expenseForm.vendor} onChange={e => setExpenseForm(s => ({ ...s, vendor: e.target.value }))}
-            placeholder="Vendor / Description" required
-            className="w-full h-12 rounded-xl bg-black border border-[#262626] px-3 text-white text-[14px] placeholder:text-[#6b7280] focus:outline-none" />
-          <input value={expenseForm.note} onChange={e => setExpenseForm(s => ({ ...s, note: e.target.value }))}
-            placeholder="Note (optional)"
-            className="w-full h-12 rounded-xl bg-black border border-[#262626] px-3 text-white text-[14px] placeholder:text-[#6b7280] focus:outline-none" />
-          <div className="flex gap-2">
-            <button onClick={handleSaveExpense} className="flex-1 h-12 rounded-full bg-[#facc15] text-black text-[13px] font-bold tracking-wide hover:bg-[#fde047]">{editingExpenseId ? "Update" : "Save Expense"}</button>
-            <button onClick={() => { setShowExpenseForm(false); setEditingExpenseId(null); }} className="flex-1 h-12 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-400 text-[13px] hover:text-white">Cancel</button>
+
+          {/* Buttons */}
+          <div className="flex gap-2 pt-1">
+            <button onClick={handleSaveExpense}
+              className="flex-1 h-12 rounded-full bg-[#facc15] text-black text-[13px] font-bold tracking-wide hover:bg-[#fde047] transition-colors">
+              {editingExpenseId ? "Actualizar" : "Guardar Gasto"}
+            </button>
+            <button onClick={() => { setShowExpenseForm(false); setEditingExpenseId(null); resetExpenseForm(); setAddingCustomType(false); setAddingCustomCat(false); }}
+              className="h-12 px-5 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-400 text-[13px] hover:text-white transition-colors">
+              Cancelar
+            </button>
           </div>
         </div>
       )}
 
-      {expenses.length === 0 ? (
-        <div className="bg-[#141414] border border-[#222] rounded-2xl p-8 text-center">
-          <p className="text-[14px] text-neutral-400">No expenses recorded</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {expenses.map(ex => (
-            <div key={ex.id} className="bg-[#141414] border border-[#222] rounded-xl p-3.5 flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[12px] font-bold text-white">{ex.category}</span>
-                  <span className="text-[10px] text-neutral-500 font-mono-jet">{ex.date}</span>
+      {/* Register */}
+      <div>
+        <p className="text-[10px] tracking-[0.22em] text-neutral-500 font-semibold mb-2.5">REGISTRO DE GASTOS</p>
+        {expenses.length === 0 ? (
+          <div className="bg-[#141414] border border-[#222] rounded-2xl p-10 text-center">
+            <p className="text-[32px] mb-2">🧾</p>
+            <p className="text-[14px] text-neutral-400">Sin gastos registrados</p>
+            <p className="text-[11px] text-neutral-600 mt-1">Toca "+ Nuevo Gasto" para añadir</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {[...expenses].sort((a, b) => b.date.localeCompare(a.date)).map(ex => (
+              <div key={ex.id} className={`bg-[#141414] border rounded-xl p-3.5 transition-colors ${ex.verified ? "border-[#4ade80]/30 bg-[#141414]" : "border-[#222]"}`}>
+                <div className="flex items-start justify-between gap-3">
+                  {/* Left: info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[13px] font-semibold text-white">{ex.vendor}</span>
+                      {ex.verified && (
+                        <span className="text-[9px] bg-[#4ade80]/10 text-[#4ade80] px-2 py-0.5 rounded-full border border-[#4ade80]/20 flex-shrink-0 font-mono-jet">✓ VERIFIED</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <span className="font-mono-jet text-[10px] text-neutral-500">{ex.date}</span>
+                      {ex.type && <span className="text-[10px] text-neutral-400 bg-[#1e1e1e] px-2 py-0.5 rounded-full">{ex.type}</span>}
+                    </div>
+                    <span className="text-[10px] text-neutral-600 mt-0.5 block">{ex.category}</span>
+                    {ex.note && <p className="text-[11px] text-neutral-500 mt-1 italic">{ex.note}</p>}
+                  </div>
+                  {/* Right: amount + actions */}
+                  <div className="flex-shrink-0 text-right">
+                    <p className="font-mono-jet text-[17px] font-bold text-[#ff6b6b]">−${ex.amount.toFixed(2)}</p>
+                    <div className="flex items-center gap-1 mt-2 justify-end">
+                      {/* Verify toggle */}
+                      <button onClick={() => handleToggleExpenseVerified(ex.id)}
+                        title={ex.verified ? "Marcar como no verificado" : "Marcar como verificado"}
+                        className={`w-7 h-7 rounded-full border text-[11px] flex items-center justify-center transition-all ${ex.verified ? "bg-[#4ade80]/20 border-[#4ade80]/40 text-[#4ade80]" : "bg-[#1e1e1e] border-[#2a2a2a] text-neutral-500 hover:text-[#4ade80]"}`}>
+                        ✓
+                      </button>
+                      {/* Edit */}
+                      <button onClick={() => {
+                        setEditingExpenseId(ex.id);
+                        setExpenseForm({ name: ex.vendor, type: ex.type || "Other", category: ex.category, description: ex.note, amount: String(ex.amount), date: ex.date });
+                        setShowExpenseForm(true);
+                        setAddingCustomType(false);
+                        setAddingCustomCat(false);
+                      }}
+                        className="w-7 h-7 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-400 text-[10px] hover:text-white flex items-center justify-center transition-colors">
+                        ✏️
+                      </button>
+                      {/* Delete */}
+                      <button onClick={() => handleDeleteExpense(ex.id)}
+                        className="w-7 h-7 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-[#f87171] text-[10px] hover:bg-[#2a1a1a] flex items-center justify-center transition-colors">
+                        ✕
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <p className="text-[12px] text-neutral-400 mt-0.5">{ex.vendor}</p>
-                {ex.note && <p className="text-[11px] text-neutral-600 mt-0.5">{ex.note}</p>}
               </div>
-              <div className="flex items-center gap-2">
-                <p className="font-mono-jet text-[15px] font-semibold text-[#ff6b6b]">−${ex.amount.toFixed(2)}</p>
-                <div className="flex gap-1">
-                  <button onClick={() => { setEditingExpenseId(ex.id); setExpenseForm({ category: ex.category, vendor: ex.vendor, amount: String(ex.amount), note: ex.note }); setShowExpenseForm(true); }}
-                    className="w-8 h-8 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-400 text-[11px] hover:text-white flex items-center justify-center">✏️</button>
-                  <button onClick={() => handleDeleteExpense(ex.id)}
-                    className="w-8 h-8 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-[#f87171] text-[11px] hover:bg-[#2a1a1a] flex items-center justify-center">✕</button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 
