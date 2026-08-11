@@ -372,12 +372,19 @@ export default function App() {
     ];
   });
 
+  // Settings / reset panel
+  const [showSettings,     setShowSettings]     = useState(false);
+  const [resetStep,        setResetStep]        = useState<0|1|2>(0); // 0=idle 1=confirm 2=done
+
   // Shift clock
   const [clockInTime, setClockInTime] = useState<Date | null>(null);
   const [totalBreakMs, setTotalBreakMs] = useState(0);
   const [isOnBreak, setIsOnBreak] = useState(false);
   const [breakStart, setBreakStart] = useState<Date | null>(null);
   const [shiftActive, setShiftActive] = useState(false);
+  const [lastShiftDate, setLastShiftDate] = useState<string>(() => {
+    try { return localStorage.getItem("ic-last-shift-date") || ""; } catch { return ""; }
+  });
   const watchIdRef = useRef<number | null>(null);
   const [gps, setGps] = useState<GpsState>({ lat: null, lng: null, acc: null, status: "inactive" });
   const [gpsAddress, setGpsAddress] = useState("");
@@ -469,6 +476,9 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem("ic-custom-vendors", JSON.stringify(customVendors)); } catch {}
   }, [customVendors]);
+  useEffect(() => {
+    try { localStorage.setItem("ic-last-shift-date", lastShiftDate); } catch {}
+  }, [lastShiftDate]);
 
   // Persist hours
   useEffect(() => {
@@ -572,15 +582,64 @@ export default function App() {
     setTimeout(() => setToast(null), ms);
   };
 
+  const STORAGE_KEYS = [
+    "island-city-trips", "island-city-expenses", "island-city-hours",
+    "island-city-last-saved", "island-city-trips-count",
+    "ic-custom-exp-types", "ic-custom-exp-cats", "ic-custom-vendors",
+    "ic-last-shift-date",
+  ];
+
+  const handleFactoryReset = () => {
+    STORAGE_KEYS.forEach(k => { try { localStorage.removeItem(k); } catch {} });
+    window.location.reload();
+  };
+
+  const handleExportBackup = () => {
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      appVersion: "IslandCity Driver v1",
+      trips,
+      expenses,
+      hoursLog,
+      customExpenseTypes,
+      customExpenseCategories,
+      customVendors,
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `islandcity-backup-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast("Backup descargado ✓");
+  };
+
   const handleClockIn = () => {
     const now = new Date();
+    const todayYMD = toYYYYMMDD(now);
+    const isNewDay = lastShiftDate !== "" && lastShiftDate !== todayYMD;
+
+    if (isNewDay) {
+      // New day — reset entry form so the screen starts clean
+      setTripForm({
+        reference: "", earnings: "", tips: "", extraCash: "", toll: "",
+        platformFee: "", platform: "Uber", pickup: "", dropoff: "", notes: "",
+      });
+      setEditingId(null);
+      showToast(`Nuevo día ${todayYMD} · pantallas limpias ✓`);
+    }
+
+    setLastShiftDate(todayYMD);
     setClockInTime(now);
     setTotalBreakMs(0);
     setIsOnBreak(false);
     setBreakStart(null);
     setShiftActive(true);
     startGPS();
-    showToast(`Clock In ${now.toLocaleTimeString()} · GPS started`);
+    if (!isNewDay) showToast(`Clock In ${now.toLocaleTimeString()} · GPS started`);
   };
 
   const handleBreakToggle = () => {
@@ -2119,7 +2178,8 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2">
             <span className="font-mono-jet text-[10px] text-neutral-500 hidden sm:block">{currentTime.toLocaleTimeString()}</span>
-            <div className="w-8 h-8 rounded-full bg-[#141414] border border-[#222] flex items-center justify-center text-[12px] font-semibold text-[#f6dd8c]">M</div>
+            <button onClick={() => { setShowSettings(true); setResetStep(0); }}
+              className="w-8 h-8 rounded-full bg-[#141414] border border-[#222] flex items-center justify-center text-[12px] font-semibold text-[#f6dd8c] hover:border-[#d9b64f]/50 transition-colors">M</button>
           </div>
         </div>
 
@@ -2168,6 +2228,110 @@ export default function App() {
 
         {/* Gold bottom line */}
         <div className="pointer-events-none fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] h-[1px] bg-gradient-to-r from-transparent via-[#d9b64f]/40 to-transparent" />
+
+        {/* ── Settings / Danger Zone panel ────────────────────── */}
+        {showSettings && (
+          <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={() => { setShowSettings(false); setResetStep(0); }}>
+            {/* Backdrop */}
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+
+            {/* Sheet */}
+            <div className="relative bg-[#0e0e0e] border-t border-[#222] rounded-t-[28px] px-5 pt-5 pb-10 space-y-5 max-w-[480px] w-full mx-auto"
+              onClick={e => e.stopPropagation()}>
+
+              {/* Handle */}
+              <div className="w-10 h-1 rounded-full bg-[#333] mx-auto mb-1" />
+
+              {/* Title */}
+              <div className="flex items-center justify-between">
+                <h2 className="text-[14px] font-bold tracking-[0.1em]">Ajustes</h2>
+                <button onClick={() => { setShowSettings(false); setResetStep(0); }}
+                  className="text-neutral-500 text-[13px] hover:text-white transition-colors">✕ Cerrar</button>
+              </div>
+
+              {/* Profile row */}
+              <div className="flex items-center gap-3 bg-[#141414] border border-[#222] rounded-2xl p-3.5">
+                <div className="w-10 h-10 rounded-full bg-[#1a1a1a] border border-[#2a2a2a] flex items-center justify-center text-[15px] font-bold text-[#f6dd8c]">M</div>
+                <div>
+                  <p className="text-[13px] font-semibold">Miguel</p>
+                  <p className="text-[10px] text-neutral-500 font-mono-jet">NYC TLC Driver · IslandCity</p>
+                </div>
+                <div className="ml-auto text-right">
+                  <p className="text-[10px] text-neutral-600 font-mono-jet">{trips.length} trips saved</p>
+                  <p className="text-[10px] text-neutral-600 font-mono-jet">{expenses.length} expenses</p>
+                </div>
+              </div>
+
+              {/* Storage info */}
+              <div className="bg-[#141414] border border-[#222] rounded-2xl p-3.5 space-y-1.5">
+                <p className="text-[9px] tracking-[0.16em] text-neutral-500 font-semibold uppercase">Almacenamiento</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] text-neutral-300">Trips guardados</span>
+                  <span className="font-mono-jet text-[12px] text-[#f6dd8c]">{trips.length}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] text-neutral-300">Gastos guardados</span>
+                  <span className="font-mono-jet text-[12px] text-[#f6dd8c]">{expenses.length}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] text-neutral-300">Días con horas</span>
+                  <span className="font-mono-jet text-[12px] text-[#f6dd8c]">{hoursLog.length}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] text-neutral-300">Tamaño disco</span>
+                  <span className="font-mono-jet text-[12px] text-neutral-400">{(storageBytes / 1024).toFixed(1)} KB</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] text-neutral-300">Último guardado</span>
+                  <span className="font-mono-jet text-[10px] text-neutral-500 text-right max-w-[180px] truncate">{lastSavedAt === "—" ? "—" : new Date(lastSavedAt).toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Backup */}
+              <div className="bg-[#141414] border border-[#222] rounded-2xl p-4 space-y-3">
+                <p className="text-[9px] tracking-[0.16em] text-neutral-500 font-semibold uppercase">📦 Backup de datos</p>
+                <p className="text-[11px] text-neutral-400 leading-relaxed">
+                  Descarga un archivo <span className="font-mono-jet text-white">.json</span> con todos tus trips, gastos y horas. Guárdalo en tu teléfono, Google Drive o iCloud como respaldo.
+                </p>
+                <button onClick={handleExportBackup}
+                  className="w-full h-11 rounded-full bg-[#facc15] text-black text-[12px] font-bold tracking-[0.1em] hover:bg-[#fde047] transition-colors">
+                  ⬇ Descargar backup completo
+                </button>
+              </div>
+
+              {/* Danger zone */}
+              <div className="bg-[#120808] border border-[#3a1010] rounded-2xl p-4 space-y-3">
+                <p className="text-[9px] tracking-[0.16em] text-[#ff6b6b]/70 font-semibold uppercase">⚠️ Zona de Peligro</p>
+                <p className="text-[11px] text-neutral-400 leading-relaxed">
+                  Borra <span className="text-white font-semibold">todos los trips, gastos y horas</span> guardados. Esta acción no se puede deshacer. El historial se perderá permanentemente.
+                </p>
+
+                {resetStep === 0 && (
+                  <button onClick={() => setResetStep(1)}
+                    className="w-full h-11 rounded-full border border-[#ff6b6b]/40 text-[#ff6b6b] text-[12px] font-bold tracking-[0.1em] hover:bg-[#ff6b6b]/10 transition-colors">
+                    🗑 Resetear todos los datos
+                  </button>
+                )}
+
+                {resetStep === 1 && (
+                  <div className="space-y-2">
+                    <p className="text-[11px] text-[#ff6b6b] font-semibold text-center">¿Estás seguro? Esta acción es irreversible.</p>
+                    <div className="flex gap-2">
+                      <button onClick={() => setResetStep(0)}
+                        className="flex-1 h-11 rounded-full border border-[#333] text-neutral-400 text-[12px] font-bold hover:text-white transition-colors">
+                        Cancelar
+                      </button>
+                      <button onClick={handleFactoryReset}
+                        className="flex-1 h-11 rounded-full bg-[#ff6b6b] text-black text-[12px] font-bold tracking-[0.08em] hover:bg-[#ff4444] transition-colors">
+                        Sí, borrar todo
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
