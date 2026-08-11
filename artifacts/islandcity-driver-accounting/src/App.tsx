@@ -919,7 +919,7 @@ export default function App() {
   const meta = getPlatformMeta(tripForm.platform);
 
   const EntryFormContent = (
-    <div id="trip-entry-form" className="w-full max-w-[480px] mx-auto bg-[#101010] border border-[#222] rounded-[24px] p-4 space-y-4">
+    <div id="trip-entry-form" className="w-full max-w-[480px] mx-auto bg-[#101010] border border-[#222] rounded-[24px] p-3 space-y-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="w-1 h-6 bg-[#22c55e] rounded-full inline-block" />
@@ -930,44 +930,44 @@ export default function App() {
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <label className="text-[11px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">REFERENCE / INVOICE</label>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <label className="text-[10px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">REFERENCE / INVOICE</label>
           <input value={tripForm.reference}
             onChange={e => setTripForm(s => ({ ...s, reference: e.target.value }))}
             placeholder="e.g. INV-2026-001"
-            className="w-full h-16 rounded-2xl bg-black border border-[#262626] px-4 text-white text-[15px] font-medium placeholder:text-[#6b7280] focus:outline-none focus:border-[#3a3a3a]" />
+            className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[13px] font-medium placeholder:text-[#6b7280] focus:outline-none focus:border-[#3a3a3a]" />
         </div>
-        <div className="space-y-1.5">
-          <label className="text-[11px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">EARNINGS <span className="font-normal normal-case opacity-70">Fare</span></label>
+        <div className="space-y-1">
+          <label className="text-[10px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">EARNINGS <span className="font-normal normal-case opacity-70">Fare</span></label>
           <input inputMode="decimal" value={tripForm.earnings}
             onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, earnings: e.target.value })); }}
             placeholder="0.00"
-            className="w-full h-16 rounded-2xl bg-black border border-[#262626] px-4 text-white text-[18px] font-bold font-mono-jet placeholder:text-[#6b7280] focus:outline-none focus:border-[#3a3a3a]" />
+            className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[16px] font-bold font-mono-jet placeholder:text-[#6b7280] focus:outline-none focus:border-[#3a3a3a]" />
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <label className="text-[11px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">TIPS</label>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <label className="text-[10px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">TIPS</label>
           <input inputMode="decimal" value={tripForm.tips}
             onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, tips: e.target.value })); }}
             placeholder="0.00"
-            className="w-full h-16 rounded-2xl bg-black border border-[#262626] px-4 text-white text-[18px] font-bold font-mono-jet placeholder:text-[#6b7280] focus:outline-none focus:border-[#3a3a3a]" />
+            className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[16px] font-bold font-mono-jet placeholder:text-[#6b7280] focus:outline-none focus:border-[#3a3a3a]" />
         </div>
-        <div className="space-y-1.5">
-          <label className="text-[11px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">EXTRA CASH</label>
+        <div className="space-y-1">
+          <label className="text-[10px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">EXTRA CASH</label>
           <input inputMode="decimal" value={tripForm.extraCash}
             onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, extraCash: e.target.value })); }}
             placeholder="0.00"
-            className="w-full h-16 rounded-2xl bg-black border border-[#262626] px-4 text-white text-[18px] font-bold font-mono-jet placeholder:text-[#6b7280] focus:outline-none focus:border-[#3a3a3a]" />
+            className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[16px] font-bold font-mono-jet placeholder:text-[#6b7280] focus:outline-none focus:border-[#3a3a3a]" />
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <label className="text-[11px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">TOLL ($)</label>
+            <label className="text-[10px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">TOLL ($)</label>
             {detectedToll ? (
               tollManuallyEdited ? (
                 <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#2d1b00] border border-[#92400e] text-[#fbbf24] text-[10px] font-bold tracking-wider animate-pulse">
@@ -997,7 +997,7 @@ export default function App() {
               if (detectedToll) setTollManuallyEdited(true);
             }}
             placeholder="e.g. 7.46"
-            className={`w-full h-16 rounded-2xl bg-black px-4 text-white text-[18px] font-bold font-mono-jet placeholder:text-[#6b7280] focus:outline-none transition-colors border ${
+            className={`w-full h-11 rounded-xl bg-black px-3 text-white text-[16px] font-bold font-mono-jet placeholder:text-[#6b7280] focus:outline-none transition-colors border ${
               detectedToll && !tollManuallyEdited
                 ? "border-[#166534] focus:border-[#4ade80]"
                 : detectedToll && tollManuallyEdited
@@ -1005,29 +1005,28 @@ export default function App() {
                 : "border-[#262626] focus:border-[#3a3a3a]"
             }`} />
         </div>
-        <div className="space-y-1.5">
-          <label className="text-[11px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">PLATFORM FEE ($)</label>
+        <div className="space-y-1">
+          <label className="text-[10px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">PLATFORM FEE ($)</label>
           <input inputMode="decimal" value={tripForm.platformFee}
             onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, platformFee: e.target.value })); }}
             placeholder="0.00"
-            className="w-full h-16 rounded-2xl bg-black border border-[#262626] px-4 text-white text-[18px] font-bold font-mono-jet placeholder:text-[#6b7280] focus:outline-none focus:border-[#3a3a3a]" />
+            className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[16px] font-bold font-mono-jet placeholder:text-[#6b7280] focus:outline-none focus:border-[#3a3a3a]" />
         </div>
       </div>
 
       {/* Platform selector */}
-      <div className="space-y-1.5">
-        <label className="text-[11px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">PLATFORM</label>
-        <div className="flex items-center gap-2 mb-2 flex-wrap">
-          <PlatformAvatar meta={meta} size="md" />
-          <span className="text-[13px] font-semibold text-white truncate">{tripForm.platform}</span>
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <label className="text-[10px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">PLATFORM</label>
+          <PlatformAvatar meta={meta} size="sm" />
+          <span className="text-[11px] font-semibold text-white truncate">{tripForm.platform}</span>
           {meta.tags.map(tg => (
-            <span key={tg} className={`text-[9px] font-bold uppercase tracking-[0.1em] px-2 py-0.5 rounded-full border ${getTagStyle(tg)}`}>{tg}</span>
+            <span key={tg} className={`text-[8px] font-bold uppercase tracking-[0.1em] px-1.5 py-0.5 rounded-full border ${getTagStyle(tg)}`}>{tg}</span>
           ))}
-          {meta.note && <span className="text-[10px] text-neutral-500">{meta.note}</span>}
         </div>
         <div className="relative">
           <select value={tripForm.platform} onChange={e => setTripForm(s => ({ ...s, platform: e.target.value }))}
-            className="w-full h-16 rounded-2xl bg-black border border-[#262626] px-4 pr-10 text-white text-[18px] font-bold appearance-none focus:outline-none focus:border-[#3a3a3a]">
+            className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 pr-8 text-white text-[14px] font-bold appearance-none focus:outline-none focus:border-[#3a3a3a]">
             <option>EcoRide - 10% fee</option>
             <option>Uber</option>
             <option>Lyft</option>
@@ -1039,21 +1038,21 @@ export default function App() {
             <option>Street Hail</option>
             <option>Other</option>
           </select>
-          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-neutral-500 text-[14px]">▼</span>
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 text-[12px]">▼</span>
         </div>
       </div>
 
       {/* Pickup */}
-      <div className="space-y-1.5">
+      <div className="space-y-1">
         <div className="flex items-center gap-2">
-          <span className="px-2.5 py-1 rounded-full bg-[#052e16] border border-[#166534] text-[#4ade80] text-[11px] font-bold tracking-widest uppercase">PICKUP</span>
-          <span className="text-[11px] text-[#6b7280]">Origin</span>
+          <span className="px-2 py-0.5 rounded-full bg-[#052e16] border border-[#166534] text-[#4ade80] text-[10px] font-bold tracking-widest uppercase">PICKUP</span>
+          <span className="text-[10px] text-[#6b7280]">Origin</span>
         </div>
         <div className="relative">
           <input value={tripForm.pickup}
             onChange={e => setTripForm(s => ({ ...s, pickup: e.target.value }))}
             placeholder={gps.lat ? `GPS: ${gps.lat.toFixed(4)},${gps.lng?.toFixed(4)}` : "Address or place"}
-            className="w-full h-16 rounded-2xl bg-black border border-[#262626] pl-4 pr-[52px] text-white text-[14px] font-medium placeholder:text-[#6b7280] focus:outline-none focus:border-[#14532d]" />
+            className="w-full h-11 rounded-xl bg-black border border-[#262626] pl-3 pr-[44px] text-white text-[13px] font-medium placeholder:text-[#6b7280] focus:outline-none focus:border-[#14532d]" />
           <button type="button" onClick={async () => {
             if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
             setPickupResolving(true);
@@ -1065,8 +1064,8 @@ export default function App() {
               setTripForm(s => ({ ...s, pickup: `${gps.lat!.toFixed(5)},${gps.lng!.toFixed(5)}` }));
               showToast("GPS coordinates saved (sin conexión)");
             } finally { setPickupResolving(false); }
-          }} className="absolute right-1.5 top-1.5 w-[42px] h-[52px] rounded-xl bg-[#052e16] border border-[#166534] flex items-center justify-center text-[16px] hover:bg-[#0a3a1f] transition-colors">
-            {pickupResolving ? <span className="animate-spin text-[13px]">⏳</span> : "📍"}
+          }} className="absolute right-1 top-1 w-[36px] h-[36px] rounded-lg bg-[#052e16] border border-[#166534] flex items-center justify-center text-[14px] hover:bg-[#0a3a1f] transition-colors">
+            {pickupResolving ? <span className="animate-spin text-[11px]">⏳</span> : "📍"}
           </button>
         </div>
         {gps.lat && (
@@ -1079,16 +1078,16 @@ export default function App() {
       </div>
 
       {/* Dropoff */}
-      <div className="space-y-1.5">
+      <div className="space-y-1">
         <div className="flex items-center gap-2">
-          <span className="px-2.5 py-1 rounded-full bg-[#0c1a33] border border-[#1e3a8a] text-[#60a5fa] text-[11px] font-bold tracking-widest uppercase">DROP OFF</span>
-          <span className="text-[11px] text-[#6b7280]">Destination</span>
+          <span className="px-2 py-0.5 rounded-full bg-[#0c1a33] border border-[#1e3a8a] text-[#60a5fa] text-[10px] font-bold tracking-widest uppercase">DROP OFF</span>
+          <span className="text-[10px] text-[#6b7280]">Destination</span>
         </div>
         <div className="relative">
           <input value={tripForm.dropoff}
             onChange={e => setTripForm(s => ({ ...s, dropoff: e.target.value }))}
             placeholder="Address or place"
-            className="w-full h-16 rounded-2xl bg-black border border-[#262626] pl-4 pr-[52px] text-white text-[14px] font-medium placeholder:text-[#6b7280] focus:outline-none focus:border-[#1e3a8a]" />
+            className="w-full h-11 rounded-xl bg-black border border-[#262626] pl-3 pr-[44px] text-white text-[13px] font-medium placeholder:text-[#6b7280] focus:outline-none focus:border-[#1e3a8a]" />
           <button type="button" onClick={async () => {
             if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
             setDropoffResolving(true);
@@ -1100,22 +1099,22 @@ export default function App() {
               setTripForm(s => ({ ...s, dropoff: `${gps.lat!.toFixed(5)},${gps.lng!.toFixed(5)}` }));
               showToast("GPS coordinates saved (sin conexión)");
             } finally { setDropoffResolving(false); }
-          }} className="absolute right-1.5 top-1.5 w-[42px] h-[52px] rounded-xl bg-[#0c1a33] border border-[#1e3a8a] flex items-center justify-center text-[16px] hover:bg-[#132a5a] transition-colors">
-            {dropoffResolving ? <span className="animate-spin text-[13px]">⏳</span> : "📍"}
+          }} className="absolute right-1 top-1 w-[36px] h-[36px] rounded-lg bg-[#0c1a33] border border-[#1e3a8a] flex items-center justify-center text-[14px] hover:bg-[#132a5a] transition-colors">
+            {dropoffResolving ? <span className="animate-spin text-[11px]">⏳</span> : "📍"}
           </button>
         </div>
       </div>
 
       {/* Quick location menus */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2">
         <button type="button" onClick={() => { if (!gps.lat) startGPS(); setShowPickupMenu(v => !v); setShowDropoffMenu(false); }}
-          className="h-14 rounded-2xl bg-black border border-[#14532d] px-4 flex items-center gap-2 text-white text-[13px] font-bold text-left hover:bg-[#052e16]/30 transition-colors">
-          <span className="text-[#22c55e] text-[16px]">📍</span>
+          className="h-10 rounded-xl bg-black border border-[#14532d] px-3 flex items-center gap-2 text-white text-[11px] font-bold text-left hover:bg-[#052e16]/30 transition-colors">
+          <span className="text-[#22c55e] text-[13px]">📍</span>
           <span className="truncate">Quick Pickup…</span>
         </button>
         <button type="button" onClick={() => { if (!gps.lat) startGPS(); setShowDropoffMenu(v => !v); setShowPickupMenu(false); }}
-          className="h-14 rounded-2xl bg-black border border-[#1e3a8a] px-4 flex items-center gap-2 text-white text-[13px] font-bold text-left hover:bg-[#0c1a33]/60 transition-colors">
-          <span className="text-[#60a5fa] text-[16px]">📍</span>
+          className="h-10 rounded-xl bg-black border border-[#1e3a8a] px-3 flex items-center gap-2 text-white text-[11px] font-bold text-left hover:bg-[#0c1a33]/60 transition-colors">
+          <span className="text-[#60a5fa] text-[13px]">📍</span>
           <span className="truncate">Quick Drop Off…</span>
         </button>
       </div>
@@ -1163,21 +1162,21 @@ export default function App() {
         </div>
       )}
 
-      <div className="space-y-1.5">
-        <label className="text-[11px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">NOTES</label>
+      <div className="space-y-1">
+        <label className="text-[10px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">NOTES</label>
         <textarea value={tripForm.notes} onChange={e => setTripForm(s => ({ ...s, notes: e.target.value }))}
-          placeholder="Surge, traffic, late toll, invoice details…" rows={3}
-          className="w-full rounded-2xl bg-black border border-[#262626] p-4 text-[13px] text-[#d1d5db] placeholder:text-[#6b7280] focus:outline-none focus:border-[#3a3a3a] resize-none leading-[1.5]" />
+          placeholder="Surge, traffic, late toll, invoice details…" rows={1}
+          className="w-full rounded-xl bg-black border border-[#262626] px-3 py-2.5 text-[12px] text-[#d1d5db] placeholder:text-[#6b7280] focus:outline-none focus:border-[#3a3a3a] resize-none leading-[1.5]" />
       </div>
 
       {/* Grand total preview */}
-      <div className="rounded-2xl bg-black border border-[#262626] p-4 flex items-center justify-between">
-        <span className="text-[11px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">GRAND TOTAL</span>
-        <span className="font-mono-jet text-[26px] font-bold text-[#facc15] tracking-tight">${grandTotalLive.toFixed(2)}</span>
+      <div className="rounded-xl bg-black border border-[#262626] px-4 py-2.5 flex items-center justify-between">
+        <span className="text-[10px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">GRAND TOTAL</span>
+        <span className="font-mono-jet text-[22px] font-bold text-[#facc15] tracking-tight">${grandTotalLive.toFixed(2)}</span>
       </div>
 
       <button type="button" onClick={handleSave}
-        className="w-full h-16 rounded-2xl bg-[#facc15] hover:bg-[#fde047] text-black font-bold text-[18px] tracking-[0.14em] uppercase transition-colors shadow-[0_0_20px_rgba(250,204,21,0.2)]">
+        className="w-full h-12 rounded-xl bg-[#facc15] hover:bg-[#fde047] text-black font-bold text-[16px] tracking-[0.14em] uppercase transition-colors shadow-[0_0_16px_rgba(250,204,21,0.2)]">
         {editingId ? "UPDATE TRIP" : "+ SAVE TRIP"}
       </button>
       {editingId && (
@@ -1187,47 +1186,33 @@ export default function App() {
         </button>
       )}
 
-      {/* Storage status */}
-      <div className={`rounded-2xl border p-3.5 space-y-2 ${storageVerified ? "bg-[#052e16]/40 border-[#166534]/50" : "bg-[#1a0a0a] border-[#7f1d1d]/50"}`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${storageVerified ? "bg-[#22c55e] animate-pulse" : "bg-red-500"}`} />
-            <p className="text-[11px] tracking-[0.14em] font-bold text-white uppercase">Storage Status</p>
-          </div>
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold tracking-widest ${storageVerified ? "bg-[#22c55e]/20 text-[#4ade80] border border-[#166534]" : "bg-red-900/30 text-red-400 border border-red-800"}`}>
-            {storageVerified ? "✓ ACTIVE" : "✗ ERROR"}
+      {/* Storage status — compact bar */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${storageVerified ? "bg-[#22c55e] animate-pulse" : "bg-red-500"}`} />
+          <span className={`text-[9px] font-bold tracking-widest ${storageVerified ? "text-[#4ade80]" : "text-red-400"}`}>
+            {storageVerified ? "STORAGE ACTIVE" : "STORAGE ERROR"}
           </span>
+          <span className="text-[9px] text-neutral-600 font-mono-jet">· {trips.length} trips · {(storageBytes / 1024).toFixed(1)}KB</span>
         </div>
-        <div className="grid grid-cols-3 gap-2">
-          {[["Trips on Disk", trips.length], ["Size", `${(storageBytes / 1024).toFixed(2)} KB`], ["Last Save", lastSavedAt === "—" ? "—" : new Date(lastSavedAt).toLocaleTimeString()]].map(([label, val]) => (
-            <div key={String(label)} className="bg-black/50 rounded-lg p-2 border border-[#222]">
-              <p className="text-[8px] tracking-widest text-neutral-500 uppercase">{label}</p>
-              <p className="font-mono-jet text-[12px] font-bold text-[#facc15] mt-0.5">{val}</p>
-            </div>
-          ))}
-        </div>
-        <div className="flex gap-2">
+        <div className="flex gap-1.5">
           <button onClick={() => {
             try {
               const raw = localStorage.getItem("island-city-trips");
-              if (raw) showToast(`✓ Verified: ${JSON.parse(raw).length} trips · ${(new Blob([raw]).size / 1024).toFixed(2)}KB`);
+              if (raw) showToast(`✓ ${JSON.parse(raw).length} trips · ${(new Blob([raw]).size / 1024).toFixed(2)}KB`);
               else showToast("No data on disk yet");
             } catch { showToast("Error reading storage"); }
-          }} className="flex-1 h-8 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-[10px] font-bold tracking-widest text-neutral-300 hover:text-white">
-            VERIFY DISK
+          }} className="px-2 h-6 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-[8px] font-bold tracking-widest text-neutral-400 hover:text-white">
+            VERIFY
           </button>
           <button onClick={() => {
             navigator.clipboard?.writeText(localStorage.getItem("island-city-trips") || "");
             showToast("JSON copied — backup ready");
-          }} className="flex-1 h-8 rounded-full bg-[#0a0a0a] border border-[#222] text-[10px] font-bold tracking-widest text-neutral-500 hover:text-white">
-            COPY BACKUP
+          }} className="px-2 h-6 rounded-full bg-[#0a0a0a] border border-[#222] text-[8px] font-bold tracking-widest text-neutral-500 hover:text-white">
+            BACKUP
           </button>
         </div>
       </div>
-
-      <p className="font-mono-jet text-[10px] text-[#6b7280] text-center">
-        GPS {gps.status} · E-ZPass 2026: $6.94 MTA · $3.18/$2.60 minor · $16.79 Port Authority peak
-      </p>
     </div>
   );
 
