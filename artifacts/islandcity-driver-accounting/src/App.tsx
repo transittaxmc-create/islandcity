@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { Home, Banknote, ClipboardList, BarChart2, BookOpen } from "lucide-react";
 
 type TurnStatus = "START" | "BREAK" | "END";
 type Tab = "ENTRY" | "REGISTER" | "DASHBOARD" | "EXPENSES" | "REPORTS" | "LEDGER" | "FINANCES";
@@ -1914,7 +1915,7 @@ export default function App() {
       </div>
 
       {/* Sticky totals bar — always visible while scrolling */}
-      <div className="sticky z-20 -mx-4 px-4 pt-2 pb-3 bg-black/96 backdrop-blur-sm border-b border-[#1a1a1a]" style={{ top: 'calc(136px + env(safe-area-inset-top))' }}>
+      <div className="sticky z-20 -mx-4 px-4 pt-2 pb-3 bg-black/96 backdrop-blur-sm border-b border-[#1a1a1a]" style={{ top: 'calc(146px + env(safe-area-inset-top))' }}>
         <div className="grid grid-cols-3 gap-2">
           {([
             ["PENDING", pendingTrips.length + (pendingTrips.length === 1 ? " trip" : " trips")],
@@ -2127,7 +2128,7 @@ export default function App() {
       </div>
 
       {/* Sticky totals bar */}
-      <div className="sticky z-20 -mx-4 px-4 pt-2 pb-3 bg-black/96 backdrop-blur-sm border-b border-[#1a1a1a]" style={{ top: 'calc(136px + env(safe-area-inset-top))' }}>
+      <div className="sticky z-20 -mx-4 px-4 pt-2 pb-3 bg-black/96 backdrop-blur-sm border-b border-[#1a1a1a]" style={{ top: 'calc(146px + env(safe-area-inset-top))' }}>
         <div className="grid grid-cols-2 gap-2">
           {([
             ["POSTED TRIPS", String(postedTrips.length)],
@@ -3189,48 +3190,38 @@ export default function App() {
         {/* Tab bar */}
         <div className="sticky z-30 bg-black" style={{ top: 'calc(68px + env(safe-area-inset-top))' }}>
 
-          {/* ── Primary 5 tabs — equal width, always fully visible ── */}
+          {/* ── Primary 5 tabs — icon + label, equal width, always visible ── */}
           <div className="flex border-b border-[#1a1a1a]">
-            {(["DASHBOARD", "ENTRY", "REGISTER", "FINANCES", "LEDGER"] as Tab[]).map(tab => {
-              const active = activeTab === tab;
-              const badge  = tab === "REGISTER" ? pendingTrips.length
-                           : tab === "LEDGER"   ? postedTrips.length
+            {([
+              { key: "DASHBOARD", Icon: Home,          label: "DASH"    },
+              { key: "ENTRY",     Icon: Banknote,      label: "REVENUE" },
+              { key: "REGISTER",  Icon: ClipboardList, label: "QUEUE"   },
+              { key: "FINANCES",  Icon: BarChart2,     label: "FINANCE" },
+              { key: "LEDGER",    Icon: BookOpen,      label: "LEDGER"  },
+            ] as { key: Tab; Icon: React.ElementType; label: string }[]).map(({ key, Icon, label }) => {
+              const active = activeTab === key;
+              const badge  = key === "REGISTER" ? pendingTrips.length
+                           : key === "LEDGER"   ? postedTrips.length
                            : 0;
-              const cfg: Record<string, [string, string]> = {
-                ENTRY:    ["REVENUE", ""],
-                REGISTER: ["REVENUE", "QUEUE"],
-              };
-              const [line1, line2] = cfg[tab] ?? [tab, ""];
-              const twoLine = Boolean(line2);
               return (
-                <button key={tab} onClick={() => setActiveTab(tab)}
-                  className={`flex-1 h-[42px] flex flex-col items-center justify-center relative transition-colors ${
-                    active ? "text-[#f6dd8c]" : "text-neutral-500 hover:text-neutral-300"
+                <button key={key} onClick={() => setActiveTab(key)}
+                  className={`flex-1 h-[52px] flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
+                    active ? "text-[#f6dd8c]" : "text-[#777] hover:text-neutral-400"
                   }`}>
-                  {twoLine ? (
-                    <>
-                      <span className="text-[9.5px] tracking-[0.10em] font-semibold leading-[1.2]">{line1}</span>
-                      <span className={`text-[8px] tracking-[0.10em] font-semibold leading-[1.2] flex items-center gap-0.5 ${
-                        active ? "text-[#d9b64f]" : "text-neutral-600"
-                      }`}>
-                        {line2}
-                        {badge > 0 && (
-                          <span className="px-1 rounded-full bg-[#facc15]/20 text-[#f6dd8c] text-[7px] font-bold leading-none">{badge > 99 ? "99+" : badge}</span>
-                        )}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-[10px] tracking-[0.12em] font-semibold flex items-center gap-1">
-                      {line1}
-                      {badge > 0 && (
-                        <span className={`px-1 rounded-full text-[7px] font-bold leading-none ${
-                          tab === "LEDGER"
-                            ? "bg-[#4ade80]/20 text-[#4ade80]"
-                            : "bg-[#facc15]/20 text-[#f6dd8c]"
-                        }`}>{badge > 99 ? "99+" : badge}</span>
-                      )}
-                    </span>
-                  )}
+                  {/* Icon with optional badge overlay */}
+                  <div className="relative flex items-center justify-center">
+                    <Icon size={17} strokeWidth={active ? 2 : 1.75} />
+                    {badge > 0 && (
+                      <span className={`absolute -top-[5px] -right-[7px] min-w-[13px] h-[13px] flex items-center justify-center rounded-full text-[7px] font-bold leading-none px-[3px] ${
+                        key === "LEDGER"
+                          ? "bg-[#4ade80]/25 text-[#4ade80]"
+                          : "bg-[#facc15]/25 text-[#f6dd8c]"
+                      }`}>{badge > 99 ? "99+" : badge}</span>
+                    )}
+                  </div>
+                  {/* Short label */}
+                  <span className="text-[7.5px] tracking-[0.12em] font-semibold">{label}</span>
+                  {/* Active indicator */}
                   {active && (
                     <span className="absolute bottom-0 left-3 right-3 h-[2px] bg-gradient-to-r from-[#f6dd8c] to-[#d9b64f] rounded-full" />
                   )}
