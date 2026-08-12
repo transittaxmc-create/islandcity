@@ -1726,7 +1726,7 @@ export default function App() {
               showToast("Pickup location resolved ✓");
             } catch {
               setTripForm(s => ({ ...s, pickup: `${gps.lat!.toFixed(5)},${gps.lng!.toFixed(5)}` }));
-              showToast("GPS coordinates saved (sin conexión)");
+              showToast("GPS coordinates saved (offline)");
             } finally { setPickupResolving(false); }
           }} className="absolute right-1 top-1 w-[36px] h-[36px] rounded-lg bg-[#052e16] border border-[#166534] flex items-center justify-center text-[14px] hover:bg-[#0a3a1f] transition-colors">
             {pickupResolving ? <span className="animate-spin text-[11px]">⏳</span> : "📍"}
@@ -1761,7 +1761,7 @@ export default function App() {
               showToast("Drop-off location resolved ✓");
             } catch {
               setTripForm(s => ({ ...s, dropoff: `${gps.lat!.toFixed(5)},${gps.lng!.toFixed(5)}` }));
-              showToast("GPS coordinates saved (sin conexión)");
+              showToast("GPS coordinates saved (offline)");
             } finally { setDropoffResolving(false); }
           }} className="absolute right-1 top-1 w-[36px] h-[36px] rounded-lg bg-[#0c1a33] border border-[#1e3a8a] flex items-center justify-center text-[14px] hover:bg-[#132a5a] transition-colors">
             {dropoffResolving ? <span className="animate-spin text-[11px]">⏳</span> : "📍"}
@@ -1898,9 +1898,12 @@ export default function App() {
   const RegisterContent = (
     <div className="space-y-4 pb-24">
       {/* Page header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-[22px] font-bold text-white tracking-tight">Register</h2>
-        <div className="flex items-center gap-2">
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-[22px] font-bold text-white tracking-tight">Revenue Queue</h2>
+          <p className="text-[10px] tracking-[0.12em] text-neutral-500 mt-0.5 uppercase font-semibold">Review &amp; audit before posting to Ledger</p>
+        </div>
+        <div className="flex items-center gap-2 mt-1">
           {selectedCount > 0 && (
             <span className="px-2.5 py-1 rounded-full bg-[#facc15]/20 border border-[#facc15]/40 text-[#f6dd8c] text-[10px] font-bold">
               {selectedCount} selected
@@ -1911,7 +1914,7 @@ export default function App() {
       </div>
 
       {/* Sticky totals bar — always visible while scrolling */}
-      <div className="sticky z-20 -mx-4 px-4 pt-2 pb-3 bg-black/96 backdrop-blur-sm border-b border-[#1a1a1a]" style={{ top: 'calc(112px + env(safe-area-inset-top))' }}>
+      <div className="sticky z-20 -mx-4 px-4 pt-2 pb-3 bg-black/96 backdrop-blur-sm border-b border-[#1a1a1a]" style={{ top: 'calc(136px + env(safe-area-inset-top))' }}>
         <div className="grid grid-cols-3 gap-2">
           {([
             ["PENDING", pendingTrips.length + (pendingTrips.length === 1 ? " trip" : " trips")],
@@ -1941,7 +1944,7 @@ export default function App() {
       {pendingTrips.length === 0 ? (
         <div className="bg-[#141414] border border-[#222] rounded-2xl p-10 text-center space-y-2">
           <p className="text-[15px] font-semibold text-white">All trips posted ✓</p>
-          <p className="text-[12px] text-neutral-500">Nothing pending — check the Ledger tab</p>
+          <p className="text-[12px] text-neutral-500">Queue is clear — all revenue is in the Ledger</p>
           <button onClick={() => setActiveTab("ENTRY")}
             className="mt-3 h-10 px-6 rounded-full border border-[#d9b64f]/50 text-[#f6dd8c] text-[12px] font-semibold hover:bg-[#f6dd8c]/10 transition-colors">
             + Log a trip
@@ -2124,7 +2127,7 @@ export default function App() {
       </div>
 
       {/* Sticky totals bar */}
-      <div className="sticky z-20 -mx-4 px-4 pt-2 pb-3 bg-black/96 backdrop-blur-sm border-b border-[#1a1a1a]" style={{ top: 'calc(112px + env(safe-area-inset-top))' }}>
+      <div className="sticky z-20 -mx-4 px-4 pt-2 pb-3 bg-black/96 backdrop-blur-sm border-b border-[#1a1a1a]" style={{ top: 'calc(136px + env(safe-area-inset-top))' }}>
         <div className="grid grid-cols-2 gap-2">
           {([
             ["POSTED TRIPS", String(postedTrips.length)],
@@ -2141,10 +2144,10 @@ export default function App() {
       {postedTrips.length === 0 ? (
         <div className="bg-[#141414] border border-[#222] rounded-2xl p-10 text-center space-y-2">
           <p className="text-[15px] font-semibold text-white">Ledger is empty</p>
-          <p className="text-[12px] text-neutral-500">Review trips in Register and post them here</p>
+          <p className="text-[12px] text-neutral-500">Review and approve trips in the Revenue Queue first</p>
           <button onClick={() => setActiveTab("REGISTER")}
             className="mt-3 h-10 px-6 rounded-full border border-[#166534]/60 text-[#4ade80] text-[12px] font-semibold hover:bg-[#4ade80]/10 transition-colors">
-            Go to Register →
+            Go to Revenue Queue →
           </button>
         </div>
       ) : (
@@ -3184,31 +3187,76 @@ export default function App() {
         </div>{/* end sticky header wrapper */}
 
         {/* Tab bar */}
-        <div className="sticky z-30 bg-black border-b border-[#1a1a1a]"
-          style={{ top: 'calc(68px + env(safe-area-inset-top))' }}>
-          <div className="flex overflow-x-auto gold-scroll px-2 gap-1">
-            {(["DASHBOARD", "ENTRY", "REGISTER", "FINANCES", "LEDGER", "EXPENSES", "REPORTS"] as Tab[]).map(tab => {
+        <div className="sticky z-30 bg-black" style={{ top: 'calc(68px + env(safe-area-inset-top))' }}>
+
+          {/* ── Primary 5 tabs — equal width, always fully visible ── */}
+          <div className="flex border-b border-[#1a1a1a]">
+            {(["DASHBOARD", "ENTRY", "REGISTER", "FINANCES", "LEDGER"] as Tab[]).map(tab => {
               const active = activeTab === tab;
-              const badge = tab === "REGISTER" ? pendingTrips.length
-                          : tab === "LEDGER"   ? postedTrips.length
-                          : 0;
-              const label: Record<string,string> = { ENTRY: "REVENUE", REGISTER: "REVENUE QUEUE" };
+              const badge  = tab === "REGISTER" ? pendingTrips.length
+                           : tab === "LEDGER"   ? postedTrips.length
+                           : 0;
+              const cfg: Record<string, [string, string]> = {
+                ENTRY:    ["REVENUE", ""],
+                REGISTER: ["REVENUE", "QUEUE"],
+              };
+              const [line1, line2] = cfg[tab] ?? [tab, ""];
+              const twoLine = Boolean(line2);
               return (
                 <button key={tab} onClick={() => setActiveTab(tab)}
-                  className={`whitespace-nowrap px-4 py-3.5 text-[11px] tracking-[0.14em] font-semibold transition-colors relative flex items-center gap-1.5 ${active ? "text-[#f6dd8c]" : "text-neutral-500 hover:text-neutral-300"}`}>
-                  {label[tab] ?? tab}
-                  {badge > 0 && (
-                    <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold leading-none ${
-                      tab === "LEDGER"
-                        ? "bg-[#4ade80]/20 text-[#4ade80]"
-                        : "bg-[#facc15]/20 text-[#f6dd8c]"
-                    }`}>{badge > 99 ? "99+" : badge}</span>
+                  className={`flex-1 h-[42px] flex flex-col items-center justify-center relative transition-colors ${
+                    active ? "text-[#f6dd8c]" : "text-neutral-500 hover:text-neutral-300"
+                  }`}>
+                  {twoLine ? (
+                    <>
+                      <span className="text-[9.5px] tracking-[0.10em] font-semibold leading-[1.2]">{line1}</span>
+                      <span className={`text-[8px] tracking-[0.10em] font-semibold leading-[1.2] flex items-center gap-0.5 ${
+                        active ? "text-[#d9b64f]" : "text-neutral-600"
+                      }`}>
+                        {line2}
+                        {badge > 0 && (
+                          <span className="px-1 rounded-full bg-[#facc15]/20 text-[#f6dd8c] text-[7px] font-bold leading-none">{badge > 99 ? "99+" : badge}</span>
+                        )}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-[10px] tracking-[0.12em] font-semibold flex items-center gap-1">
+                      {line1}
+                      {badge > 0 && (
+                        <span className={`px-1 rounded-full text-[7px] font-bold leading-none ${
+                          tab === "LEDGER"
+                            ? "bg-[#4ade80]/20 text-[#4ade80]"
+                            : "bg-[#facc15]/20 text-[#f6dd8c]"
+                        }`}>{badge > 99 ? "99+" : badge}</span>
+                      )}
+                    </span>
                   )}
-                  {active && <span className="absolute bottom-0 left-3 right-3 h-[2px] bg-gradient-to-r from-[#f6dd8c] to-[#d9b64f] rounded-full" />}
+                  {active && (
+                    <span className="absolute bottom-0 left-3 right-3 h-[2px] bg-gradient-to-r from-[#f6dd8c] to-[#d9b64f] rounded-full" />
+                  )}
                 </button>
               );
             })}
           </div>
+
+          {/* ── Secondary tabs — EXPENSES & REPORTS ── */}
+          <div className="flex border-b border-[#111] bg-[#060606]">
+            {(["EXPENSES", "REPORTS"] as Tab[]).map(tab => {
+              const active = activeTab === tab;
+              return (
+                <button key={tab} onClick={() => setActiveTab(tab)}
+                  className={`px-6 h-[26px] flex items-center text-[8.5px] tracking-[0.14em] font-semibold relative transition-colors ${
+                    active ? "text-[#f6dd8c]" : "text-neutral-600 hover:text-neutral-400"
+                  }`}>
+                  {tab}
+                  {active && (
+                    <span className="absolute bottom-0 left-4 right-4 h-[1.5px] bg-gradient-to-r from-[#f6dd8c] to-[#d9b64f] rounded-full" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
         </div>
 
         {/* Content */}
