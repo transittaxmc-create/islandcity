@@ -13,6 +13,7 @@ export const modules: ModuleMap = {
   "./components/mockups/islandcity/FinancesBoldChat.tsx": () => import("../components/mockups/islandcity/FinancesBoldChat.tsx"),
   "./components/mockups/islandcity/FinancesBoldNetBalance.tsx": () => import("../components/mockups/islandcity/FinancesBoldNetBalance.tsx"),
   "./components/mockups/islandcity/IncomeProjection.tsx": () => import("../components/mockups/islandcity/IncomeProjection.tsx"),
+  "./components/mockups/islandcity/MonthlyPNL.tsx": () => import("../components/mockups/islandcity/MonthlyPNL.tsx"),
   "./components/mockups/islandcity/ReceiptScanner.tsx": () => import("../components/mockups/islandcity/ReceiptScanner.tsx"),
   "./components/mockups/islandcity/Speedometer.tsx": () => import("../components/mockups/islandcity/Speedometer.tsx")
 };
