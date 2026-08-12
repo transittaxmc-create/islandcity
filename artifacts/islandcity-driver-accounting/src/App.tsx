@@ -3,7 +3,8 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import { Home, Banknote, ClipboardList, BarChart2, BookOpen, Receipt, FileText } from "lucide-react";
 
 type TurnStatus = "START" | "BREAK" | "END";
-type Tab = "ENTRY" | "REGISTER" | "DASHBOARD" | "EXPENSES" | "REPORTS" | "LEDGER" | "FINANCES";
+type Tab      = "DASHBOARD" | "TRIPS" | "EXPENSES" | "FINANCES" | "REPORTS";
+type TripsTab = "ENTRY" | "REGISTER" | "LEDGER";
 
 type Trip = {
   id: string;
@@ -408,7 +409,8 @@ const CLEAN_SLATE_VERSION = "2026-08-12-v7";
 })();
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>("DASHBOARD");
+  const [activeTab,  setActiveTab]  = useState<Tab>("DASHBOARD");
+  const [tripsTab,   setTripsTab]   = useState<TripsTab>("ENTRY");
   const [goal, setGoal] = useState<number>(() => {
     try { return parseInt(localStorage.getItem("ic-hourly-goal") || "60") || 60; } catch { return 60; }
   });
@@ -1272,7 +1274,7 @@ export default function App() {
     syncSaveTrips(updated);
     resetForm();
     showToast(editingId ? `Trip updated ✓` : `Trip saved ✓ $${newTrip.grandTotal.toFixed(2)}`);
-    setActiveTab("REGISTER");
+    setActiveTab("TRIPS"); setTripsTab("REGISTER");
   };
 
   const handleEditToEntry = (trip: Trip) => {
@@ -1285,7 +1287,7 @@ export default function App() {
       tripDate: trip.date,
       tripTime: _tsDt.toTimeString().slice(0, 5),
     });
-    setActiveTab("ENTRY");
+    setActiveTab("TRIPS"); setTripsTab("ENTRY");
   };
 
   // Sync-save helpers — write to localStorage BEFORE calling the React setter.
@@ -1405,7 +1407,7 @@ export default function App() {
     syncSaveTrips(updated);
     setSelectedForPost(new Set());
     showToast(`${count} trip${count !== 1 ? "s" : ""} posted to Ledger ✓`);
-    setActiveTab("LEDGER");
+    setActiveTab("TRIPS"); setTripsTab("LEDGER");
   };
 
   const resetExpenseForm = () => {
@@ -2465,7 +2467,7 @@ export default function App() {
         <div className="bg-[#141414] border border-[#222] rounded-2xl p-10 text-center space-y-2">
           <p className="text-[15px] font-semibold text-white">All trips posted ✓</p>
           <p className="text-[12px] text-neutral-400">Queue is clear — all revenue is in the Ledger</p>
-          <button onClick={() => setActiveTab("ENTRY")}
+          <button onClick={() => { setActiveTab("TRIPS"); setTripsTab("ENTRY"); }}
             className="mt-3 h-10 px-6 rounded-full border border-[#d9b64f]/50 text-[#f6dd8c] text-[12px] font-semibold hover:bg-[#f6dd8c]/10 transition-colors">
             + Log a trip
           </button>
@@ -2616,7 +2618,7 @@ export default function App() {
 
       {/* Floating POST TO LEDGER button */}
       {selectedCount > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-[440px] px-4 pointer-events-none">
+        <div className="fixed bottom-[76px] left-1/2 -translate-x-1/2 z-50 w-full max-w-[440px] px-4 pointer-events-none">
           <button
             onClick={handlePostToLedger}
             style={{ pointerEvents: "auto" }}
@@ -2665,7 +2667,7 @@ export default function App() {
         <div className="bg-[#141414] border border-[#222] rounded-2xl p-10 text-center space-y-2">
           <p className="text-[15px] font-semibold text-white">Ledger is empty</p>
           <p className="text-[12px] text-neutral-400">Review and approve trips in the Revenue Queue first</p>
-          <button onClick={() => setActiveTab("REGISTER")}
+          <button onClick={() => { setActiveTab("TRIPS"); setTripsTab("REGISTER"); }}
             className="mt-3 h-10 px-6 rounded-full border border-[#166534]/60 text-[#4ade80] text-[12px] font-semibold hover:bg-[#4ade80]/10 transition-colors">
             Go to Revenue Queue →
           </button>
@@ -4369,76 +4371,86 @@ export default function App() {
         </div>{/* end inner h-[68px] row */}
         </div>{/* end sticky header wrapper */}
 
-        {/* Tab bar — two symmetric rows */}
-        <div className="sticky z-30 bg-black" style={{ top: 'calc(68px + env(safe-area-inset-top))' }}>
-
-          {/* ── Row 1: Operations (daily driving) ── */}
-          <div className="flex border-b border-[#181818]">
-            {([
-              { key: "DASHBOARD", Icon: Home,          label: "DASH",    color: "#f6dd8c" },
-              { key: "ENTRY",     Icon: Banknote,      label: "REVENUE", color: "#f6dd8c" },
-              { key: "REGISTER",  Icon: ClipboardList, label: "QUEUE",   color: "#fbbf24" },
-              { key: "LEDGER",    Icon: BookOpen,      label: "LEDGER",  color: "#4ade80" },
-            ] as { key: Tab; Icon: React.ElementType; label: string; color: string }[]).map(({ key, Icon, label, color }) => {
-              const active = activeTab === key;
-              const badge  = key === "REGISTER" ? pendingTrips.length
-                           : key === "LEDGER"   ? postedTrips.length
-                           : 0;
-              return (
-                <button key={key} onClick={() => setActiveTab(key)}
-                  className={`flex-1 h-[50px] flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
-                    active ? "" : "text-neutral-500 hover:text-neutral-300"
-                  }`}
-                  style={active ? { color } : undefined}>
-                  <div className="relative flex items-center justify-center">
-                    <Icon size={16} strokeWidth={active ? 2 : 1.75} />
+        {/* TRIPS sub-navigation — sticky just below header */}
+        {activeTab === "TRIPS" && (
+          <div className="sticky z-20 bg-black border-b border-[#181818] px-4 py-2.5"
+            style={{ top: 'calc(68px + env(safe-area-inset-top))' }}>
+            <div className="flex gap-2">
+              {([
+                { key: "ENTRY",    label: "💰 Revenue", badge: 0 },
+                { key: "REGISTER", label: "📋 Queue",   badge: pendingTrips.length },
+                { key: "LEDGER",   label: "📖 Ledger",  badge: postedTrips.length },
+              ] as { key: TripsTab; label: string; badge: number }[]).map(({ key, label, badge }) => {
+                const active = tripsTab === key;
+                return (
+                  <button key={key} onClick={() => setTripsTab(key)}
+                    className={`flex-1 h-8 rounded-full text-[9px] font-bold tracking-[0.1em] border transition-all relative ${
+                      active
+                        ? "bg-[#1a1200] border-[#f6dd8c]/40 text-[#f6dd8c]"
+                        : "bg-transparent border-[#2a2a2a] text-neutral-500 hover:text-neutral-300"
+                    }`}>
+                    {label}
                     {badge > 0 && (
-                      <span className={`absolute -top-[5px] -right-[7px] min-w-[13px] h-[13px] flex items-center justify-center rounded-full text-[7px] font-bold leading-none px-[3px] ${
+                      <span className={`absolute -top-1.5 -right-1 text-[7px] font-bold min-w-[14px] h-[14px] flex items-center justify-center rounded-full px-[3px] ${
                         key === "LEDGER" ? "bg-[#4ade80]/25 text-[#4ade80]" : "bg-[#facc15]/25 text-[#f6dd8c]"
-                      }`}>{badge > 99 ? "99+" : badge}</span>
+                      }`}>{badge}</span>
                     )}
-                  </div>
-                  <span className="text-[7px] tracking-[0.13em] font-semibold">{label}</span>
-                  {active && <span className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full" style={{ background: color }} />}
-                </button>
-              );
-            })}
+                  </button>
+                );
+              })}
+            </div>
           </div>
+        )}
 
-          {/* ── Row 2: Finances (money management) ── */}
-          <div className="flex border-b border-[#111] bg-[#050505]">
+        {/* Content */}
+        <div className="px-4 pb-36 pt-5">
+          {activeTab === "DASHBOARD" && DashboardContent}
+          {activeTab === "FINANCES"  && FinancesContent}
+          {activeTab === "TRIPS" && tripsTab === "ENTRY"    && EntryFormContent}
+          {activeTab === "TRIPS" && tripsTab === "REGISTER" && RegisterContent}
+          {activeTab === "TRIPS" && tripsTab === "LEDGER"   && LedgerContent}
+          {activeTab === "EXPENSES"  && ExpensesContent}
+          {activeTab === "REPORTS"   && ReportsContent}
+        </div>
+
+        {/* Bottom tab bar */}
+        <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] z-40 bg-[#030303] border-t border-[#1c1c1c]"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <div className="flex">
             {([
-              { key: "EXPENSES", Icon: Receipt,  label: "EXPENSES", color: "#fb923c" },
-              { key: "FINANCES", Icon: BarChart2, label: "FINANCE",  color: "#60a5fa" },
-              { key: "REPORTS",  Icon: FileText,  label: "REPORTS",  color: "#a78bfa" },
-            ] as { key: Tab; Icon: React.ElementType; label: string; color: string }[]).map(({ key, Icon, label, color }) => {
-              const active = activeTab === key;
+              { key: "DASHBOARD" as Tab, Icon: Home,      label: "DASH",     color: "#f6dd8c" },
+              { key: "TRIPS"     as Tab, Icon: Banknote,  label: "TRIPS",    color: "#fbbf24" },
+              { key: "EXPENSES"  as Tab, Icon: Receipt,   label: "EXPENSES", color: "#fb923c" },
+              { key: "FINANCES"  as Tab, Icon: BarChart2, label: "FINANCE",  color: "#60a5fa" },
+              { key: "REPORTS"   as Tab, Icon: FileText,  label: "REPORTS",  color: "#a78bfa" },
+            ]).map(({ key, Icon, label, color }) => {
+              const active  = activeTab === key;
+              const badge   = key === "TRIPS" ? pendingTrips.length : 0;
               return (
                 <button key={key} onClick={() => setActiveTab(key)}
-                  className={`flex-1 h-[42px] flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
+                  className={`flex-1 h-[62px] flex flex-col items-center justify-center gap-[3px] relative transition-all ${
                     active ? "" : "text-neutral-600 hover:text-neutral-400"
                   }`}
                   style={active ? { color } : undefined}>
-                  <Icon size={13} strokeWidth={active ? 2 : 1.75} />
-                  <span className="text-[6.5px] tracking-[0.14em] font-semibold">{label}</span>
-                  {active && <span className="absolute bottom-0 left-3 right-3 h-[1.5px] rounded-full" style={{ background: color }} />}
+                  {active && (
+                    <span className="absolute top-1.5 left-1.5 right-1.5 bottom-1.5 rounded-2xl pointer-events-none"
+                      style={{ background: color, opacity: 0.07 }} />
+                  )}
+                  <div className="relative z-10">
+                    <Icon size={active ? 20 : 18} strokeWidth={active ? 2 : 1.5} />
+                    {badge > 0 && (
+                      <span className="absolute -top-[5px] -right-[8px] min-w-[14px] h-[14px] flex items-center justify-center rounded-full text-[7px] font-bold bg-[#facc15]/25 text-[#f6dd8c] px-[3px]">
+                        {badge > 99 ? "99+" : badge}
+                      </span>
+                    )}
+                  </div>
+                  <span className={`text-[7.5px] tracking-[0.1em] z-10 ${active ? "font-bold" : "font-semibold"}`}>{label}</span>
                 </button>
               );
             })}
           </div>
-
         </div>
 
-        {/* Content */}
-        <div className="px-4 pb-28 pt-5">
-          {activeTab === "DASHBOARD"  && DashboardContent}
-          {activeTab === "FINANCES"   && FinancesContent}
-          {activeTab === "ENTRY"      && EntryFormContent}
-          {activeTab === "REGISTER"   && RegisterContent}
-          {activeTab === "LEDGER"     && LedgerContent}
-          {activeTab === "EXPENSES"   && ExpensesContent}
-          {activeTab === "REPORTS"    && ReportsContent}
-        </div>
 
         {/* Document viewer modal */}
         {viewingDoc && (
@@ -4473,7 +4485,7 @@ export default function App() {
 
         {/* Toast */}
         {toast && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-full bg-[#facc15] text-black text-[12px] font-bold tracking-wide shadow-xl border border-black/10 max-w-[90%] text-center">
+          <div className="fixed bottom-[76px] left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-full bg-[#facc15] text-black text-[12px] font-bold tracking-wide shadow-xl border border-black/10 max-w-[90%] text-center">
             {toast}
           </div>
         )}
