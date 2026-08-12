@@ -2586,7 +2586,7 @@ export default function App() {
   const allExpenseCategories = useMemo(() => [...EXPENSE_CATEGORIES, ...customExpenseCategories], [customExpenseCategories]);
   const allVendors           = useMemo(() => [...NYC_DEFAULT_VENDORS, ...(customVendors.filter(v=>!NYC_DEFAULT_VENDORS.includes(v)))], [customVendors]);
 
-  // Period-filtered expenses (used by header + list inside ExpensesContent)
+  // Period-filtered expenses — EXPENSE LOG only (one-time, non-recurring entries)
   const expPeriodFiltered = useMemo(() => {
     const today     = toYYYYMMDD(currentTime);
     const wd        = currentTime.getDay();
@@ -2594,11 +2594,13 @@ export default function App() {
     const weekStart = toYYYYMMDD(new Date(currentTime.getFullYear(), currentTime.getMonth(), currentTime.getDate() + monOffset));
     const monthStr  = today.slice(0,7);
     const yearStr   = today.slice(0,4);
-    if (expPeriod === 'DAY')   return expenses.filter(e => e.date === today);
-    if (expPeriod === 'WEEK')  return expenses.filter(e => e.date >= weekStart && e.date <= today);
-    if (expPeriod === 'MONTH') return expenses.filter(e => e.date.startsWith(monthStr));
-    if (expPeriod === 'YEAR')  return expenses.filter(e => e.date.startsWith(yearStr));
-    return expenses;
+    // Bills (recurring) live in MY BILLS — exclude them from the log
+    const logOnly = expenses.filter(e => !e.frequency || e.frequency === 'none');
+    if (expPeriod === 'DAY')   return logOnly.filter(e => e.date === today);
+    if (expPeriod === 'WEEK')  return logOnly.filter(e => e.date >= weekStart && e.date <= today);
+    if (expPeriod === 'MONTH') return logOnly.filter(e => e.date.startsWith(monthStr));
+    if (expPeriod === 'YEAR')  return logOnly.filter(e => e.date.startsWith(yearStr));
+    return logOnly;
   }, [expenses, expPeriod, currentTime]);
 
   const ExpensesContent = (
@@ -2617,14 +2619,25 @@ export default function App() {
               </p>
           }
         </div>
-        <button
-          onClick={() => {
-            if (showExpenseForm && !editingExpenseId) { setShowExpenseForm(false); }
-            else { setShowExpenseForm(true); setEditingExpenseId(null); resetExpenseForm(); setAddingCustomType(false); setAddingCustomCat(false); setAddingCustomVendor(false); }
-          }}
-          className="h-10 px-4 rounded-full bg-[#facc15] text-black text-[12px] font-bold tracking-wide hover:bg-[#fde047] transition-colors">
-          {showExpenseForm && !editingExpenseId ? "✕ Close" : "+ New Expense"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setShowExpenseForm(true); setEditingExpenseId(null);
+              setExpenseForm({ name: "", type: "Gasoline / Fuel", category: "Vehicle & Fuel", description: "", amount: "", date: new Date().toISOString().slice(0,10), frequency: "monthly", dueDate: "" });
+              setAddingCustomType(false); setAddingCustomCat(false); setAddingCustomVendor(false);
+            }}
+            className="h-10 px-4 rounded-full bg-[#1e1e1e] border border-[#333] text-white text-[12px] font-bold tracking-wide hover:bg-[#2a2a2a] transition-colors">
+            + Bill
+          </button>
+          <button
+            onClick={() => {
+              if (showExpenseForm && !editingExpenseId) { setShowExpenseForm(false); }
+              else { setShowExpenseForm(true); setEditingExpenseId(null); resetExpenseForm(); setAddingCustomType(false); setAddingCustomCat(false); setAddingCustomVendor(false); }
+            }}
+            className="h-10 px-4 rounded-full bg-[#facc15] text-black text-[12px] font-bold tracking-wide hover:bg-[#fde047] transition-colors">
+            {showExpenseForm && !editingExpenseId ? "✕ Close" : "+ Expense"}
+          </button>
+        </div>
       </div>
 
       {/* Entry / Edit form */}
@@ -2642,7 +2655,9 @@ export default function App() {
 
           <div className="flex items-center justify-between">
             <h3 className="text-[11px] font-bold tracking-[0.16em] text-white uppercase">
-              {editingExpenseId ? "✏️ Edit Expense" : "New Expense"}
+              {editingExpenseId
+                ? (expenseForm.frequency && expenseForm.frequency !== 'none' ? "✏️ Edit Bill" : "✏️ Edit Expense")
+                : (expenseForm.frequency && expenseForm.frequency !== 'none' ? "📋 New Bill" : "New Expense")}
             </h3>
             <div className="flex items-center gap-2">
               {/* Receipt scan button */}
@@ -2811,24 +2826,97 @@ export default function App() {
         </div>
       )}
 
-      {/* ── #6 Period filter ── */}
+      {/* ── MY BILLS ── */}
       {(() => {
-        const today = toYYYYMMDD(currentTime);
-        const weekStart = (() => { const d = new Date(currentTime); d.setDate(d.getDate()-(d.getDay()===0?6:d.getDay()-1)); return toYYYYMMDD(d); })();
-        const monthStr  = today.slice(0,7);
-        const yearStr   = today.slice(0,4);
-        const filtered =
-          expPeriod==='DAY'   ? expenses.filter(e=>e.date===today) :
-          expPeriod==='WEEK'  ? expenses.filter(e=>e.date>=weekStart&&e.date<=today) :
-          expPeriod==='MONTH' ? expenses.filter(e=>e.date.startsWith(monthStr)) :
-          expPeriod==='YEAR'  ? expenses.filter(e=>e.date.startsWith(yearStr)) :
-          expenses;
+        const bills = expenses.filter(e => e.frequency && e.frequency !== 'none');
+        const monthlyEq = bills.reduce((s,e) => {
+          if (e.frequency==='daily')   return s + e.amount * 30;
+          if (e.frequency==='weekly')  return s + e.amount * 4.33;
+          return s + e.amount;
+        }, 0);
+        const todayStr = toYYYYMMDD(currentTime);
+        return (
+          <div className="bg-[#0d0d0d] border border-[#1e1e1e] rounded-2xl overflow-hidden">
+            {/* Section header */}
+            <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-[#1a1a1a]">
+              <div>
+                <p className="text-[10px] text-neutral-300 font-bold uppercase tracking-widest">📋 My Bills</p>
+                <p className="text-[10px] text-neutral-400 mt-0.5 font-mono-jet">
+                  {bills.length} active · ~−${monthlyEq.toFixed(0)}/mo
+                </p>
+              </div>
+              <button onClick={() => {
+                setShowExpenseForm(true); setEditingExpenseId(null);
+                setExpenseForm({ name: "", type: "Gasoline / Fuel", category: "Vehicle & Fuel", description: "", amount: "", date: new Date().toISOString().slice(0,10), frequency: "monthly", dueDate: "" });
+                setAddingCustomType(false); setAddingCustomCat(false); setAddingCustomVendor(false);
+              }} className="h-8 px-3 rounded-full bg-[#1e1e1e] border border-[#333] text-white text-[10px] font-bold tracking-wide hover:bg-[#2a2a2a] transition-colors">
+                + Add Bill
+              </button>
+            </div>
+            {/* Bills list */}
+            {bills.length === 0 ? (
+              <div className="px-4 py-6 text-center">
+                <p className="text-[28px] mb-2">🧾</p>
+                <p className="text-[13px] text-neutral-400">No bills yet</p>
+                <p className="text-[10px] text-neutral-400 mt-1">Add rent, car payment, memberships — anything that repeats</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-[#1a1a1a]">
+                {bills.map(b => {
+                  const freqLabel = b.frequency==='daily' ? 'Daily' : b.frequency==='weekly' ? 'Weekly' : 'Monthly';
+                  const freqColor = b.frequency==='daily' ? 'text-orange-400' : b.frequency==='weekly' ? 'text-blue-400' : 'text-[#4ade80]';
+                  const nextDue   = b.dueDate ? new Date(b.dueDate + 'T00:00:00') : null;
+                  const daysUntil = nextDue ? Math.ceil((nextDue.getTime() - new Date(todayStr+'T00:00:00').getTime()) / 86400000) : null;
+                  const dueStr    = daysUntil !== null
+                    ? daysUntil === 0 ? '⚠️ Due today'
+                    : daysUntil < 0  ? `${Math.abs(daysUntil)}d overdue`
+                    : daysUntil <= 5 ? `⏰ Due in ${daysUntil}d`
+                    : `Due in ${daysUntil}d`
+                    : null;
+                  const urgentDue = daysUntil !== null && daysUntil <= 3;
+                  return (
+                    <div key={b.id} className="flex items-center gap-3 px-4 py-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[13px] font-semibold text-white truncate">{b.vendor}</span>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[#1a1a1a] border border-[#2a2a2a] ${freqColor}`}>🔄 {freqLabel}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          <span className="text-[10px] text-neutral-400">{b.category}</span>
+                          {dueStr && <span className={`text-[10px] font-mono-jet ${urgentDue ? 'text-orange-400 font-bold' : 'text-neutral-400'}`}>{dueStr}</span>}
+                        </div>
+                        {b.note && <p className="text-[10px] text-neutral-400 mt-0.5 italic">{b.note}</p>}
+                      </div>
+                      <div className="flex-shrink-0 flex items-center gap-2">
+                        <span className="font-mono-jet text-[15px] font-bold text-[#ff6b6b]">−${b.amount.toFixed(2)}</span>
+                        <button onClick={() => { setEditingExpenseId(b.id); setExpenseForm({ name: b.vendor, type: b.type||"Other", category: b.category, description: b.note, amount: String(b.amount), date: b.date, frequency: b.frequency||"none", dueDate: b.dueDate||"" }); setShowExpenseForm(true); setAddingCustomType(false); setAddingCustomCat(false); setAddingCustomVendor(false); }}
+                          className="w-7 h-7 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-400 text-[10px] flex items-center justify-center">✏️</button>
+                        <button onClick={() => handleDeleteExpense(b.id)}
+                          className="w-7 h-7 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-[#f87171] text-[10px] flex items-center justify-center">✕</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* ── EXPENSE LOG ── */}
+      {(() => {
+        const filtered    = expPeriodFiltered; // log-only (one-time entries), pre-filtered by period
         const periodTotal = filtered.reduce((a,e)=>a+e.amount,0);
         const labels:{id:'DAY'|'WEEK'|'MONTH'|'YEAR'|'ALL',label:string}[] = [
           {id:'DAY',label:'Today'},{id:'WEEK',label:'Week'},{id:'MONTH',label:'Month'},{id:'YEAR',label:'Year'},{id:'ALL',label:'All'}
         ];
         return (
           <div>
+            {/* Section label */}
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[10px] text-neutral-300 font-bold uppercase tracking-widest">📅 Expense Log</p>
+              <span className="text-[10px] text-neutral-400 font-mono-jet">one-time &amp; unexpected</span>
+            </div>
             {/* Period selector */}
             <div className="flex gap-1.5 mb-3">
               {labels.map(l=>(
