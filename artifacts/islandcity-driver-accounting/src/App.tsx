@@ -1601,7 +1601,14 @@ export default function App() {
           {currentTime.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).toUpperCase()}
         </p>
         <p className="font-mono-jet text-[10px] text-neutral-400 mt-1">
-          {currentTime.toLocaleTimeString()} · Live · LocalStorage stamped
+          {currentTime.toLocaleTimeString()}
+          {gpsAddress
+            ? ` · ${gpsAddress}`
+            : gps.status === "searching"
+              ? " · Locating…"
+              : gps.status === "active" && gps.lat && gps.lng
+                ? ` · ${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)}`
+                : ""}
         </p>
       </div>
 
