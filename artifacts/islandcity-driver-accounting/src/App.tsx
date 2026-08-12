@@ -1155,7 +1155,9 @@ export default function App() {
     backgroundClip: "text",
   };
 
-  const shiftStatusLabel = shiftActive ? (isOnBreak ? "ON BREAK" : "ON ROUTE") : "OFF DUTY";
+  const shiftStatusLabel = shiftActive ? (isOnBreak ? "EN PAUSA" : "EN RUTA") : "FUERA DE TURNO";
+  const gpsStatusLabel   = gps.status === "active" ? "activo" : gps.status === "searching" ? "buscando" : "inactivo";
+  const greeting         = currentTime.getHours() < 6 ? "Buenas noches" : currentTime.getHours() < 12 ? "Buenos días" : currentTime.getHours() < 19 ? "Buenas tardes" : "Buenas noches";
 
   // ─── Nearest NYC demand zones (static reference — live API pending Task #7) ───
   const NYC_ZONES = [
@@ -1192,7 +1194,7 @@ export default function App() {
   const DashboardContent = (
     <div className="space-y-5">
       <div>
-        <h2 className="text-[24px] font-bold leading-tight">Good morning, Miguel.</h2>
+        <h2 className="text-[24px] font-bold leading-tight">{greeting}, Miguel.</h2>
         <p className="font-mono-jet text-[11px] tracking-[0.18em] mt-1.5 uppercase" style={goldGradientStyle}>
           {currentTime.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).toUpperCase()}
         </p>
@@ -1233,13 +1235,13 @@ export default function App() {
         </div>
         <div className="mt-2">
           <p className="font-mono-jet text-[11px] text-neutral-500">
-            {gps.lat && gps.lng ? `${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)}` : "GPS not active"}{gps.acc ? ` · ±${Math.round(gps.acc)}m` : ""}
+            {gps.lat && gps.lng ? `${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)}` : "GPS inactivo"}{gps.acc ? ` · ±${Math.round(gps.acc)}m` : ""}
           </p>
           {gpsAddress && <p className="text-[11px] text-neutral-300 mt-0.5 truncate">{gpsAddress}</p>}
           {gpsAirport && <p className="font-mono-jet text-[10px] text-[#f6dd8c] mt-0.5">✈ {gpsAirport}</p>}
         </div>
         <p className="font-mono-jet text-[32px] font-black mt-2 tracking-tight" style={goldGradientStyle}>${grossToday.toFixed(2)}</p>
-        <p className="font-mono-jet text-[10px] text-neutral-500 mt-0.5">{todayTrips.length} {todayTrips.length === 1 ? "trip" : "trips"} · fare + tips + toll</p>
+        <p className="font-mono-jet text-[10px] text-neutral-500 mt-0.5">{todayTrips.length} {todayTrips.length === 1 ? "viaje" : "viajes"} · tarifa + propinas + peajes</p>
         <div className="mt-3 h-px" style={{ background: "linear-gradient(90deg, #1e1400, #1e1e1e)" }} />
         <div className="mt-2.5 flex items-center gap-1.5">
           <span className={`w-1.5 h-1.5 rounded-full ${
@@ -1252,11 +1254,11 @@ export default function App() {
             : shiftActive && isOnBreak  ? "text-[#f97316]"
             : "text-neutral-500"
           }`}>
-            {shiftActive ? (isOnBreak ? "On break" : "On track") : "Shift ended"}
+            {shiftActive ? (isOnBreak ? "En pausa" : "En ruta") : "Turno finalizado"}
           </span>
           <span className="ml-auto text-[9px] text-neutral-600 font-mono-jet flex items-center gap-1">
             <span className={`w-1 h-1 rounded-full ${gps.status === "active" ? "bg-[#4ade80]" : gps.status === "searching" ? "bg-yellow-400 animate-pulse" : "bg-neutral-600"}`} />
-            GPS {gps.status}
+            GPS {gpsStatusLabel}
           </span>
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2">
@@ -1274,7 +1276,7 @@ export default function App() {
                   : isActive ? { background: "linear-gradient(90deg, #f6dd8c, #d9b64f)", border: "1px solid #d9b64f", color: "#000" }
                   : { background: "transparent", border: "1px solid #d9b64f99", color: "#f6dd8c" }
                 }>
-                {s === "BREAK" ? (isOnBreak ? "RESUME" : "BREAK") : s}
+                {s === "START" ? "INICIAR" : s === "BREAK" ? (isOnBreak ? "CONTINUAR" : "PAUSA") : "FINALIZAR"}
               </button>
             );
           })}
@@ -1283,16 +1285,16 @@ export default function App() {
 
       {/* Performance grid */}
       <div>
-        <p className="text-[10px] tracking-[0.22em] text-neutral-400 font-bold mb-2.5">PERFORMANCE</p>
+        <p className="text-[10px] tracking-[0.22em] text-neutral-400 font-bold mb-2.5">RENDIMIENTO DEL TURNO</p>
         <div className="grid grid-cols-2 gap-3">
           {/* HOY BREAKDOWN */}
           <div className="rounded-xl p-3.5" style={{ background: "#0d0d0d", border: "1px solid #1e1400" }}>
-            <p className="text-[9px] tracking-[0.18em] font-bold" style={{ color: "#d97706" }}>HOY BREAKDOWN</p>
+            <p className="text-[9px] tracking-[0.18em] font-bold" style={{ color: "#d97706" }}>DESGLOSE DEL DÍA</p>
             <div className="mt-2 space-y-1">
               {([
-                ["Fare",  todayTrips.reduce((a,b) => a + b.earnings, 0)],
-                ["Tips",  todayTrips.reduce((a,b) => a + b.tips + b.extra, 0)],
-                ["Tolls", totalTollsToday],
+                ["Tarifa",   todayTrips.reduce((a,b) => a + b.earnings, 0)],
+                ["Propinas", todayTrips.reduce((a,b) => a + b.tips + b.extra, 0)],
+                ["Peajes",   totalTollsToday],
               ] as [string,number][]).map(([label, val]) => (
                 <div key={label} className="flex justify-between items-center">
                   <span className="text-[10px] text-neutral-500 font-mono-jet">{label}</span>
@@ -1327,7 +1329,7 @@ export default function App() {
                 <div className="p-3.5">
                   {/* Label row with status badge */}
                   <div className="flex items-center justify-between">
-                    <p className="text-[9px] tracking-[0.18em] font-bold" style={{ color: "#d97706" }}>$/HORA GROSS</p>
+                    <p className="text-[9px] tracking-[0.18em] font-bold" style={{ color: "#d97706" }}>TARIFA BRUTA / HORA</p>
                     {tierLabel && (
                       <span className="font-mono-jet text-[8px] font-black px-1.5 py-0.5 rounded-full"
                         style={{ background: `${rateColor}22`, color: rateColor, border: `1px solid ${rateColor}55` }}>
@@ -1352,21 +1354,21 @@ export default function App() {
           })()}
           {/* GASTOS HOY */}
           <div className="rounded-xl p-3.5" style={{ background: "#0d0d0d", border: "1px solid #1e0a0a" }}>
-            <p className="text-[9px] tracking-[0.18em] font-bold text-[#ef4444]">GASTOS HOY</p>
+            <p className="text-[9px] tracking-[0.18em] font-bold text-[#ef4444]">GASTOS DEL DÍA</p>
             <p className="font-mono-jet text-[22px] font-black text-[#ef4444] mt-2">
               {expensesToday > 0 ? `−$${expensesToday.toFixed(2)}` : "$0.00"}
             </p>
             <p className="text-[10px] text-neutral-600 mt-1 font-mono-jet">
-              {expenses.filter(e => e.date === toYYYYMMDD(currentTime)).length} items hoy
+              {expenses.filter(e => e.date === toYYYYMMDD(currentTime)).length} registros del día
             </p>
           </div>
           {/* NET HOY */}
           <div className="rounded-xl p-3.5" style={{ background: "#0d0d0d", border: `1px solid ${netToday >= 0 ? "#0a1e0a" : "#1e0a0a"}` }}>
-            <p className={`text-[9px] tracking-[0.18em] font-bold ${netToday >= 0 ? "text-[#4ade80]" : "text-[#ef4444]"}`}>NET HOY</p>
+            <p className={`text-[9px] tracking-[0.18em] font-bold ${netToday >= 0 ? "text-[#4ade80]" : "text-[#ef4444]"}`}>GANANCIA NETA HOY</p>
             <p className={`font-mono-jet text-[22px] font-black mt-2 ${netToday >= 0 ? "text-[#4ade80]" : "text-[#ef4444]"}`}>
               ${netToday.toFixed(2)}
             </p>
-            <p className="text-[10px] text-neutral-600 mt-1 font-mono-jet">gross − gastos · ref. semanal ${weeklyTotal.toFixed(0)}</p>
+            <p className="text-[10px] text-neutral-600 mt-1 font-mono-jet">ingresos − gastos · ref. semanal ${weeklyTotal.toFixed(0)}</p>
           </div>
         </div>
       </div>
@@ -1374,7 +1376,7 @@ export default function App() {
       {/* Goal tracker */}
       <div className="rounded-[20px] p-4 space-y-4" style={{ background: "#0d0d0d", border: "1px solid #1e1e1e" }}>
         <div className="flex items-center justify-between">
-          <h3 className="text-[11px] tracking-[0.18em] font-bold" style={goldGradientStyle}>TODAY'S PERFORMANCE</h3>
+          <h3 className="text-[11px] tracking-[0.18em] font-bold" style={goldGradientStyle}>RENDIMIENTO DE HOY</h3>
           <span className={`font-mono-jet text-[11px] font-bold ${goalPct >= 100 ? "text-[#4ade80]" : goalPct >= 70 ? "text-[#f6dd8c]" : "text-neutral-500"}`}>
             {goalPct.toFixed(0)}% del día
           </span>
@@ -1383,7 +1385,7 @@ export default function App() {
         {/* $500 daily goal progress bar */}
         <div className="space-y-2">
           <div className="flex items-center justify-between text-[10px]">
-            <span className="text-neutral-500 font-mono-jet">DAILY GOAL $500</span>
+            <span className="text-neutral-500 font-mono-jet">META DIARIA $500</span>
             <span className={`font-mono-jet font-bold ${goalPct >= 100 ? "text-[#4ade80]" : goalPct >= 70 ? "text-[#f6dd8c]" : "text-neutral-400"}`}>
               {goalPct.toFixed(0)}%
             </span>
@@ -1397,12 +1399,12 @@ export default function App() {
           </div>
           <div className="flex items-center justify-between text-[10px] font-mono-jet">
             <span className="text-neutral-500">
-              {grossToday >= todayGoal ? "🏆 Goal reached!" : `Faltan $${remainingToGoal.toFixed(2)}`}
+              {grossToday >= todayGoal ? "🏆 ¡Meta alcanzada!" : `Faltan $${remainingToGoal.toFixed(2)} para la meta`}
             </span>
             <span className="text-neutral-400">
               {projectedFinish
                 ? `Llegas ~${projectedFinish.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
-                : grossToday >= todayGoal ? "✓ Done" : "—"}
+                : grossToday >= todayGoal ? "✓ Completado" : "—"}
             </span>
           </div>
         </div>
@@ -1410,7 +1412,7 @@ export default function App() {
         {/* $/hr goal slider */}
         <div className="rounded-xl p-3.5" style={{ background: "#080808", border: "1px solid #1e1400" }}>
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-neutral-400">Target $/hora (gross)</span>
+            <span className="text-[11px] text-neutral-400">Objetivo de tarifa bruta por hora</span>
             <span className="font-mono-jet text-[20px] font-black" style={goldGradientStyle}>${goal}/h</span>
           </div>
           <input type="range" min={50} max={100} step={1} value={goal}
@@ -1424,10 +1426,10 @@ export default function App() {
         {/* Actual vs Goal vs Delta */}
         <div className="grid grid-cols-3 gap-2">
           {([
-            ["ACTUAL/h", perHourGross > 0 ? `$${perHourGross.toFixed(2)}` : "—",
+            ["REAL/H",      perHourGross > 0 ? `$${perHourGross.toFixed(2)}` : "—",
               perHourGross >= goal ? "#4ade80" : perHourGross >= 60 ? "#f6dd8c" : "#ef4444"],
-            ["GOAL/h",  `$${goal.toFixed(0)}`, "#f6dd8c"],
-            ["DELTA",   perHourGross > 0 ? `${perHourGross >= goal ? "+" : ""}$${(perHourGross - goal).toFixed(0)}/h` : "—",
+            ["META/H",      `$${goal.toFixed(0)}`, "#f6dd8c"],
+            ["DIFERENCIA",  perHourGross > 0 ? `${perHourGross >= goal ? "+" : ""}$${(perHourGross - goal).toFixed(0)}/h` : "—",
               perHourGross >= goal ? "#4ade80" : "#ef4444"],
           ] as [string,string,string][]).map(([label, val, col]) => (
             <div key={label} className="rounded-xl p-3" style={{ background: "#080808", border: `1px solid ${col}22` }}>
@@ -1522,17 +1524,17 @@ export default function App() {
         {/* Trip stats strip */}
         <div className="grid grid-cols-3 gap-0 bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl overflow-hidden">
           <div className="p-3 border-r border-[#1f1f1f] text-center">
-            <p className="text-[9px] text-neutral-500 tracking-widest">TRIPS HOY</p>
+            <p className="text-[9px] text-neutral-500 tracking-widest">VIAJES HOY</p>
             <p className="font-mono-jet text-[13px] font-semibold mt-1 text-white">{todayTrips.length}</p>
           </div>
           <div className="p-3 border-r border-[#1f1f1f] text-center">
-            <p className="text-[9px] text-neutral-500 tracking-widest">$/VIAJE</p>
+            <p className="text-[9px] text-neutral-500 tracking-widest">PROMEDIO/VIAJE</p>
             <p className="font-mono-jet text-[13px] font-semibold mt-1 text-[#f6dd8c]">
               ${todayTrips.length ? (grossToday / todayTrips.length).toFixed(2) : "0.00"}
             </p>
           </div>
           <div className="p-3 text-center">
-            <p className="text-[9px] text-neutral-500 tracking-widest">SEMANAL</p>
+            <p className="text-[9px] text-neutral-500 tracking-widest">TOTAL SEMANA</p>
             <p className="font-mono-jet text-[13px] font-semibold mt-1 text-[#f5c518]">${weeklyTotal.toFixed(2)}</p>
           </div>
         </div>
@@ -1542,7 +1544,7 @@ export default function App() {
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-[#8b5cf6]" />
-              <p className="text-[10px] tracking-[0.18em] font-bold text-[#a78bfa]">E-ZPASS {TOLL_YEAR} · TOLLS USADOS</p>
+              <p className="text-[10px] tracking-[0.18em] font-bold text-[#a78bfa]">E-ZPASS {TOLL_YEAR} · PEAJES PAGADOS</p>
             </div>
             <span className="font-mono-jet text-[11px] font-bold text-[#c4b5fd]">${totalTollsToday.toFixed(2)} hoy</span>
           </div>
@@ -2624,7 +2626,7 @@ export default function App() {
 
       {/* ── Label ── */}
       <div>
-        <p className="text-[10px] tracking-[0.22em] text-neutral-500 font-semibold uppercase">Financial Intelligence</p>
+        <p className="text-[10px] tracking-[0.22em] text-neutral-500 font-semibold uppercase">Inteligencia Financiera</p>
         <p className="text-[10px] text-neutral-600 mt-0.5">Real vs. proyectado · actualizado en vivo</p>
       </div>
 
@@ -2647,11 +2649,11 @@ export default function App() {
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="bg-black rounded-lg p-2">
-                <p className="text-[8px] text-neutral-600">Falta</p>
+                <p className="text-[8px] text-neutral-600">Falta para meta</p>
                 <p className="text-[13px] font-bold text-white">${Math.max(_todayPlan-_earnToday,0).toFixed(0)}</p>
               </div>
               <div className="bg-black rounded-lg p-2">
-                <p className="text-[8px] text-neutral-600">$/hora</p>
+                <p className="text-[8px] text-neutral-600">Tarifa bruta/h</p>
                 <p className="text-[13px] font-bold text-white">${perHourGross.toFixed(2)}</p>
               </div>
             </div>
@@ -2778,7 +2780,7 @@ export default function App() {
             </div>
           ))}
           <div className="pt-2.5 border-t border-[#2a2a2a] flex justify-between items-center">
-            <p className="text-[12px] font-bold text-white">NET PROYECTADO</p>
+            <p className="text-[12px] font-bold text-white">GANANCIA NETA PROYECTADA</p>
             <p className={`font-mono-jet text-[19px] font-bold ${_netProj>=0?'text-[#4ade80]':'text-red-400'}`}>
               {_netProj<0?`-$${Math.abs(_netProj).toFixed(2)}`:`$${_netProj.toFixed(2)}`}
             </p>
@@ -2843,17 +2845,17 @@ export default function App() {
           <p className="text-[32px] font-bold text-[#f6dd8c] font-mono-jet leading-none">
             ${_weekPlanTotal.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
           </p>
-          <p className="text-[9px] text-neutral-600 mt-1">{workDays.length} día{workDays.length!==1?'s':''} de trabajo · avg ${_avgDayTarget.toFixed(0)}/día</p>
+          <p className="text-[9px] text-neutral-600 mt-1">{workDays.length} día{workDays.length!==1?'s':''} de trabajo · promedio ${_avgDayTarget.toFixed(0)}/día</p>
         </div>
 
         {/* Monthly / Annual estimates */}
         <div className="grid grid-cols-2 gap-2 mt-3">
           <div className="bg-black border border-[#1e1e1e] rounded-xl p-3 text-center">
-            <p className="text-[8px] text-neutral-600 uppercase tracking-widest mb-0.5">Est. mensual</p>
+            <p className="text-[8px] text-neutral-600 uppercase tracking-widest mb-0.5">Estimado mensual</p>
             <p className="text-[14px] font-bold text-white font-mono-jet">${(_weekPlanTotal*4.33/1000).toFixed(1)}k</p>
           </div>
           <div className="bg-black border border-[#1e1e1e] rounded-xl p-3 text-center">
-            <p className="text-[8px] text-neutral-600 uppercase tracking-widest mb-0.5">Est. anual</p>
+            <p className="text-[8px] text-neutral-600 uppercase tracking-widest mb-0.5">Estimado anual</p>
             <p className="text-[14px] font-bold text-white font-mono-jet">${(_annTarget/1000).toFixed(0)}k</p>
           </div>
         </div>
