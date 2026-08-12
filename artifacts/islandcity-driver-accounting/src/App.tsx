@@ -941,28 +941,57 @@ export default function App() {
     const dow = currentTime.getDay();
     const wd  = dow >= 1 && dow <= 5;
     const we  = !wd;
+
+    // ── Goal reached ─────────────────────────────────────────────────────────
     if (grossToday >= todayGoal)
-      return { emoji: "🏆", text: `$${todayGoal} goal reached! Outstanding shift.`, type: "gold" };
+      return { emoji: "🏆", text: `Meta $${todayGoal} alcanzada. ¡Turno excepcional!`, type: "gold" };
+
+    // ── Rate-based checks fire FIRST when the driver has active earnings ──────
+    // This overrides time-of-day messages so the driver always sees their real
+    // performance status while earning, not just a generic time suggestion.
+    if (perHourGross > 0) {
+      // Thresholds live here as internal logic — never exposed as raw numbers in text
+      if (perHourGross < 60)
+        return {
+          emoji: "🚨",
+          text: `Tu ritmo de $${perHourGross.toFixed(0)}/h está por debajo de tu zona saludable (mínimo $60/h). Considera reposicionarte — revisa las zonas de mayor demanda abajo.`,
+          type: "warn",
+        };
+      if (perHourGross < 70)
+        return {
+          emoji: "📊",
+          text: `Vas a $${perHourGross.toFixed(0)}/h — ritmo aceptable, pero hay margen para mejorar. Mantente en zonas activas y aprovecha los picos.`,
+          type: "warm",
+        };
+      if (perHourGross < 90)
+        return {
+          emoji: "💪",
+          text: `Ritmo excelente — $${perHourGross.toFixed(0)}/h. Estás en zona óptima. Sigue así y aprovecha cada oportunidad.`,
+          type: "good",
+        };
+      // ≥ $90 — exceptional
+      return {
+        emoji: "🚀",
+        text: `Ritmo excepcional — $${perHourGross.toFixed(0)}/h. Turno top. No pares.`,
+        type: "gold",
+      };
+    }
+
+    // ── No active rate yet — fall back to time-of-day context ────────────────
     if (wd && h >= 7 && h < 9)
-      return { emoji: "🔥", text: "Morning rush — Midtown, Queens→Manhattan, Penn Station. Stay on the move.", type: "hot" };
+      return { emoji: "🔥", text: "Rush matutino — Midtown, Queens→Manhattan, Penn Station. Ponte en movimiento.", type: "hot" };
     if (h >= 12 && h < 14)
-      return { emoji: "🍽", text: "Lunch surge — Midtown, FiDi, Brooklyn Heights. Fast short trips.", type: "warm" };
+      return { emoji: "🍽", text: "Surge del almuerzo — Midtown, FiDi, Brooklyn Heights. Viajes cortos rápidos.", type: "warm" };
     if (wd && h >= 17 && h < 20)
-      return { emoji: "⚡", text: "Evening peak — best time of day. JFK/LGA also busy. Be aggressive.", type: "hot" };
+      return { emoji: "⚡", text: "Pico vespertino — mejor hora del día. JFK/LGA también activos. Sé agresivo.", type: "hot" };
     if (we && (h >= 22 || h < 2))
-      return { emoji: "🌙", text: "Weekend night — LES, Williamsburg, Midtown. High surge potential.", type: "purple" };
+      return { emoji: "🌙", text: "Noche de fin de semana — LES, Williamsburg, Midtown. Alto potencial de surge.", type: "purple" };
     if (h >= 2 && h < 6)
-      return { emoji: "😴", text: "Dead zone 2–6 AM — very low demand. Rest or reposition. Protect your rate.", type: "cold" };
+      return { emoji: "😴", text: "Zona muerta 2–6 AM — demanda muy baja. Descansa o reposiciónate.", type: "cold" };
     if (wd && h >= 9 && h < 11)
-      return { emoji: "📉", text: "Post-rush valley. Good time for a break or airport queue (JFK/LGA).", type: "warn" };
-    if (perHourGross > 0 && perHourGross < 60)
-      return { emoji: "📊", text: `Pace $${perHourGross.toFixed(0)}/h — below $60 minimum. Check surge areas or reposition.`, type: "warn" };
-    if (perHourGross >= 60 && perHourGross < 70)
-      return { emoji: "👍", text: `Pace $${perHourGross.toFixed(0)}/h — close to $70 target. Stay in high-demand zones.`, type: "warm" };
-    if (perHourGross >= 70)
-      return { emoji: "💪", text: `Strong at $${perHourGross.toFixed(0)}/h. You're on track for a great shift.`, type: "good" };
-    return { emoji: "📍", text: "Start your shift to begin tracking performance.", type: "neutral" };
-  }, [currentTime, grossToday, perHourGross]);
+      return { emoji: "📉", text: "Valle post-rush. Buen momento para una pausa o hacer cola en JFK/LGA.", type: "warn" };
+    return { emoji: "📍", text: "Inicia tu turno para comenzar a medir tu rendimiento.", type: "neutral" };
+  }, [currentTime, grossToday, todayGoal, perHourGross]);
 
   const resetForm = () => {
     setTripForm({ reference: "", earnings: "", tips: "", extraCash: "", toll: "", platformFee: "", platform: "Uber", pickup: "", dropoff: "", notes: "" });
@@ -1128,6 +1157,37 @@ export default function App() {
 
   const shiftStatusLabel = shiftActive ? (isOnBreak ? "ON BREAK" : "ON ROUTE") : "OFF DUTY";
 
+  // ─── Nearest NYC demand zones (static reference — live API pending Task #7) ───
+  const NYC_ZONES = [
+    { name: "JFK Airport",           lat: 40.6413, lng: -73.7781 },
+    { name: "LaGuardia Airport",      lat: 40.7769, lng: -73.8740 },
+    { name: "Penn Station / MSG",     lat: 40.7506, lng: -73.9935 },
+    { name: "Times Square",           lat: 40.7580, lng: -73.9855 },
+    { name: "Grand Central",          lat: 40.7527, lng: -73.9772 },
+    { name: "Midtown Manhattan",      lat: 40.7549, lng: -73.9840 },
+    { name: "Lower Manhattan / FDI",  lat: 40.7074, lng: -74.0113 },
+    { name: "Brooklyn Downtown",      lat: 40.6928, lng: -73.9903 },
+    { name: "Upper East Side",        lat: 40.7739, lng: -73.9575 },
+    { name: "Williamsburg",           lat: 40.7081, lng: -73.9571 },
+    { name: "Astoria / Queens",       lat: 40.7721, lng: -73.9302 },
+    { name: "Newark Airport (EWR)",   lat: 40.6895, lng: -74.1745 },
+  ] as const;
+  const haversineKm = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
+  const nearbyZones: { name: string; km: number }[] =
+    gps.lat && gps.lng
+      ? [...NYC_ZONES]
+          .map(z => ({ name: z.name, km: haversineKm(gps.lat!, gps.lng!, z.lat, z.lng) }))
+          .sort((a, b) => a.km - b.km)
+          .slice(0, 3)
+      : [];
+
   // ─── Dashboard ───────────────────────────────────────────────
   const DashboardContent = (
     <div className="space-y-5">
@@ -1142,36 +1202,60 @@ export default function App() {
       </div>
 
       {/* Main status card */}
-      <div className="bg-[#141414] border border-[#222] rounded-[20px] px-4 pt-3.5 pb-3 overflow-hidden relative">
+      <div className="rounded-[20px] px-4 pt-3.5 pb-3 overflow-hidden relative"
+        style={{ background: "#0d0d0d", border: "1px solid #1e1e1e", boxShadow: "0 0 0 1px #1a1200 inset" }}>
+        {/* Gold top accent line */}
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2,
+          background: "linear-gradient(90deg, #d97706, #f6dd8c44, transparent)" }} />
+
         <div className="flex items-center justify-between">
           <p className="font-mono-jet text-[10px] text-neutral-400">
             {currentTime.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} ·{" "}
             {currentTime.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
           </p>
-          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[9px] tracking-[0.12em] font-semibold ${
-            shiftActive ? "bg-[#2ecc71]/15 border-[#2ecc71]/30 text-[#6ee7a8]" : "bg-[#1e1e1e] border-[#2a2a2a] text-neutral-500"
-          }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${shiftActive ? "bg-[#2ecc71] animate-pulse" : "bg-neutral-600"}`} />
+          <span
+            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[9px] tracking-[0.12em] font-bold"
+            style={
+              shiftActive && !isOnBreak
+                ? { background: "#052e16", borderColor: "#4ade8066", color: "#4ade80" }
+                : shiftActive && isOnBreak
+                ? { background: "#1c0d00", borderColor: "#f9731666", color: "#f97316" }
+                : { background: "#111", borderColor: "#2a2a2a", color: "#737373" }
+            }
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${
+              shiftActive && !isOnBreak ? "bg-[#4ade80] animate-pulse"
+              : shiftActive && isOnBreak  ? "bg-[#f97316] animate-pulse"
+              : "bg-neutral-600"
+            }`} />
             {shiftStatusLabel}
           </span>
         </div>
         <div className="mt-2">
-          <p className="font-mono-jet text-[11px] text-neutral-400">
+          <p className="font-mono-jet text-[11px] text-neutral-500">
             {gps.lat && gps.lng ? `${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)}` : "GPS not active"}{gps.acc ? ` · ±${Math.round(gps.acc)}m` : ""}
           </p>
           {gpsAddress && <p className="text-[11px] text-neutral-300 mt-0.5 truncate">{gpsAddress}</p>}
           {gpsAirport && <p className="font-mono-jet text-[10px] text-[#f6dd8c] mt-0.5">✈ {gpsAirport}</p>}
         </div>
-        <p className="font-mono-jet text-[28px] font-bold text-[#f5c518] mt-2 tracking-tight">${grossToday.toFixed(2)}</p>
+        <p className="font-mono-jet text-[32px] font-black mt-2 tracking-tight" style={goldGradientStyle}>${grossToday.toFixed(2)}</p>
         <p className="font-mono-jet text-[10px] text-neutral-500 mt-0.5">{todayTrips.length} {todayTrips.length === 1 ? "trip" : "trips"} · fare + tips + toll</p>
-        <div className="mt-3 h-px bg-[#222]" />
+        <div className="mt-3 h-px" style={{ background: "linear-gradient(90deg, #1e1400, #1e1e1e)" }} />
         <div className="mt-2.5 flex items-center gap-1.5">
-          <span className={`w-1.5 h-1.5 rounded-full ${shiftActive ? "bg-[#2ecc71]" : "bg-neutral-700"}`} />
-          <span className={`text-[10px] font-mono-jet ${shiftActive ? "text-[#6ee7a8]" : "text-neutral-500"}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${
+            shiftActive && !isOnBreak ? "bg-[#4ade80]"
+            : shiftActive && isOnBreak  ? "bg-[#f97316]"
+            : "bg-neutral-700"
+          }`} />
+          <span className={`text-[10px] font-mono-jet ${
+            shiftActive && !isOnBreak ? "text-[#4ade80]"
+            : shiftActive && isOnBreak  ? "text-[#f97316]"
+            : "text-neutral-500"
+          }`}>
             {shiftActive ? (isOnBreak ? "On break" : "On track") : "Shift ended"}
           </span>
           <span className="ml-auto text-[9px] text-neutral-600 font-mono-jet flex items-center gap-1">
-            <span className={`w-1 h-1 rounded-full ${gps.status === "active" ? "bg-[#2ecc71]" : gps.status === "searching" ? "bg-yellow-400 animate-pulse" : "bg-neutral-600"}`} />
+            <span className={`w-1 h-1 rounded-full ${gps.status === "active" ? "bg-[#4ade80]" : gps.status === "searching" ? "bg-yellow-400 animate-pulse" : "bg-neutral-600"}`} />
             GPS {gps.status}
           </span>
         </div>
@@ -1182,11 +1266,14 @@ export default function App() {
             return (
               <button key={s} onClick={() => handleTurnButton(s)} disabled={disabled}
                 className={`h-[38px] rounded-full border text-[11px] tracking-[0.12em] font-bold transition-all ${
-                  disabled ? "border-[#1a1a1a] bg-[#0a0a0a] text-neutral-600 cursor-not-allowed"
-                  : isActive ? "border-[#d9b64f] text-black"
-                  : "border-[#d9b64f]/60 text-[#f6dd8c] bg-transparent hover:bg-[#f6dd8c]/10"
+                  disabled ? "cursor-not-allowed"
+                  : ""
                 }`}
-                style={isActive ? { background: "linear-gradient(90deg, #f6dd8c, #d9b64f)" } : {}}>
+                style={
+                  disabled ? { background: "#0a0a0a", border: "1px solid #1a1a1a", color: "#444" }
+                  : isActive ? { background: "linear-gradient(90deg, #f6dd8c, #d9b64f)", border: "1px solid #d9b64f", color: "#000" }
+                  : { background: "transparent", border: "1px solid #d9b64f99", color: "#f6dd8c" }
+                }>
                 {s === "BREAK" ? (isOnBreak ? "RESUME" : "BREAK") : s}
               </button>
             );
@@ -1196,41 +1283,77 @@ export default function App() {
 
       {/* Performance grid */}
       <div>
-        <p className="text-[10px] tracking-[0.22em] text-neutral-500 font-semibold mb-2.5">PERFORMANCE</p>
+        <p className="text-[10px] tracking-[0.22em] text-neutral-400 font-bold mb-2.5">PERFORMANCE</p>
         <div className="grid grid-cols-2 gap-3">
           {/* HOY BREAKDOWN */}
-          <div className="bg-[#141414] border border-[#222] rounded-xl p-3.5">
-            <p className="text-[9px] tracking-[0.18em] text-neutral-500 font-semibold">HOY BREAKDOWN</p>
+          <div className="rounded-xl p-3.5" style={{ background: "#0d0d0d", border: "1px solid #1e1400" }}>
+            <p className="text-[9px] tracking-[0.18em] font-bold" style={{ color: "#d97706" }}>HOY BREAKDOWN</p>
             <div className="mt-2 space-y-1">
               {([
-                ["Fare", todayTrips.reduce((a,b) => a + b.earnings, 0)],
-                ["Tips", todayTrips.reduce((a,b) => a + b.tips + b.extra, 0)],
+                ["Fare",  todayTrips.reduce((a,b) => a + b.earnings, 0)],
+                ["Tips",  todayTrips.reduce((a,b) => a + b.tips + b.extra, 0)],
                 ["Tolls", totalTollsToday],
               ] as [string,number][]).map(([label, val]) => (
                 <div key={label} className="flex justify-between items-center">
                   <span className="text-[10px] text-neutral-500 font-mono-jet">{label}</span>
-                  <span className="font-mono-jet text-[12px] font-semibold text-neutral-200">${val.toFixed(2)}</span>
+                  <span className="font-mono-jet text-[12px] font-semibold text-neutral-100">${val.toFixed(2)}</span>
                 </div>
               ))}
             </div>
           </div>
-          {/* $/HORA GROSS */}
-          <div className="bg-[#141414] border border-[#222] rounded-xl p-3.5">
-            <p className="text-[9px] tracking-[0.18em] text-neutral-500 font-semibold">$/HORA GROSS</p>
-            <p className={`font-mono-jet text-[20px] font-semibold mt-2 ${perHourGross >= 70 ? "text-[#4ade80]" : perHourGross >= 60 ? "text-[#f6dd8c]" : perHourGross > 0 ? "text-[#ff6b6b]" : "text-white"}`}>
-              {perHourGross > 0 ? `$${perHourGross.toFixed(2)}` : "—"}
-            </p>
-            <div className="mt-1 space-y-0.5">
-              <p className="text-[10px] text-neutral-500 font-mono-jet">
-                {shiftActive ? activeHoursFormatted : cumulative.hoy > 0 ? `${cumulative.hoy.toFixed(2)}h hoy` : "sin turno"}
-              </p>
-              <p className="text-[9px] font-mono-jet text-neutral-600">Sem {cumulative.semana.toFixed(1)}h · Mes {cumulative.mes.toFixed(1)}h</p>
-            </div>
-          </div>
+          {/* $/HORA GROSS — color tier: <$60 red · $60-70 yellow · $70-90 green · ≥$90 gold */}
+          {(() => {
+            const rateColor = perHourGross >= 90 ? "#f6dd8c"
+              : perHourGross >= 70 ? "#4ade80"
+              : perHourGross >= 60 ? "#fbbf24"
+              : perHourGross >  0  ? "#ef4444"
+              : "#374151";
+            const rateBg = perHourGross >= 90 ? "#1a1200"
+              : perHourGross >= 70 ? "#052e16"
+              : perHourGross >= 60 ? "#1a1200"
+              : perHourGross >  0  ? "#1a0505"
+              : "#0d0d0d";
+            const tierLabel = perHourGross >= 90 ? "EXCEPCIONAL"
+              : perHourGross >= 70 ? "EXCELENTE"
+              : perHourGross >= 60 ? "MÍNIMO OK"
+              : perHourGross >  0  ? "⚠ BAJO $60"
+              : null;
+            return (
+              <div className="rounded-xl overflow-hidden" style={{
+                background: rateBg,
+                border: `1px solid ${rateColor}33`,
+                borderLeft: `3px solid ${rateColor}`,
+              }}>
+                <div className="p-3.5">
+                  {/* Label row with status badge */}
+                  <div className="flex items-center justify-between">
+                    <p className="text-[9px] tracking-[0.18em] font-bold" style={{ color: "#d97706" }}>$/HORA GROSS</p>
+                    {tierLabel && (
+                      <span className="font-mono-jet text-[8px] font-black px-1.5 py-0.5 rounded-full"
+                        style={{ background: `${rateColor}22`, color: rateColor, border: `1px solid ${rateColor}55` }}>
+                        {tierLabel}
+                      </span>
+                    )}
+                  </div>
+                  {/* Rate value */}
+                  <p className="font-mono-jet text-[24px] font-black mt-1.5 tracking-tight"
+                    style={{ color: rateColor }}>
+                    {perHourGross > 0 ? `$${perHourGross.toFixed(2)}` : "—"}
+                  </p>
+                  <div className="mt-1 space-y-0.5">
+                    <p className="text-[10px] text-neutral-500 font-mono-jet">
+                      {shiftActive ? activeHoursFormatted : cumulative.hoy > 0 ? `${cumulative.hoy.toFixed(2)}h hoy` : "sin turno"}
+                    </p>
+                    <p className="text-[9px] font-mono-jet text-neutral-600">Sem {cumulative.semana.toFixed(1)}h · Mes {cumulative.mes.toFixed(1)}h</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
           {/* GASTOS HOY */}
-          <div className="bg-[#141414] border border-[#222] rounded-xl p-3.5">
-            <p className="text-[9px] tracking-[0.18em] text-neutral-500 font-semibold">GASTOS HOY</p>
-            <p className="font-mono-jet text-[20px] font-semibold text-[#ff6b6b] mt-2">
+          <div className="rounded-xl p-3.5" style={{ background: "#0d0d0d", border: "1px solid #1e0a0a" }}>
+            <p className="text-[9px] tracking-[0.18em] font-bold text-[#ef4444]">GASTOS HOY</p>
+            <p className="font-mono-jet text-[22px] font-black text-[#ef4444] mt-2">
               {expensesToday > 0 ? `−$${expensesToday.toFixed(2)}` : "$0.00"}
             </p>
             <p className="text-[10px] text-neutral-600 mt-1 font-mono-jet">
@@ -1238,9 +1361,9 @@ export default function App() {
             </p>
           </div>
           {/* NET HOY */}
-          <div className="bg-[#141414] border border-[#222] rounded-xl p-3.5">
-            <p className="text-[9px] tracking-[0.18em] text-neutral-500 font-semibold">NET HOY</p>
-            <p className={`font-mono-jet text-[20px] font-semibold mt-2 ${netToday >= 0 ? "text-[#4ade80]" : "text-[#ff6b6b]"}`}>
+          <div className="rounded-xl p-3.5" style={{ background: "#0d0d0d", border: `1px solid ${netToday >= 0 ? "#0a1e0a" : "#1e0a0a"}` }}>
+            <p className={`text-[9px] tracking-[0.18em] font-bold ${netToday >= 0 ? "text-[#4ade80]" : "text-[#ef4444]"}`}>NET HOY</p>
+            <p className={`font-mono-jet text-[22px] font-black mt-2 ${netToday >= 0 ? "text-[#4ade80]" : "text-[#ef4444]"}`}>
               ${netToday.toFixed(2)}
             </p>
             <p className="text-[10px] text-neutral-600 mt-1 font-mono-jet">gross − gastos · ref. semanal ${weeklyTotal.toFixed(0)}</p>
@@ -1249,10 +1372,10 @@ export default function App() {
       </div>
 
       {/* Goal tracker */}
-      <div className="bg-[#141414] border border-[#222] rounded-[20px] p-4 space-y-4">
+      <div className="rounded-[20px] p-4 space-y-4" style={{ background: "#0d0d0d", border: "1px solid #1e1e1e" }}>
         <div className="flex items-center justify-between">
-          <h3 className="text-[11px] tracking-[0.18em] font-bold text-white">TODAY'S PERFORMANCE</h3>
-          <span className={`font-mono-jet text-[11px] font-bold ${goalPct >= 100 ? "text-[#4ade80]" : "text-neutral-500"}`}>
+          <h3 className="text-[11px] tracking-[0.18em] font-bold" style={goldGradientStyle}>TODAY'S PERFORMANCE</h3>
+          <span className={`font-mono-jet text-[11px] font-bold ${goalPct >= 100 ? "text-[#4ade80]" : goalPct >= 70 ? "text-[#f6dd8c]" : "text-neutral-500"}`}>
             {goalPct.toFixed(0)}% del día
           </span>
         </div>
@@ -1285,10 +1408,10 @@ export default function App() {
         </div>
 
         {/* $/hr goal slider */}
-        <div className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-3.5">
+        <div className="rounded-xl p-3.5" style={{ background: "#080808", border: "1px solid #1e1400" }}>
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-neutral-500">Target $/hora (gross)</span>
-            <span className="font-mono-jet text-[18px] font-bold" style={goldGradientStyle}>${goal}/h</span>
+            <span className="text-[11px] text-neutral-400">Target $/hora (gross)</span>
+            <span className="font-mono-jet text-[20px] font-black" style={goldGradientStyle}>${goal}/h</span>
           </div>
           <input type="range" min={50} max={100} step={1} value={goal}
             onChange={e => setGoal(parseInt(e.target.value))} className="w-full mt-3" />
@@ -1301,13 +1424,15 @@ export default function App() {
         {/* Actual vs Goal vs Delta */}
         <div className="grid grid-cols-3 gap-2">
           {([
-            ["ACTUAL/h", perHourGross > 0 ? `$${perHourGross.toFixed(2)}` : "—", perHourGross >= goal ? "text-[#4ade80]" : perHourGross >= 60 ? "text-[#f6dd8c]" : "text-[#ff6b6b]"],
-            ["GOAL/h",   `$${goal.toFixed(0)}`,                             "text-[#f6dd8c]"],
-            ["DELTA",    perHourGross > 0 ? `${perHourGross >= goal ? "+" : ""}$${(perHourGross - goal).toFixed(0)}/h` : "—", perHourGross >= goal ? "text-[#4ade80]" : "text-[#ff6b6b]"],
-          ] as [string,string,string][]).map(([label, val, cls]) => (
-            <div key={label} className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-3">
+            ["ACTUAL/h", perHourGross > 0 ? `$${perHourGross.toFixed(2)}` : "—",
+              perHourGross >= goal ? "#4ade80" : perHourGross >= 60 ? "#f6dd8c" : "#ef4444"],
+            ["GOAL/h",  `$${goal.toFixed(0)}`, "#f6dd8c"],
+            ["DELTA",   perHourGross > 0 ? `${perHourGross >= goal ? "+" : ""}$${(perHourGross - goal).toFixed(0)}/h` : "—",
+              perHourGross >= goal ? "#4ade80" : "#ef4444"],
+          ] as [string,string,string][]).map(([label, val, col]) => (
+            <div key={label} className="rounded-xl p-3" style={{ background: "#080808", border: `1px solid ${col}22` }}>
               <p className="text-[9px] tracking-[0.14em] text-neutral-500">{label}</p>
-              <p className={`font-mono-jet text-[15px] font-semibold ${cls} mt-1`}>{val}</p>
+              <p className="font-mono-jet text-[15px] font-black mt-1" style={{ color: col }}>{val}</p>
             </div>
           ))}
         </div>
@@ -1333,6 +1458,66 @@ export default function App() {
             </p>
           )}
         </div>
+
+        {/* Location zone advisor — color coupled to rate tier */}
+        {(() => {
+          // When rate is below $60, escalate zone advisor to red/orange alarm
+          const zoneUrgent = perHourGross > 0 && perHourGross < 60;
+          const zoneOk     = perHourGross >= 60 && perHourGross < 70;
+          const zoneGood   = perHourGross >= 70;
+          const zoneBg     = zoneUrgent ? "#120505" : zoneOk ? "#0d0d05" : "#060e08";
+          const zoneBorder = zoneUrgent ? "#ef444433" : zoneOk ? "#fbbf2433" : "#1a2a1a";
+          const zoneAccent = zoneUrgent ? "#ef4444"   : zoneOk ? "#fbbf24"   : "#4ade80";
+          const zoneLabel  = zoneUrgent ? "REPOSICIONATE — TASA BAJA"
+            : zoneOk  ? "ZONAS CERCANAS — MANTÉN RITMO"
+            : "ZONAS DE ALTA DEMANDA";
+          return (
+            <div className="rounded-xl p-3.5" style={{ background: zoneBg, border: `1px solid ${zoneBorder}`, borderLeft: `3px solid ${zoneAccent}` }}>
+              <div className="flex items-center justify-between mb-2.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[14px]">{zoneUrgent ? "🚨" : "📍"}</span>
+                  <span className="text-[9px] tracking-[0.18em] font-bold" style={{ color: zoneAccent }}>{zoneLabel}</span>
+                </div>
+                <span className="text-[8px] font-mono-jet text-neutral-600">referencia estática</span>
+              </div>
+
+              {gps.lat && gps.lng ? (
+                <>
+                  <p className="text-[10px] text-neutral-500 mb-2">
+                    {zoneUrgent
+                      ? "Tu tasa está baja — zonas NYC conocidas más cercanas:"
+                      : "Zonas NYC conocidas más cercanas a tu posición:"}
+                  </p>
+                  <div className="space-y-2">
+                    {nearbyZones.map((z, i) => (
+                      <div key={z.name} className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px]">{i === 0 ? (zoneUrgent ? "🎯" : "📍") : "→"}</span>
+                          <span className="text-[11px] font-semibold" style={{ color: i === 0 ? zoneAccent : "#737373" }}>{z.name}</span>
+                        </div>
+                        <span className="font-mono-jet text-[10px] text-neutral-600">{z.km.toFixed(1)} km</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 pt-2.5" style={{ borderTop: `1px solid ${zoneBorder}` }}>
+                    <p className="text-[9px] text-neutral-600">
+                      Demanda en tiempo real no conectada · Tarea #7 pendiente
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <p className="text-[11px] text-neutral-500">
+                    Activa el GPS para ver zonas cercanas.
+                  </p>
+                  <p className="text-[9px] text-neutral-700 mt-1.5">
+                    Demanda en tiempo real: pendiente conectar API · Tarea #7
+                  </p>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Trip stats strip */}
         <div className="grid grid-cols-3 gap-0 bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl overflow-hidden">
