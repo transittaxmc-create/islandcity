@@ -1940,21 +1940,21 @@ export default function App() {
           <span className="w-1 h-6 bg-[#22c55e] rounded-full inline-block" />
           <h2 className="text-white font-bold text-[18px] tracking-[0.14em] uppercase">TRIP ENTRY</h2>
         </div>
-        <span className="px-3 py-1 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-[#9ca3af] text-[11px] tracking-[0.12em] font-semibold uppercase">
+        <span className="px-3 py-1 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-200 text-[11px] tracking-[0.12em] font-semibold uppercase">
           {editingId ? "EDITING" : "NEW TRIP"}
         </span>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
-          <label className="text-[10px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">REFERENCE / INVOICE</label>
+          <label className="text-[10px] tracking-[0.08em] text-neutral-200 font-bold uppercase">REFERENCE / INVOICE</label>
           <input value={tripForm.reference}
             onChange={e => setTripForm(s => ({ ...s, reference: e.target.value }))}
             placeholder="e.g. INV-2026-001"
             className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[13px] font-medium placeholder:text-[#6b7280] focus:outline-none focus:border-[#3a3a3a]" />
         </div>
         <div className="space-y-1">
-          <label className="text-[10px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">EARNINGS <span className="font-normal normal-case opacity-70">Fare</span></label>
+          <label className="text-[10px] tracking-[0.08em] text-neutral-200 font-bold uppercase">EARNINGS <span className="font-normal normal-case opacity-70">Fare</span></label>
           <input inputMode="decimal" value={tripForm.earnings}
             onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, earnings: e.target.value })); }}
             placeholder="0.00"
@@ -1964,14 +1964,14 @@ export default function App() {
 
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
-          <label className="text-[10px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">TIPS</label>
+          <label className="text-[10px] tracking-[0.08em] text-neutral-200 font-bold uppercase">TIPS</label>
           <input inputMode="decimal" value={tripForm.tips}
             onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, tips: e.target.value })); }}
             placeholder="0.00"
             className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[16px] font-bold font-mono-jet placeholder:text-[#6b7280] focus:outline-none focus:border-[#3a3a3a]" />
         </div>
         <div className="space-y-1">
-          <label className="text-[10px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">EXTRA CASH</label>
+          <label className="text-[10px] tracking-[0.08em] text-neutral-200 font-bold uppercase">EXTRA CASH</label>
           <input inputMode="decimal" value={tripForm.extraCash}
             onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, extraCash: e.target.value })); }}
             placeholder="0.00"
@@ -1982,7 +1982,7 @@ export default function App() {
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <label className="text-[10px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">TOLL ($)</label>
+            <label className="text-[10px] tracking-[0.08em] text-neutral-200 font-bold uppercase">TOLL ($)</label>
             {detectedToll ? (
               tollManuallyEdited ? (
                 <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#2d1b00] border border-[#92400e] text-[#fbbf24] text-[10px] font-bold tracking-wider animate-pulse">
@@ -2021,7 +2021,7 @@ export default function App() {
             }`} />
         </div>
         <div className="space-y-1">
-          <label className="text-[10px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">PLATFORM FEE ($)</label>
+          <label className="text-[10px] tracking-[0.08em] text-neutral-200 font-bold uppercase">PLATFORM FEE ($)</label>
           <input inputMode="decimal" value={tripForm.platformFee}
             onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, platformFee: e.target.value })); }}
             placeholder="0.00"
@@ -2032,7 +2032,7 @@ export default function App() {
       {/* Platform selector */}
       <div className="space-y-1">
         <div className="flex items-center gap-2">
-          <label className="text-[10px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">PLATFORM</label>
+          <label className="text-[10px] tracking-[0.08em] text-neutral-200 font-bold uppercase">PLATFORM</label>
           <PlatformAvatar meta={meta} size="sm" />
           <span className="text-[11px] font-semibold text-white truncate">{tripForm.platform}</span>
           {meta.tags.map(tg => (
@@ -2064,7 +2064,7 @@ export default function App() {
       <div className="space-y-1">
         <div className="flex items-center gap-2">
           <span className="px-2 py-0.5 rounded-full bg-[#052e16] border border-[#166534] text-[#4ade80] text-[10px] font-bold tracking-widest uppercase">PICKUP</span>
-          <span className="text-[10px] text-[#6b7280]">Origin</span>
+          <span className="text-[10px] text-neutral-300">Origin</span>
         </div>
         <div className="relative">
           <input value={tripForm.pickup}
@@ -2099,7 +2099,7 @@ export default function App() {
       <div className="space-y-1">
         <div className="flex items-center gap-2">
           <span className="px-2 py-0.5 rounded-full bg-[#0c1a33] border border-[#1e3a8a] text-[#60a5fa] text-[10px] font-bold tracking-widest uppercase">DROP OFF</span>
-          <span className="text-[10px] text-[#6b7280]">Destination</span>
+          <span className="text-[10px] text-neutral-300">Destination</span>
         </div>
         <div className="relative">
           <input value={tripForm.dropoff}
@@ -2181,7 +2181,7 @@ export default function App() {
       )}
 
       <div className="space-y-1">
-        <label className="text-[10px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">NOTES</label>
+        <label className="text-[10px] tracking-[0.08em] text-neutral-200 font-bold uppercase">NOTES</label>
         <textarea value={tripForm.notes} onChange={e => setTripForm(s => ({ ...s, notes: e.target.value }))}
           placeholder="Surge, traffic, late toll, invoice details…" rows={1}
           className="w-full rounded-xl bg-black border border-[#262626] px-3 py-2.5 text-[12px] text-[#d1d5db] placeholder:text-[#6b7280] focus:outline-none focus:border-[#3a3a3a] resize-none leading-[1.5]" />
@@ -2189,7 +2189,7 @@ export default function App() {
 
       {/* Grand total preview */}
       <div className="rounded-xl bg-black border border-[#262626] px-4 py-2.5 flex items-center justify-between">
-        <span className="text-[10px] tracking-[0.08em] text-[#9ca3af] font-bold uppercase">GRAND TOTAL</span>
+        <span className="text-[10px] tracking-[0.08em] text-neutral-200 font-bold uppercase">GRAND TOTAL</span>
         <span className="font-mono-jet text-[22px] font-bold text-[#facc15] tracking-tight">${grandTotalLive.toFixed(2)}</span>
       </div>
 
@@ -2836,11 +2836,13 @@ export default function App() {
         }, 0);
         const todayStr = toYYYYMMDD(currentTime);
         return (
-          <div className="bg-[#0d0d0d] border border-[#1e1e1e] rounded-2xl overflow-hidden">
+          <div className="bg-[#0d0d0d] border border-orange-400/20 rounded-2xl overflow-hidden">
+            {/* Orange top accent */}
+            <div className="h-[3px] bg-gradient-to-r from-orange-400/90 to-orange-400/10" />
             {/* Section header */}
-            <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-[#1a1a1a]">
+            <div className="flex items-center justify-between px-4 pt-3 pb-3 border-b border-[#1a1a1a]">
               <div>
-                <p className="text-[10px] text-neutral-300 font-bold uppercase tracking-widest">📋 My Bills</p>
+                <p className="text-[10px] text-orange-300 font-bold uppercase tracking-widest">📋 My Bills</p>
                 <p className="text-[10px] text-neutral-400 mt-0.5 font-mono-jet">
                   {bills.length} active · ~−${monthlyEq.toFixed(0)}/mo
                 </p>
@@ -2849,7 +2851,7 @@ export default function App() {
                 setShowExpenseForm(true); setEditingExpenseId(null);
                 setExpenseForm({ name: "", type: "Gasoline / Fuel", category: "Vehicle & Fuel", description: "", amount: "", date: new Date().toISOString().slice(0,10), frequency: "monthly", dueDate: "" });
                 setAddingCustomType(false); setAddingCustomCat(false); setAddingCustomVendor(false);
-              }} className="h-8 px-3 rounded-full bg-[#1e1e1e] border border-[#333] text-white text-[10px] font-bold tracking-wide hover:bg-[#2a2a2a] transition-colors">
+              }} className="h-8 px-3 rounded-full bg-orange-400/10 border border-orange-400/30 text-orange-300 text-[10px] font-bold tracking-wide hover:bg-orange-400/20 transition-colors">
                 + Add Bill
               </button>
             </div>
@@ -2888,7 +2890,7 @@ export default function App() {
                         {b.note && <p className="text-[10px] text-neutral-400 mt-0.5 italic">{b.note}</p>}
                       </div>
                       <div className="flex-shrink-0 flex items-center gap-2">
-                        <span className="font-mono-jet text-[15px] font-bold text-[#ff6b6b]">−${b.amount.toFixed(2)}</span>
+                        <span className="font-mono-jet text-[15px] font-bold text-orange-400">−${b.amount.toFixed(2)}</span>
                         <button onClick={() => { setEditingExpenseId(b.id); setExpenseForm({ name: b.vendor, type: b.type||"Other", category: b.category, description: b.note, amount: String(b.amount), date: b.date, frequency: b.frequency||"none", dueDate: b.dueDate||"" }); setShowExpenseForm(true); setAddingCustomType(false); setAddingCustomCat(false); setAddingCustomVendor(false); }}
                           className="w-7 h-7 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-400 text-[10px] flex items-center justify-center">✏️</button>
                         <button onClick={() => handleDeleteExpense(b.id)}
@@ -2914,7 +2916,7 @@ export default function App() {
           <div>
             {/* Section label */}
             <div className="flex items-center justify-between mb-3">
-              <p className="text-[10px] text-neutral-300 font-bold uppercase tracking-widest">📅 Expense Log</p>
+              <p className="text-[10px] text-red-400 font-bold uppercase tracking-widest">📅 Expense Log</p>
               <span className="text-[10px] text-neutral-400 font-mono-jet">one-time &amp; unexpected</span>
             </div>
             {/* Period selector */}
@@ -4101,12 +4103,12 @@ export default function App() {
           {/* ── Primary 5 tabs — icon + label, equal width, always visible ── */}
           <div className="flex border-b border-[#1a1a1a]">
             {([
-              { key: "DASHBOARD", Icon: Home,          label: "DASH"    },
-              { key: "ENTRY",     Icon: Banknote,      label: "REVENUE" },
-              { key: "REGISTER",  Icon: ClipboardList, label: "QUEUE"   },
-              { key: "FINANCES",  Icon: BarChart2,     label: "FINANCE" },
-              { key: "LEDGER",    Icon: BookOpen,      label: "LEDGER"  },
-            ] as { key: Tab; Icon: React.ElementType; label: string }[]).map(({ key, Icon, label }) => {
+              { key: "DASHBOARD", Icon: Home,          label: "DASH",    color: "#f6dd8c" },
+              { key: "ENTRY",     Icon: Banknote,      label: "REVENUE", color: "#f6dd8c" },
+              { key: "REGISTER",  Icon: ClipboardList, label: "QUEUE",   color: "#fbbf24" },
+              { key: "FINANCES",  Icon: BarChart2,     label: "FINANCE", color: "#60a5fa" },
+              { key: "LEDGER",    Icon: BookOpen,      label: "LEDGER",  color: "#4ade80" },
+            ] as { key: Tab; Icon: React.ElementType; label: string; color: string }[]).map(({ key, Icon, label, color }) => {
               const active = activeTab === key;
               const badge  = key === "REGISTER" ? pendingTrips.length
                            : key === "LEDGER"   ? postedTrips.length
@@ -4114,8 +4116,9 @@ export default function App() {
               return (
                 <button key={key} onClick={() => setActiveTab(key)}
                   className={`flex-1 h-[52px] flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
-                    active ? "text-[#f6dd8c]" : "text-[#777] hover:text-neutral-400"
-                  }`}>
+                    active ? "" : "text-neutral-300 hover:text-neutral-200"
+                  }`}
+                  style={active ? { color } : undefined}>
                   {/* Icon with optional badge overlay */}
                   <div className="relative flex items-center justify-center">
                     <Icon size={17} strokeWidth={active ? 2 : 1.75} />
@@ -4129,9 +4132,9 @@ export default function App() {
                   </div>
                   {/* Short label */}
                   <span className="text-[7.5px] tracking-[0.12em] font-semibold">{label}</span>
-                  {/* Active indicator */}
+                  {/* Active indicator — color matches tab identity */}
                   {active && (
-                    <span className="absolute bottom-0 left-3 right-3 h-[2px] bg-gradient-to-r from-[#f6dd8c] to-[#d9b64f] rounded-full" />
+                    <span className="absolute bottom-0 left-3 right-3 h-[2px] rounded-full" style={{ background: color }} />
                   )}
                 </button>
               );
