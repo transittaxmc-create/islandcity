@@ -2127,14 +2127,125 @@ export default function App() {
         </div>
       </div>
 
-      {/* Reference / Invoice — compact, secondary */}
-      <div className="space-y-1">
-        <label className="text-[10px] tracking-[0.08em] text-neutral-400 font-bold uppercase">REFERENCE / INVOICE <span className="font-normal normal-case opacity-60">(optional)</span></label>
-        <input value={tripForm.reference}
-          onChange={e => setTripForm(s => ({ ...s, reference: e.target.value }))}
-          placeholder="e.g. INV-2026-001"
-          className="w-full h-10 rounded-xl bg-black border border-[#1e1e1e] px-3 text-white text-[13px] font-medium placeholder:text-[#4b5563] focus:outline-none focus:border-[#3a3a3a]" />
+      {/* ── Pickup & Drop-off — compact card, close to earnings ── */}
+      <div className="rounded-2xl border border-[#1e1e1e] bg-black overflow-hidden">
+        {/* Pickup row */}
+        <div className="flex items-center gap-2 px-3" style={{ minHeight: 48 }}>
+          <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-[#052e16] border border-[#166534] text-[#4ade80] text-[9px] font-bold tracking-widest uppercase">FROM</span>
+          <input value={tripForm.pickup}
+            onChange={e => setTripForm(s => ({ ...s, pickup: e.target.value }))}
+            placeholder={gps.lat ? `GPS: ${gps.lat.toFixed(4)},${gps.lng?.toFixed(4)}` : "Pickup address"}
+            className="flex-1 bg-transparent text-white text-[13px] font-medium placeholder:text-[#4b5563] focus:outline-none min-w-0 py-3" />
+          <button type="button" onClick={async () => {
+            if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
+            setPickupResolving(true);
+            try {
+              const rich = await reverseGeocodeRich(gps.lat, gps.lng);
+              setTripForm(s => ({ ...s, pickup: rich }));
+              showToast("Pickup resolved ✓");
+            } catch {
+              setTripForm(s => ({ ...s, pickup: `${gps.lat!.toFixed(5)},${gps.lng!.toFixed(5)}` }));
+              showToast("GPS coordinates saved (offline)");
+            } finally { setPickupResolving(false); }
+          }} className="flex-shrink-0 w-9 h-9 rounded-xl bg-[#052e16] border border-[#166534] flex items-center justify-center text-[14px] active:scale-90 transition-all">
+            {pickupResolving ? <span className="animate-spin text-[10px]">⏳</span> : "📍"}
+          </button>
+        </div>
+
+        {/* GPS status — single compact line */}
+        {gps.lat && (
+          <div className="px-3 pb-1.5">
+            <p className="font-mono-jet text-[9px] text-[#4ade80] truncate">
+              GPS · {gps.lat.toFixed(4)},{gps.lng?.toFixed(4)} · ±{gps.acc ? Math.round(gps.acc) : "?"}m
+              {gpsAddress ? ` · ${gpsAddress}` : ""}
+              {gpsAirport ? ` · ✈ ${gpsAirport}` : ""}
+            </p>
+          </div>
+        )}
+
+        {/* Divider */}
+        <div className="h-px bg-[#1e1e1e]" />
+
+        {/* Dropoff row */}
+        <div className="flex items-center gap-2 px-3" style={{ minHeight: 48 }}>
+          <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-[#0c1a33] border border-[#1e3a8a] text-[#60a5fa] text-[9px] font-bold tracking-widest uppercase">TO</span>
+          <input value={tripForm.dropoff}
+            onChange={e => setTripForm(s => ({ ...s, dropoff: e.target.value }))}
+            placeholder="Drop-off address"
+            className="flex-1 bg-transparent text-white text-[13px] font-medium placeholder:text-[#4b5563] focus:outline-none min-w-0 py-3" />
+          <button type="button" onClick={async () => {
+            if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
+            setDropoffResolving(true);
+            try {
+              const rich = await reverseGeocodeRich(gps.lat, gps.lng);
+              setTripForm(s => ({ ...s, dropoff: rich }));
+              showToast("Drop-off resolved ✓");
+            } catch {
+              setTripForm(s => ({ ...s, dropoff: `${gps.lat!.toFixed(5)},${gps.lng!.toFixed(5)}` }));
+              showToast("GPS coordinates saved (offline)");
+            } finally { setDropoffResolving(false); }
+          }} className="flex-shrink-0 w-9 h-9 rounded-xl bg-[#0c1a33] border border-[#1e3a8a] flex items-center justify-center text-[14px] active:scale-90 transition-all">
+            {dropoffResolving ? <span className="animate-spin text-[10px]">⏳</span> : "📍"}
+          </button>
+        </div>
       </div>
+
+      {/* Quick location buttons */}
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" onClick={() => { if (!gps.lat) startGPS(); setShowPickupMenu(v => !v); setShowDropoffMenu(false); }}
+          className="h-9 rounded-xl bg-black border border-[#14532d] px-3 flex items-center gap-2 text-white text-[10px] font-bold text-left active:bg-[#052e16]/30 transition-colors">
+          <span className="text-[#22c55e] text-[12px]">📍</span>
+          <span className="truncate">Quick Pickup…</span>
+        </button>
+        <button type="button" onClick={() => { if (!gps.lat) startGPS(); setShowDropoffMenu(v => !v); setShowPickupMenu(false); }}
+          className="h-9 rounded-xl bg-black border border-[#1e3a8a] px-3 flex items-center gap-2 text-white text-[10px] font-bold text-left active:bg-[#0c1a33]/60 transition-colors">
+          <span className="text-[#60a5fa] text-[12px]">📍</span>
+          <span className="truncate">Quick Drop Off…</span>
+        </button>
+      </div>
+
+      {showPickupMenu && (
+        <div className="bg-[#141414] border border-[#222] rounded-2xl p-3">
+          <p className="text-[11px] tracking-[0.12em] text-neutral-300 font-bold uppercase mb-2">PICKUP CATEGORY</p>
+          {gps.lat && (
+            <div className="w-full rounded-xl bg-black border border-[#262626] px-3 py-2 text-[12px] text-neutral-300 mb-3 flex flex-col">
+              <span className="font-mono-jet truncate">📍 {gps.lat.toFixed(5)},{gps.lng?.toFixed(5)}{gps.acc ? ` · ±${Math.round(gps.acc)}m` : ""}</span>
+              {gpsAddress && <span className="font-mono-jet text-[11px] text-neutral-400 mt-0.5">{gpsAddress}</span>}
+              {gpsAirport && <span className="font-mono-jet text-[11px] text-[#f6dd8c] mt-0.5">✈ {gpsAirport}</span>}
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-2.5">
+            {LOCATION_CATEGORIES.map(cat => (
+              <button key={`p-${cat}`} type="button" onClick={() => {
+                const coord = gps.lat ? ` (${gps.lat.toFixed(4)},${gps.lng?.toFixed(4)})` : "";
+                setTripForm(s => ({ ...s, pickup: `${cat}${coord}` }));
+                setShowPickupMenu(false);
+                showToast(`Pickup: ${cat}`);
+              }} className="h-14 rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] text-white text-[14px] font-medium active:bg-[#2a2a2a] transition-colors text-center">
+                {cat}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {showDropoffMenu && (
+        <div className="bg-[#141414] border border-[#222] rounded-2xl p-3">
+          <p className="text-[11px] tracking-[0.12em] text-neutral-300 font-bold uppercase mb-2">DROP OFF CATEGORY</p>
+          <div className="grid grid-cols-2 gap-2.5">
+            {LOCATION_CATEGORIES.map(cat => (
+              <button key={`d-${cat}`} type="button" onClick={() => {
+                const coord = gps.lat ? ` (${gps.lat.toFixed(4)},${gps.lng?.toFixed(4)})` : "";
+                setTripForm(s => ({ ...s, dropoff: `${cat}${coord}` }));
+                setShowDropoffMenu(false);
+                showToast(`Drop-off: ${cat}`);
+              }} className="h-14 rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] text-white text-[14px] font-medium active:bg-[#2a2a2a] transition-colors text-center">
+                {cat}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
@@ -2317,126 +2428,6 @@ export default function App() {
           </div>
         </div>
       </div>
-
-      {/* Pickup */}
-      <div className="space-y-1">
-        <div className="flex items-center gap-2">
-          <span className="px-2 py-0.5 rounded-full bg-[#052e16] border border-[#166534] text-[#4ade80] text-[10px] font-bold tracking-widest uppercase">PICKUP</span>
-          <span className="text-[10px] text-neutral-300">Origin</span>
-        </div>
-        <div className="relative">
-          <input value={tripForm.pickup}
-            onChange={e => setTripForm(s => ({ ...s, pickup: e.target.value }))}
-            placeholder={gps.lat ? `GPS: ${gps.lat.toFixed(4)},${gps.lng?.toFixed(4)}` : "Address or place"}
-            className="w-full h-11 rounded-xl bg-black border border-[#262626] pl-3 pr-[44px] text-white text-[13px] font-medium placeholder:text-[#6b7280] focus:outline-none focus:border-[#14532d]" />
-          <button type="button" onClick={async () => {
-            if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
-            setPickupResolving(true);
-            try {
-              const rich = await reverseGeocodeRich(gps.lat, gps.lng);
-              setTripForm(s => ({ ...s, pickup: rich }));
-              showToast("Pickup location resolved ✓");
-            } catch {
-              setTripForm(s => ({ ...s, pickup: `${gps.lat!.toFixed(5)},${gps.lng!.toFixed(5)}` }));
-              showToast("GPS coordinates saved (offline)");
-            } finally { setPickupResolving(false); }
-          }} className="absolute right-1 top-1 w-[36px] h-[36px] rounded-lg bg-[#052e16] border border-[#166534] flex items-center justify-center text-[14px] hover:bg-[#0a3a1f] transition-colors">
-            {pickupResolving ? <span className="animate-spin text-[11px]">⏳</span> : "📍"}
-          </button>
-        </div>
-        {gps.lat && (
-          <div className="space-y-0.5">
-            <p className="font-mono-jet text-[10px] text-[#4ade80]">GPS: {gps.lat.toFixed(5)},{gps.lng?.toFixed(5)} · ±{gps.acc ? Math.round(gps.acc) : "?"}m</p>
-            {gpsAddress && <p className="font-mono-jet text-[10px] text-neutral-400 truncate">📍 {gpsAddress}</p>}
-            {gpsAirport && <p className="font-mono-jet text-[10px] text-[#f6dd8c]">✈ Near {gpsAirport}</p>}
-          </div>
-        )}
-      </div>
-
-      {/* Dropoff */}
-      <div className="space-y-1">
-        <div className="flex items-center gap-2">
-          <span className="px-2 py-0.5 rounded-full bg-[#0c1a33] border border-[#1e3a8a] text-[#60a5fa] text-[10px] font-bold tracking-widest uppercase">DROP OFF</span>
-          <span className="text-[10px] text-neutral-300">Destination</span>
-        </div>
-        <div className="relative">
-          <input value={tripForm.dropoff}
-            onChange={e => setTripForm(s => ({ ...s, dropoff: e.target.value }))}
-            placeholder="Address or place"
-            className="w-full h-11 rounded-xl bg-black border border-[#262626] pl-3 pr-[44px] text-white text-[13px] font-medium placeholder:text-[#6b7280] focus:outline-none focus:border-[#1e3a8a]" />
-          <button type="button" onClick={async () => {
-            if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
-            setDropoffResolving(true);
-            try {
-              const rich = await reverseGeocodeRich(gps.lat, gps.lng);
-              setTripForm(s => ({ ...s, dropoff: rich }));
-              showToast("Drop-off location resolved ✓");
-            } catch {
-              setTripForm(s => ({ ...s, dropoff: `${gps.lat!.toFixed(5)},${gps.lng!.toFixed(5)}` }));
-              showToast("GPS coordinates saved (offline)");
-            } finally { setDropoffResolving(false); }
-          }} className="absolute right-1 top-1 w-[36px] h-[36px] rounded-lg bg-[#0c1a33] border border-[#1e3a8a] flex items-center justify-center text-[14px] hover:bg-[#132a5a] transition-colors">
-            {dropoffResolving ? <span className="animate-spin text-[11px]">⏳</span> : "📍"}
-          </button>
-        </div>
-      </div>
-
-      {/* Quick location menus */}
-      <div className="grid grid-cols-2 gap-2">
-        <button type="button" onClick={() => { if (!gps.lat) startGPS(); setShowPickupMenu(v => !v); setShowDropoffMenu(false); }}
-          className="h-10 rounded-xl bg-black border border-[#14532d] px-3 flex items-center gap-2 text-white text-[11px] font-bold text-left hover:bg-[#052e16]/30 transition-colors">
-          <span className="text-[#22c55e] text-[13px]">📍</span>
-          <span className="truncate">Quick Pickup…</span>
-        </button>
-        <button type="button" onClick={() => { if (!gps.lat) startGPS(); setShowDropoffMenu(v => !v); setShowPickupMenu(false); }}
-          className="h-10 rounded-xl bg-black border border-[#1e3a8a] px-3 flex items-center gap-2 text-white text-[11px] font-bold text-left hover:bg-[#0c1a33]/60 transition-colors">
-          <span className="text-[#60a5fa] text-[13px]">📍</span>
-          <span className="truncate">Quick Drop Off…</span>
-        </button>
-      </div>
-
-      {showPickupMenu && (
-        <div className="bg-[#141414] border border-[#222] rounded-2xl p-3">
-          <p className="text-[11px] tracking-[0.12em] text-neutral-300 font-bold uppercase mb-2">PICKUP CATEGORY</p>
-          {gps.lat && (
-            <div className="w-full rounded-xl bg-black border border-[#262626] px-3 py-2 text-[12px] text-neutral-300 mb-3 flex flex-col">
-              <span className="font-mono-jet truncate">📍 {gps.lat.toFixed(5)},{gps.lng?.toFixed(5)}{gps.acc ? ` · ±${Math.round(gps.acc)}m` : ""}</span>
-              {gpsAddress && <span className="font-mono-jet text-[11px] text-neutral-400 mt-0.5">{gpsAddress}</span>}
-              {gpsAirport && <span className="font-mono-jet text-[11px] text-[#f6dd8c] mt-0.5">✈ {gpsAirport}</span>}
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-2.5">
-            {LOCATION_CATEGORIES.map(cat => (
-              <button key={`p-${cat}`} type="button" onClick={() => {
-                const coord = gps.lat ? ` (${gps.lat.toFixed(4)},${gps.lng?.toFixed(4)})` : "";
-                setTripForm(s => ({ ...s, pickup: `${cat}${coord}` }));
-                setShowPickupMenu(false);
-                showToast(`Pickup: ${cat}`);
-              }} className="h-14 rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] text-white text-[14px] font-medium hover:bg-[#2a2a2a] transition-colors text-center">
-                {cat}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {showDropoffMenu && (
-        <div className="bg-[#141414] border border-[#222] rounded-2xl p-3">
-          <p className="text-[11px] tracking-[0.12em] text-neutral-300 font-bold uppercase mb-2">DROP OFF CATEGORY</p>
-          <div className="grid grid-cols-2 gap-2.5">
-            {LOCATION_CATEGORIES.map(cat => (
-              <button key={`d-${cat}`} type="button" onClick={() => {
-                const coord = gps.lat ? ` (${gps.lat.toFixed(4)},${gps.lng?.toFixed(4)})` : "";
-                setTripForm(s => ({ ...s, dropoff: `${cat}${coord}` }));
-                setShowDropoffMenu(false);
-                showToast(`Drop-off: ${cat}`);
-              }} className="h-14 rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] text-white text-[14px] font-medium hover:bg-[#2a2a2a] transition-colors text-center">
-                {cat}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       <div className="space-y-1">
         <label className="text-[10px] tracking-[0.08em] text-neutral-200 font-bold uppercase">NOTES</label>
