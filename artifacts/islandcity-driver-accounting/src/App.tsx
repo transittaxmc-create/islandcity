@@ -105,7 +105,7 @@ const LOCATION_CATEGORIES = [
 const AIRPORTS = [
   { name: "JFK Airport", lat: 40.6413, lng: -73.7781 },
   { name: "LGA Airport", lat: 40.7769, lng: -73.874 },
-  { name: "EWR Airport", lat: 40.6895, lng: -74.1745 },
+  { name: "Newark Airport (EWR)", lat: 40.6895, lng: -74.1745 },
   { name: "ISP Airport", lat: 40.7952, lng: -73.1002 },
 ] as const;
 
@@ -1005,7 +1005,7 @@ export default function App() {
     if (wd && h >= 7 && h < 9)
       return { emoji: "🔥", text: "Morning rush — Midtown, Queens→Manhattan, Penn Station. Get moving.", type: "hot" };
     if (h >= 12 && h < 14)
-      return { emoji: "🍽", text: "Lunch surge — Midtown, FiDi, Brooklyn Heights. Quick short trips.", type: "warm" };
+      return { emoji: "🍽", text: "Lunch surge — Midtown, Financial District (FiDi), Brooklyn Heights. Quick short trips.", type: "warm" };
     if (wd && h >= 17 && h < 20)
       return { emoji: "⚡", text: "Afternoon peak — best hour of the day. JFK/LGA also active. Push hard.", type: "hot" };
     if (we && (h >= 22 || h < 2))
@@ -1188,11 +1188,11 @@ export default function App() {
   const NYC_ZONES = [
     { name: "JFK Airport",           lat: 40.6413, lng: -73.7781 },
     { name: "LaGuardia Airport",      lat: 40.7769, lng: -73.8740 },
-    { name: "Penn Station / MSG",     lat: 40.7506, lng: -73.9935 },
+    { name: "Penn Station / Madison Square Garden (MSG)", lat: 40.7506, lng: -73.9935 },
     { name: "Times Square",           lat: 40.7580, lng: -73.9855 },
     { name: "Grand Central",          lat: 40.7527, lng: -73.9772 },
     { name: "Midtown Manhattan",      lat: 40.7549, lng: -73.9840 },
-    { name: "Lower Manhattan / FiDi", lat: 40.7074, lng: -74.0113 },
+    { name: "Lower Manhattan / Financial District (FiDi)", lat: 40.7074, lng: -74.0113 },
     { name: "Brooklyn Downtown",      lat: 40.6928, lng: -73.9903 },
     { name: "Upper East Side",        lat: 40.7739, lng: -73.9575 },
     { name: "Williamsburg",           lat: 40.7081, lng: -73.9571 },
