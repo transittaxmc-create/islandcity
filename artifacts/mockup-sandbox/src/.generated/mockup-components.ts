@@ -5,6 +5,8 @@ export const modules: ModuleMap = {
   "./components/mockups/islandcity/CashFlow.tsx": () => import("../components/mockups/islandcity/CashFlow.tsx"),
   "./components/mockups/islandcity/CashFlowBold.tsx": () => import("../components/mockups/islandcity/CashFlowBold.tsx"),
   "./components/mockups/islandcity/FinancesBold.tsx": () => import("../components/mockups/islandcity/FinancesBold.tsx"),
+  "./components/mockups/islandcity/FinancesBoldChat.tsx": () => import("../components/mockups/islandcity/FinancesBoldChat.tsx"),
+  "./components/mockups/islandcity/FinancesBoldNetBalance.tsx": () => import("../components/mockups/islandcity/FinancesBoldNetBalance.tsx"),
   "./components/mockups/islandcity/ReceiptScanner.tsx": () => import("../components/mockups/islandcity/ReceiptScanner.tsx"),
   "./components/mockups/islandcity/Speedometer.tsx": () => import("../components/mockups/islandcity/Speedometer.tsx")
 };
