@@ -2994,7 +2994,7 @@ export default function App() {
                         </p>
                       </div>
                       <div>
-                        <p className="text-[7px] text-neutral-600 uppercase mb.0.5">Net</p>
+                        <p className="text-[7px] text-neutral-600 uppercase mb-0.5">Net</p>
                         <p className={`font-mono-jet text-[11px] font-bold ${displayNet>=0?'text-[#4ade80]':'text-red-400'}`}>
                           {displayNet>=0?'+':''}{displayNet.toFixed(0)}
                         </p>
@@ -3187,12 +3187,12 @@ export default function App() {
         <div className="sticky z-30 bg-black border-b border-[#1a1a1a]"
           style={{ top: 'calc(68px + env(safe-area-inset-top))' }}>
           <div className="flex overflow-x-auto gold-scroll px-2 gap-1">
-            {(["DASHBOARD", "ENTRY", "FINANCES", "REGISTER", "LEDGER", "EXPENSES", "REPORTS"] as Tab[]).map(tab => {
+            {(["DASHBOARD", "ENTRY", "REGISTER", "FINANCES", "LEDGER", "EXPENSES", "REPORTS"] as Tab[]).map(tab => {
               const active = activeTab === tab;
               const badge = tab === "REGISTER" ? pendingTrips.length
                           : tab === "LEDGER"   ? postedTrips.length
                           : 0;
-              const label: Record<string,string> = { ENTRY: "REVENUE" };
+              const label: Record<string,string> = { ENTRY: "REVENUE", REGISTER: "REVENUE QUEUE" };
               return (
                 <button key={tab} onClick={() => setActiveTab(tab)}
                   className={`whitespace-nowrap px-4 py-3.5 text-[11px] tracking-[0.14em] font-semibold transition-colors relative flex items-center gap-1.5 ${active ? "text-[#f6dd8c]" : "text-neutral-500 hover:text-neutral-300"}`}>
