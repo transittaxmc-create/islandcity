@@ -2,6 +2,7 @@
 type ModuleMap = Record<string, () => Promise<Record<string, unknown>>>;
 export const modules: ModuleMap = {
   "./components/mockups/islandcity/BankReconcile.tsx": () => import("../components/mockups/islandcity/BankReconcile.tsx"),
+  "./components/mockups/islandcity/BankReconcileSwipe.tsx": () => import("../components/mockups/islandcity/BankReconcileSwipe.tsx"),
   "./components/mockups/islandcity/CashFlow.tsx": () => import("../components/mockups/islandcity/CashFlow.tsx"),
   "./components/mockups/islandcity/CashFlow3DTimeline.tsx": () => import("../components/mockups/islandcity/CashFlow3DTimeline.tsx"),
   "./components/mockups/islandcity/CashFlowBold.tsx": () => import("../components/mockups/islandcity/CashFlowBold.tsx"),
@@ -14,6 +15,7 @@ export const modules: ModuleMap = {
   "./components/mockups/islandcity/FinancesBoldNetBalance.tsx": () => import("../components/mockups/islandcity/FinancesBoldNetBalance.tsx"),
   "./components/mockups/islandcity/IncomeProjection.tsx": () => import("../components/mockups/islandcity/IncomeProjection.tsx"),
   "./components/mockups/islandcity/MonthlyPNL.tsx": () => import("../components/mockups/islandcity/MonthlyPNL.tsx"),
+  "./components/mockups/islandcity/PushNotifications.tsx": () => import("../components/mockups/islandcity/PushNotifications.tsx"),
   "./components/mockups/islandcity/ReceiptScanner.tsx": () => import("../components/mockups/islandcity/ReceiptScanner.tsx"),
   "./components/mockups/islandcity/Speedometer.tsx": () => import("../components/mockups/islandcity/Speedometer.tsx")
 };
