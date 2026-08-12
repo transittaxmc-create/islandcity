@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { Home, Banknote, ClipboardList, BarChart2, BookOpen } from "lucide-react";
 
 type TurnStatus = "START" | "BREAK" | "END";
@@ -1215,6 +1215,20 @@ export default function App() {
           .slice(0, 3)
       : [];
 
+  // ─── Dashboard monthly summary (used in FI card) ─────────────
+  const _dbMonthStr   = `${currentTime.getFullYear()}-${String(currentTime.getMonth()+1).padStart(2,'0')}`;
+  const _dbEarnMonth  = trips.filter(t=>t.date.startsWith(_dbMonthStr))
+    .reduce((a,t)=>a+(t.earnings||0)+(t.tips||0)+(t.extra||0)+(t.toll||0),0);
+  const _dbExpMonth   = expenses.filter(e=>e.date?.startsWith(_dbMonthStr)&&e.frequency!=='monthly'&&e.frequency!=='weekly')
+    .reduce((a,e)=>a+e.amount,0);
+  const _dbNetMonth   = _dbEarnMonth - _dbExpMonth;
+  const _dbMonthGoal  = workDays.reduce((s,iso)=>s+(dayTargets[iso]??dailyGoal),0)*4.33;
+  const _dbMonthPct   = _dbMonthGoal>0 ? Math.min(_dbEarnMonth/_dbMonthGoal*100,100) : 0;
+  const _dbDayOfMonth = currentTime.getDate();
+  const _dbDaysInMonth = new Date(currentTime.getFullYear(),currentTime.getMonth()+1,0).getDate();
+  const _dbPaceTarget = _dbMonthGoal * (_dbDayOfMonth/_dbDaysInMonth);
+  const _dbOnTrack    = _dbEarnMonth >= _dbPaceTarget * 0.85;
+
   // ─── Dashboard ───────────────────────────────────────────────
   const DashboardContent = (
     <div className="space-y-5">
@@ -1357,12 +1371,68 @@ export default function App() {
         </div>
       </div>
 
+      {/* Financial Intelligence — monthly summary */}
+      <div className="rounded-[20px] p-4" style={{ background: "#0d0d0d", border: "1px solid #1e1e1e" }}>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">Financial Intelligence</p>
+            <p className="text-[11px] font-semibold text-neutral-300 mt-0.5">
+              {currentTime.toLocaleDateString('en-US',{month:'long',year:'numeric'})}
+            </p>
+          </div>
+          <span className={`px-2.5 py-1 rounded-full text-[9px] font-bold tracking-[0.12em] border ${
+            _dbOnTrack
+              ? 'bg-[#052e16] border-[#4ade8044] text-[#4ade80]'
+              : 'bg-[#1a0f00] border-[#f6dd8c44] text-[#f6dd8c]'
+          }`}>
+            {_dbOnTrack ? '✓ On track' : '↗ Keep pushing'}
+          </span>
+        </div>
+        {/* Net balance — big */}
+        <div className="mb-3">
+          <p className="text-[8px] text-neutral-600 uppercase tracking-widest">Net balance</p>
+          <p className={`font-mono-jet text-[30px] font-black leading-none tracking-tight mt-0.5 ${_dbNetMonth>=0?'text-[#f6dd8c]':'text-red-400'}`}>
+            {_dbNetMonth>=0?'+':''}{_dbNetMonth.toLocaleString('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0})}
+          </p>
+        </div>
+        {/* Income / Expenses row */}
+        <div className="flex gap-4 mb-3">
+          <div>
+            <p className="text-[8px] text-neutral-600 uppercase tracking-widest">INCOME</p>
+            <p className="font-mono-jet text-[16px] font-bold text-[#4ade80] mt-0.5">${_dbEarnMonth.toLocaleString('en-US',{maximumFractionDigits:0})}</p>
+          </div>
+          <div>
+            <p className="text-[8px] text-neutral-600 uppercase tracking-widest">EXPENSES</p>
+            <p className="font-mono-jet text-[16px] font-bold text-red-400 mt-0.5">-${_dbExpMonth.toLocaleString('en-US',{maximumFractionDigits:0})}</p>
+          </div>
+        </div>
+        {/* Monthly goal progress */}
+        {_dbMonthGoal>0 && (
+          <div>
+            <div className="flex justify-between text-[9px] mb-1.5">
+              <span className="font-mono-jet text-neutral-500">${_dbEarnMonth.toFixed(0)} earned</span>
+              <span className="font-mono-jet text-[#f6dd8c]">Goal ${_dbMonthGoal.toLocaleString('en-US',{maximumFractionDigits:0})}</span>
+            </div>
+            <div className="h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden">
+              <div className="h-full rounded-full transition-all duration-700"
+                style={{width:`${_dbMonthPct}%`,background:'linear-gradient(90deg,#d9b64f,#f6dd8c)'}}/>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Goal tracker */}
       <div className="rounded-[20px] p-4 space-y-4" style={{ background: "#0d0d0d", border: "1px solid #1e1e1e" }}>
         <div className="flex items-center justify-between">
-          <h3 className="text-[11px] tracking-[0.18em] font-bold" style={goldGradientStyle}>TODAY'S PERFORMANCE</h3>
-          <span className={`font-mono-jet text-[11px] font-bold ${goalPct >= 100 ? "text-[#4ade80]" : goalPct >= 70 ? "text-[#f6dd8c]" : "text-neutral-500"}`}>
-            {goalPct.toFixed(0)}% of goal
+          <h3 className="text-[11px] tracking-[0.18em] font-bold" style={goldGradientStyle}>$/HR NOW</h3>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[9px] font-bold tracking-[0.12em]"
+            style={shiftActive&&!isOnBreak
+              ?{background:"#052e16",borderColor:"#4ade8066",color:"#4ade80"}
+              :shiftActive&&isOnBreak
+              ?{background:"#1c0d00",borderColor:"#f9731666",color:"#f97316"}
+              :{background:"#111",borderColor:"#2a2a2a",color:"#737373"}}>
+            <span className={`w-1.5 h-1.5 rounded-full ${shiftActive&&!isOnBreak?"bg-[#4ade80] animate-pulse":shiftActive&&isOnBreak?"bg-[#f97316] animate-pulse":"bg-neutral-600"}`}/>
+            {shiftStatusLabel}
           </span>
         </div>
 
@@ -1372,7 +1442,7 @@ export default function App() {
           const gA=(v:number)=>180+Math.min(v/100,1)*180;
           const gP=(r:number,deg:number)=>({x:GCX+r*Math.cos(deg*Math.PI/180),y:GCY+r*Math.sin(deg*Math.PI/180)});
           const gPath=(r:number,a1:number,a2:number)=>{const s=gP(r,a1),e=gP(r,a2);return `M${s.x.toFixed(1)} ${s.y.toFixed(1)} A${r} ${r} 0 ${a2-a1>=180?1:0} 1 ${e.x.toFixed(1)} ${e.y.toFixed(1)}`;};
-          const zones=[{min:0,max:60,color:"#ef4444"},{min:60,max:70,color:"#fbbf24"},{min:70,max:90,color:"#4ade80"},{min:90,max:100,color:"#f6dd8c"}];
+          const zones=[{min:0,max:60,color:"#ef4444"},{min:60,max:70,color:"#f97316"},{min:70,max:80,color:"#fbbf24"},{min:80,max:90,color:"#4ade80"},{min:90,max:100,color:"#3b82f6"}];
           const activeZ=zones.find(z=>perHourGross>=z.min&&(z.max>=100||perHourGross<z.max))??zones[0];
           const zColor=perHourGross>0?activeZ.color:"#374151";
           const needleA=gA(perHourGross>0?Math.min(perHourGross,100):0);
@@ -1383,14 +1453,14 @@ export default function App() {
               <path d={gPath(GR,180,360)} fill="none" stroke="#1c1c1c" strokeWidth={GSW}/>
               {zones.map(z=>(
                 <path key={z.min} d={gPath(GR,gA(z.min),gA(Math.min(z.max,100)))}
-                  fill="none" stroke={z.color} strokeWidth={GSW-5} strokeLinecap="butt" opacity={0.82}/>
+                  fill="none" stroke={z.color} strokeWidth={GSW} strokeLinecap="butt" opacity={0.9}/>
               ))}
               {/* Goal marker */}
               <line x1={gm1.x} y1={gm1.y} x2={gm2.x} y2={gm2.y} stroke="#f6dd8c" strokeWidth="3" opacity="0.9"/>
               {/* Zone separators */}
-              {[60,70,90].map(v=>{const a=gA(v);const i=gP(GR-GSW/2+1,a),o=gP(GR+GSW/2-3,a);return <line key={v} x1={i.x} y1={i.y} x2={o.x} y2={o.y} stroke="#000" strokeWidth="2" opacity="0.5"/>;})}
+              {[60,70,80,90].map(v=>{const a=gA(v);const i=gP(GR-GSW/2+1,a),o=gP(GR+GSW/2-3,a);return <line key={v} x1={i.x} y1={i.y} x2={o.x} y2={o.y} stroke="#000" strokeWidth="2" opacity="0.6"/>;})}
               {/* Boundary labels */}
-              {([{v:0,t:'$0'},{v:60,t:'$60'},{v:90,t:'$90'},{v:100,t:'$100'}] as {v:number,t:string}[]).map(({v,t})=>{
+              {([{v:0,t:'$0'},{v:60,t:'$60'},{v:70,t:'$70'},{v:80,t:'$80'},{v:90,t:'$90'},{v:100,t:'$100+'}] as {v:number,t:string}[]).map(({v,t})=>{
                 const a=gA(v);const p=gP(GR+GSW/2+9,a);
                 return <text key={v} x={p.x} y={p.y+4} textAnchor={v<=20?'end':'start'} fill="#4b5563" fontSize="9" fontFamily="monospace">{t}</text>;
               })}
@@ -1410,25 +1480,53 @@ export default function App() {
           );
         })()}
 
-        {/* Daily goal — slim bar below gauge */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between text-[10px]">
-            <span className="text-neutral-500 font-mono-jet">DAILY GOAL ${todayGoal}</span>
-            <span className={`font-mono-jet font-bold ${goalPct>=100?"text-[#4ade80]":goalPct>=70?"text-[#f6dd8c]":"text-neutral-400"}`}>{goalPct.toFixed(0)}%</span>
-          </div>
-          <div className="h-2 bg-[#1a1a1a] rounded-full overflow-hidden border border-[#2a2a2a]">
-            <div className="h-full rounded-full transition-all duration-500"
-              style={{width:`${goalPct}%`,background:goalPct>=100?"#4ade80":goalPct>=70?"linear-gradient(90deg,#f6dd8c,#d9b64f)":"linear-gradient(90deg,#374151,#f6dd8c)"}}/>
-          </div>
-          <div className="flex items-center justify-between text-[10px] font-mono-jet">
-            <span className="text-neutral-500">
-              {grossToday>=todayGoal?"🏆 Goal reached!":`$${remainingToGoal.toFixed(2)} short of goal`}
-            </span>
-            <span className="text-neutral-400">
-              {projectedFinish?`Est. finish ~${projectedFinish.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}`:grossToday>=todayGoal?"✓ Done":"—"}
-            </span>
-          </div>
-        </div>
+        {/* HOY — DAILY GOAL circular ring */}
+        {(() => {
+          const R=36,SW=9,CX=44,CY=44;
+          const circ=2*Math.PI*R;
+          const dash=circ*Math.min(goalPct/100,1);
+          const rc=goalPct>=100?"#4ade80":goalPct>=70?"#f6dd8c":"#d9b64f";
+          return (
+            <div className="flex items-center gap-4 bg-[#080808] border border-[#1a1a1a] rounded-2xl p-3.5">
+              <svg width="88" height="88" viewBox="0 0 88 88" className="flex-shrink-0">
+                <circle cx={CX} cy={CY} r={R} fill="none" stroke="#1e1e1e" strokeWidth={SW}/>
+                <circle cx={CX} cy={CY} r={R} fill="none" stroke={rc} strokeWidth={SW}
+                  strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+                  transform={`rotate(-90 ${CX} ${CY})`}
+                  style={{transition:'stroke-dasharray 0.6s ease'}}/>
+                <text x={CX} y={CY+1} textAnchor="middle" dominantBaseline="middle"
+                  fill={rc} fontSize="13" fontWeight="900" fontFamily="'JetBrains Mono',monospace">
+                  {goalPct.toFixed(0)}%
+                </text>
+                <text x={CX} y={CY+16} textAnchor="middle" fill="#4b5563" fontSize="8" fontFamily="monospace">
+                  ${grossToday.toFixed(0)}/${todayGoal}
+                </text>
+              </svg>
+              <div className="flex-1 min-w-0">
+                <p className="text-[8px] text-neutral-600 uppercase tracking-widest">EARNED TODAY</p>
+                <p className="font-mono-jet text-[24px] font-black leading-none mt-0.5" style={{color:rc}}>${grossToday.toFixed(2)}</p>
+                <div className="grid grid-cols-2 gap-x-3 mt-2">
+                  <div>
+                    <p className="text-[8px] text-neutral-600 uppercase">Remaining</p>
+                    <p className="font-mono-jet text-[14px] font-bold text-neutral-300">${remainingToGoal.toFixed(0)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[8px] text-neutral-600 uppercase">$/Hour</p>
+                    <p className={`font-mono-jet text-[14px] font-bold ${perHourGross>=80?"text-[#4ade80]":perHourGross>=60?"text-[#f6dd8c]":"text-neutral-500"}`}>
+                      {perHourGross>0?`$${perHourGross.toFixed(2)}`:"—"}
+                    </p>
+                  </div>
+                </div>
+                {projectedFinish&&grossToday<todayGoal&&(
+                  <p className="text-[9px] text-[#4ade80] font-semibold mt-1.5">✓ Goal ~ {projectedFinish.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}</p>
+                )}
+                {grossToday>=todayGoal&&(
+                  <p className="text-[9px] text-[#4ade80] font-semibold mt-1.5">🏆 Daily goal ${todayGoal} reached!</p>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* $/hr goal slider */}
         <div className="rounded-xl p-3.5" style={{ background: "#080808", border: "1px solid #1e1400" }}>
@@ -1444,14 +1542,15 @@ export default function App() {
           </div>
         </div>
 
-        {/* Actual vs Goal vs Delta */}
+        {/* THIS SHIFT · ACTIVE HRS · DAILY GOAL */}
         <div className="grid grid-cols-3 gap-2">
           {([
-            ["ACTUAL/HR",   perHourGross > 0 ? `$${perHourGross.toFixed(2)}` : "—",
-              perHourGross >= goal ? "#4ade80" : perHourGross >= 60 ? "#f6dd8c" : "#ef4444"],
-            ["GOAL/HR",     `$${goal.toFixed(0)}`, "#f6dd8c"],
-            ["GAP",         perHourGross > 0 ? `${perHourGross >= goal ? "+" : ""}$${(perHourGross - goal).toFixed(0)}/hr` : "—",
-              perHourGross >= goal ? "#4ade80" : "#ef4444"],
+            ["THIS SHIFT",  grossToday>0?`$${grossToday.toFixed(2)}`:"—",
+              grossToday>0?"#f6dd8c":"#374151"],
+            ["ACTIVE HRS",  activeHoursDecimal>0?`${activeHoursDecimal.toFixed(1)}h`:"—",
+              activeHoursDecimal>0?"#f6dd8c":"#374151"],
+            ["DAILY GOAL",  `${goalPct.toFixed(0)}%`,
+              goalPct>=100?"#4ade80":goalPct>=70?"#f6dd8c":"#9ca3af"],
           ] as [string,string,string][]).map(([label, val, col]) => (
             <div key={label} className="rounded-xl p-3" style={{ background: "#080808", border: `1px solid ${col}22` }}>
               <p className="text-[9px] tracking-[0.14em] text-neutral-500">{label}</p>
@@ -2734,6 +2833,48 @@ export default function App() {
     })
     .sort((a,b)=>a.daysUntil-b.daysUntil);
 
+  // ─── 14-day cash flow projection ──────────────────────────────
+  const _cfDailyRecur = _recurWk / 7;
+  const _cfDays = (() => {
+    const days: {
+      date:Date; dateStr:string; shortLabel:string; fullLabel:string;
+      isToday:boolean; isWorkDay:boolean;
+      income:number; paymentTotal:number; payments:Expense[];
+      balance:number;
+    }[] = [];
+    let bal = bankBalance;
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(currentTime);
+      d.setDate(currentTime.getDate() + i);
+      const dateStr = toYYYYMMDD(d);
+      const iso = d.getDay() === 0 ? 7 : d.getDay();
+      const isWorkDay = workDays.includes(iso);
+      const isToday = i === 0;
+      const income = isToday ? 0 : (isWorkDay ? (dayTargets[iso] ?? dailyGoal) : 0);
+      const payments = expenses.filter(e => e.dueDate === dateStr && e.frequency === 'monthly');
+      const paymentTotal = payments.reduce((s,e) => s + e.amount, 0);
+      if (!isToday) bal = bal + income - _cfDailyRecur - paymentTotal;
+      const shortLabel = isToday ? 'NOW'
+        : d.toLocaleDateString('en-US',{weekday:'short'}).slice(0,2).toUpperCase();
+      const fullLabel = isToday ? 'Today'
+        : d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+      days.push({date:new Date(d),dateStr,shortLabel,fullLabel,isToday,isWorkDay,income,paymentTotal,payments,balance:isToday?bankBalance:bal});
+    }
+    return days;
+  })();
+  const _cfMin = Math.min(..._cfDays.map(d => d.balance));
+  const _cfMax = Math.max(..._cfDays.map(d => d.balance));
+  const _cfPayments14 = expenses
+    .filter(e => e.dueDate && e.frequency === 'monthly')
+    .map(e => {
+      const daysUntil = Math.round((new Date(e.dueDate!+'T12:00:00').getTime()-currentTime.getTime())/86400000);
+      const dayEntry = _cfDays.find(d => d.dateStr === e.dueDate);
+      const balAfter = dayEntry?.balance ?? bankBalance;
+      return {name:e.vendor||e.category, amount:e.amount, dueStr:e.dueDate!, daysUntil, balAfter, covered:balAfter>=0};
+    })
+    .filter(p => p.daysUntil >= 0 && p.daysUntil <= 13)
+    .sort((a,b) => a.daysUntil - b.daysUntil);
+
   const _finPageNames = ['This Week','Projections','Platforms','Financial Health'];
 
   const FinancesContent = (
@@ -2855,27 +2996,33 @@ export default function App() {
 
         </div>{/* end page 0 */}
 
-        {/* ── PAGE 1 · Projections ── */}
+        {/* ── PAGE 1 · Cash Flow 14-day ── */}
         <div className="flex-shrink-0 w-full px-4 space-y-4 pb-6" style={{scrollSnapAlign:'start'}}>
 
-          {/* 1 · Balance bancario editable */}
+          {/* Header */}
+          <div className="flex items-center gap-3 pt-1">
+            <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">CASH FLOW</p>
+            <span className="px-2.5 py-0.5 rounded-full bg-[#f6dd8c]/20 border border-[#f6dd8c]/30 text-[#f6dd8c] text-[8px] font-bold tracking-[0.12em]">14-DAY PROJECTION</span>
+          </div>
+
+          {/* 1 · Bank Balance */}
           <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">BANK BALANCE</p>
+              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">BANK BALANCE TODAY</p>
               {!bankEditing && (
                 <button onClick={()=>{setBankEditVal(bankBalance.toFixed(2));setBankEditing(true);}}
-                  className="text-[9px] text-[#f6dd8c] border border-[#f6dd8c]/30 px-2 py-0.5 rounded-full active:scale-95 transition-transform">
-                  Edit
+                  className="flex items-center gap-1 text-[9px] text-[#f6dd8c] border border-[#f6dd8c]/30 px-2.5 py-1 rounded-full active:scale-95 transition-transform">
+                  ✏ Edit
                 </button>
               )}
             </div>
             {bankEditing ? (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-neutral-400 text-[16px] font-mono-jet">$</span>
+                  <span className="text-neutral-400 text-[18px] font-mono-jet">$</span>
                   <input type="number" value={bankEditVal}
                     onChange={e=>setBankEditVal(e.target.value)}
-                    className="flex-1 bg-black border border-[#f6dd8c]/40 rounded-xl px-3 py-2 text-[#f6dd8c] font-mono-jet text-[18px] font-bold focus:outline-none focus:border-[#f6dd8c]"
+                    className="flex-1 bg-black border border-[#f6dd8c]/40 rounded-xl px-3 py-2 text-[#f6dd8c] font-mono-jet text-[20px] font-bold focus:outline-none focus:border-[#f6dd8c]"
                     autoFocus inputMode="decimal"/>
                 </div>
                 <input type="text" placeholder="Optional note (e.g. car repair −$270)" value={bankEditNote}
@@ -2888,7 +3035,7 @@ export default function App() {
                       const adj:BankAdjEntry={
                         id:Date.now().toString(),
                         date:toYYYYMMDD(currentTime),
-                        time:currentTime.toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'}),
+                        time:currentTime.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}),
                         prevBalance:bankBalance, newBalance:nv,
                         note:bankEditNote.trim()
                       };
@@ -2896,168 +3043,124 @@ export default function App() {
                       setBankBalance(nv);
                     }
                     setBankEditing(false); setBankEditVal(""); setBankEditNote("");
-                  }} className="flex-1 bg-[#f6dd8c] text-black text-[11px] font-bold py-2 rounded-xl active:scale-95 transition-transform">
+                  }} className="flex-1 bg-[#f6dd8c] text-black text-[12px] font-bold py-2.5 rounded-xl active:scale-95 transition-transform">
                     Save
                   </button>
                   <button onClick={()=>{setBankEditing(false);setBankEditVal("");setBankEditNote("");}}
-                    className="px-4 text-neutral-400 text-[11px] border border-[#2a2a2a] rounded-xl">
+                    className="px-4 text-neutral-400 text-[12px] border border-[#2a2a2a] rounded-xl">
                     Cancel
                   </button>
                 </div>
               </div>
             ) : (
-              <p className="font-mono-jet text-[28px] font-black text-[#f6dd8c] leading-none">
-                ${bankBalance.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
-              </p>
-            )}
-            {/* Recent adjustment log */}
-            {bankAdjHistory.length>0 && !bankEditing && (
-              <div className="mt-3 pt-3 border-t border-[#1e1e1e] space-y-1.5">
-                {bankAdjHistory.slice(0,3).map(adj=>(
-                  <div key={adj.id} className="flex items-start gap-2">
-                    <span className="text-[8px] text-neutral-600 mt-0.5 flex-shrink-0 font-mono-jet">{adj.date}</span>
-                    <div className="flex-1 min-w-0">
-                      <span className="font-mono-jet text-[9px] text-neutral-400">
-                        ${adj.prevBalance.toFixed(0)} → ${adj.newBalance.toFixed(0)}{' '}
-                        <span className={adj.newBalance>=adj.prevBalance?'text-[#4ade80]':'text-red-400'}>
-                          ({adj.newBalance>=adj.prevBalance?'+':''}${(adj.newBalance-adj.prevBalance).toFixed(0)})
-                        </span>
-                      </span>
-                      {adj.note && <p className="text-[8px] text-neutral-600 truncate">— {adj.note}</p>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* 2 · Mes en semanas */}
-          <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">
-                {currentTime.toLocaleDateString('en-US',{month:'long',year:'numeric'}).toUpperCase()}
-              </p>
-              {_mwCurIdx>=0 && (
-                <p className="text-[9px] text-neutral-500">Week {_mwCurIdx+1} of {_mwWeeks.length}</p>
-              )}
-            </div>
-
-            {/* Monthly progress bar */}
-            {_mwMonthGoal>0 && (
-              <div className="mb-4">
-                <div className="flex justify-between text-[9px] mb-1.5">
-                  <span className="text-neutral-400 font-mono-jet">${_mwEarned.toFixed(0)} earned</span>
-                  <span className="text-[#f6dd8c] font-mono-jet">Goal ${_mwMonthGoal.toLocaleString('en-US',{maximumFractionDigits:0})}</span>
-                </div>
-                <div className="h-2.5 bg-[#1a1a1a] rounded-full overflow-hidden border border-[#2a2a2a]">
-                  <div className="h-full rounded-full transition-all duration-700"
-                    style={{width:`${Math.min(_mwEarned/_mwMonthGoal*100,100)}%`,background:'linear-gradient(90deg,#d9b64f,#f6dd8c)'}}/>
-                </div>
-                <p className="text-[8px] text-neutral-600 mt-1">
-                  {Math.round(_mwEarned/_mwMonthGoal*100)}% of your monthly goal
+              <>
+                <p className="font-mono-jet text-[36px] font-black text-[#f6dd8c] leading-none tracking-tight">
+                  ${bankBalance.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
                 </p>
-              </div>
+                {bankAdjHistory.length>0 && (
+                  <p className="text-[9px] text-neutral-600 mt-1">
+                    Updated manually · {new Date(bankAdjHistory[0].date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+                  </p>
+                )}
+              </>
             )}
-
-            {/* Week rows */}
-            <div className="space-y-2">
-              {_mwWeeks.map((w,i)=>{
-                const bal=_mwBalances[i];
-                const netActual=w.actualIncome-w.actualExp;
-                const netProj=w.projIncome-w.projExp;
-                const displayNet=w.isPast||w.isCurrent?netActual:netProj;
-                const displayIncome=w.isPast||w.isCurrent?w.actualIncome:w.projIncome;
-                const onPlan=w.projIncome>0?(w.actualIncome/w.projIncome)>=0.8:true;
-                return (
-                  <div key={w.wStr} className={`rounded-xl p-3 border ${
-                    w.isCurrent?'border-[#f6dd8c]/40 bg-[#0f0a00]':
-                    w.isPast?'border-[#1e1e1e] bg-black/40':
-                    'border-[#181818] bg-black/10'
-                  }`}>
-                    {/* Row header */}
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`text-[7px] font-black px-1.5 py-0.5 rounded tracking-widest uppercase ${
-                          w.isCurrent?'bg-[#f6dd8c]/20 text-[#f6dd8c]':
-                          w.isPast?'bg-[#1e1e1e] text-neutral-500':
-                          'bg-[#141414] text-neutral-600'
-                        }`}>{w.isCurrent?'CURRENT':w.isPast?'CLOSED':'UPCOMING'}</span>
-                        <span className="text-[10px] text-neutral-400">{w.label}</span>
-                      </div>
-                      {!isNaN(bal) && (
-                        <span className={`font-mono-jet text-[10px] font-bold ${bal>=0?'text-[#4ade80]':'text-red-400'}`}>
-                          ${bal.toFixed(0)}
-                        </span>
-                      )}
-                    </div>
-                    {/* Data grid */}
-                    <div className="grid grid-cols-3 gap-1">
-                      <div>
-                        <p className="text-[7px] text-neutral-600 uppercase mb-0.5">Earned</p>
-                        <p className={`font-mono-jet text-[11px] font-bold ${w.isCurrent?'text-[#f6dd8c]':w.isPast?'text-neutral-300':'text-neutral-500'}`}>
-                          ${displayIncome.toFixed(0)}
-                          {(w.isPast||w.isCurrent)&&w.projIncome>0&&(
-                            <span className="text-neutral-600 text-[8px]">/{w.projIncome.toFixed(0)}</span>
-                          )}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[7px] text-neutral-600 uppercase mb-0.5">Expenses</p>
-                        <p className="font-mono-jet text-[11px] font-bold text-red-400">
-                          ${w.actualExp.toFixed(0)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[7px] text-neutral-600 uppercase mb-0.5">Net</p>
-                        <p className={`font-mono-jet text-[11px] font-bold ${displayNet>=0?'text-[#4ade80]':'text-red-400'}`}>
-                          {displayNet>=0?'+':''}{displayNet.toFixed(0)}
-                        </p>
-                      </div>
-                    </div>
-                    {/* Past week variance note */}
-                    {w.isPast && w.projIncome>0 && (
-                      <p className={`text-[8px] mt-1.5 font-semibold ${onPlan?'text-[#4ade80]':'text-orange-400'}`}>
-                        {onPlan?'↑ Above plan':'↓ Below plan'} · {Math.round(w.actualIncome/w.projIncome*100)}% of goal
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
           </div>
 
-          {/* 3 · Pagos programados */}
-          {_mwPayments.length>0 && (
+          {/* 2 · Upcoming payments (next 14 days) */}
+          {_cfPayments14.length > 0 && (
             <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
-              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">SCHEDULED PAYMENTS</p>
+              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">⚡ UPCOMING PAYMENTS</p>
               <div className="space-y-2">
-                {_mwPayments.map(p=>(
-                  <div key={p.dueStr} className={`rounded-xl p-3 border ${
-                    p.covered?'border-[#4ade80]/25 bg-[#020f02]':'border-red-500/25 bg-[#0f0202]'
+                {_cfPayments14.map(p=>(
+                  <div key={p.dueStr} className={`flex items-center gap-3 rounded-xl px-3 py-3 border ${
+                    p.daysUntil<=2 ? 'border-red-500/40 bg-[#0f0202]'
+                    : p.covered   ? 'border-[#4ade80]/20 bg-[#020f02]'
+                    :               'border-red-500/20 bg-[#0f0202]'
                   }`}>
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[11px] font-semibold text-neutral-100 truncate">{p.name}</p>
-                        <p className="text-[9px] text-neutral-500 mt-0.5">
-                          {p.daysUntil<=0?'Due today':p.daysUntil===1?'Tomorrow':`In ${p.daysUntil} days`}
-                          {' · '}{new Date(p.dueStr+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}
-                        </p>
-                      </div>
-                      <p className="font-mono-jet text-[14px] font-black text-neutral-100 flex-shrink-0">${p.amount.toFixed(0)}</p>
+                    <span className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                      p.daysUntil<=2 ? 'bg-red-500' : p.covered ? 'bg-[#4ade80]' : 'bg-red-500'
+                    }`}/>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-semibold text-white truncate">{p.name}</p>
+                      <p className="text-[10px] text-neutral-500 mt-0.5">
+                        {p.daysUntil===0?'Due today':p.daysUntil===1?'Tomorrow':`In ${p.daysUntil} days`}
+                        {' · '}balance after: <span className="font-mono-jet">${p.balAfter.toLocaleString('en-US',{maximumFractionDigits:0})}</span>
+                      </p>
                     </div>
-                    <div className={`text-[9px] font-semibold flex items-center gap-1 ${p.covered?'text-[#4ade80]':'text-red-400'}`}>
-                      {p.covered
-                        ? <>✓ Covered · <span className="font-mono-jet">${(p.projBal-p.amount).toFixed(0)}</span> to spare</>
-                        : <>⚠ Short by <span className="font-mono-jet">${(p.amount-p.projBal).toFixed(0)}</span> to cover this payment</>
-                      }
-                    </div>
+                    <p className="font-mono-jet text-[16px] font-black text-red-400 flex-shrink-0">-${p.amount.toFixed(0)}</p>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* 4 · Panorama anual */}
+          {/* 3 · Daily balance bar chart */}
+          <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+            <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">DAILY BALANCE</p>
+            <ResponsiveContainer width="100%" height={110}>
+              <BarChart data={_cfDays.map(d=>({label:d.shortLabel,balance:d.balance,isToday:d.isToday,neg:d.balance<0}))}
+                barSize={16} margin={{top:4,right:0,left:0,bottom:0}}>
+                <XAxis dataKey="label" tick={{fontSize:8,fill:'#6b7280'}} axisLine={false} tickLine={false}/>
+                <YAxis hide domain={[Math.min(_cfMin*1.1,0), _cfMax*1.1]}/>
+                <Bar dataKey="balance" radius={[3,3,0,0]}>
+                  {_cfDays.map((d,i)=>(
+                    <Cell key={i}
+                      fill={d.isToday ? '#f6dd8c' : d.balance<0 ? '#ef4444' : '#4ade80'}
+                      fillOpacity={d.isToday ? 1 : 0.65}/>
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+            <div className="flex justify-between text-[10px] font-mono-jet mt-1 px-1">
+              <span className="text-neutral-500">Min: <span className={_cfMin<0?'text-red-400':'text-neutral-300'}>${_cfMin.toLocaleString('en-US',{maximumFractionDigits:0})}</span></span>
+              <span className="text-neutral-500">Max: <span className="text-[#4ade80]">${_cfMax.toLocaleString('en-US',{maximumFractionDigits:0})}</span></span>
+            </div>
+          </div>
+
+          {/* 4 · Detailed timeline */}
+          <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+            <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-1">DETAILED TIMELINE</p>
+            <div>
+              {_cfDays.map((d,i)=>(
+                <div key={d.dateStr} className={`flex items-start gap-3 py-2.5 ${i<_cfDays.length-1?'border-b border-[#141414]':''}`}>
+                  {/* Day label */}
+                  <div className="w-[44px] flex-shrink-0 pt-0.5">
+                    {d.isToday ? (
+                      <span className="inline-block px-1.5 py-0.5 rounded bg-[#f6dd8c]/20 text-[#f6dd8c] text-[7px] font-black tracking-widest">TODAY</span>
+                    ) : (
+                      <span className="text-[10px] text-neutral-600 font-semibold">{d.shortLabel}</span>
+                    )}
+                  </div>
+                  {/* Description */}
+                  <div className="flex-1 min-w-0">
+                    {d.isToday ? (
+                      <p className="text-[12px] text-neutral-400">{d.isWorkDay ? 'Work day' : 'Rest'}</p>
+                    ) : (
+                      <div>
+                        {d.income > 0 && (
+                          <p className="text-[12px] text-[#4ade80] font-semibold">+${d.income.toLocaleString('en-US',{maximumFractionDigits:0})} income</p>
+                        )}
+                        {!d.isWorkDay && d.income===0 && d.paymentTotal===0 && (
+                          <p className="text-[12px] text-neutral-600">Rest</p>
+                        )}
+                        {d.payments.map(p=>(
+                          <p key={p.id} className="text-[11px] text-red-400 font-semibold">-${p.amount.toFixed(0)} {p.vendor||p.category}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {/* Balance */}
+                  <p className={`font-mono-jet text-[14px] font-bold flex-shrink-0 ${
+                    d.balance<0 ? 'text-red-400' : d.isToday ? 'text-[#f6dd8c]' : 'text-neutral-200'
+                  }`}>
+                    ${d.balance.toLocaleString('en-US',{maximumFractionDigits:0})}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 5 · Annual outlook (preserved) */}
           <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
             <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">ANNUAL OUTLOOK</p>
             <div className="grid grid-cols-3 gap-2 mb-3">
@@ -3068,7 +3171,7 @@ export default function App() {
               ] as {label:string,val:number}[]).map(({label,val})=>(
                 <div key={label} className="bg-black border border-[#1e1e1e] rounded-xl p-2.5 text-center">
                   <p className="text-[8px] text-neutral-500 uppercase tracking-widest leading-tight mb-1">{label}</p>
-                  <p className="text-[13px] font-bold text-[#f6dd8c] font-mono-jet">${(val/1000).toFixed(1)}k</p>
+                  <p className="text-[14px] font-bold text-[#f6dd8c] font-mono-jet">${(val/1000).toFixed(1)}k</p>
                 </div>
               ))}
             </div>
