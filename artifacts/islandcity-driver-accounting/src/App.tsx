@@ -384,7 +384,7 @@ function PlatformAvatar({
 // One-time reset: bump version string below to wipe all data on the next load.
 // After clearing it forces a real page reload so React can't write stale
 // in-memory state back into the freshly-cleared localStorage.
-const CLEAN_SLATE_VERSION = "2026-08-11-v6";
+const CLEAN_SLATE_VERSION = "2026-08-12-v7";
 (function enforceCleanSlate() {
   try {
     if (localStorage.getItem("ic-app-version") !== CLEAN_SLATE_VERSION) {
