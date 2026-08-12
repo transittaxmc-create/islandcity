@@ -375,6 +375,8 @@ const CLEAN_SLATE_VERSION = "2026-08-11-v6";
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("DASHBOARD");
   const [goal, setGoal] = useState(60);
+  const [finPage, setFinPage] = useState(0);
+  const finScrollRef = useRef<HTMLDivElement>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
 
@@ -1283,76 +1285,35 @@ export default function App() {
         </div>
       </div>
 
-      {/* Performance grid */}
+      {/* Performance grid — DESGLOSE full-width · GASTOS | NET side by side */}
       <div>
         <p className="text-[10px] tracking-[0.22em] text-neutral-400 font-bold mb-2.5">RENDIMIENTO DEL TURNO</p>
         <div className="grid grid-cols-2 gap-3">
-          {/* HOY BREAKDOWN */}
-          <div className="rounded-xl p-3.5" style={{ background: "#0d0d0d", border: "1px solid #1e1400" }}>
-            <p className="text-[9px] tracking-[0.18em] font-bold" style={{ color: "#d97706" }}>DESGLOSE DEL DÍA</p>
-            <div className="mt-2 space-y-1">
-              {([
-                ["Tarifa",   todayTrips.reduce((a,b) => a + b.earnings, 0)],
-                ["Propinas", todayTrips.reduce((a,b) => a + b.tips + b.extra, 0)],
-                ["Peajes",   totalTollsToday],
-              ] as [string,number][]).map(([label, val]) => (
-                <div key={label} className="flex justify-between items-center">
-                  <span className="text-[10px] text-neutral-500 font-mono-jet">{label}</span>
-                  <span className="font-mono-jet text-[12px] font-semibold text-neutral-100">${val.toFixed(2)}</span>
-                </div>
-              ))}
+          {/* DESGLOSE DEL DÍA — full width con bruto total a la derecha */}
+          <div className="col-span-2 rounded-xl p-3.5 flex items-start justify-between gap-3"
+            style={{ background: "#0d0d0d", border: "1px solid #1e1400" }}>
+            <div className="flex-1">
+              <p className="text-[9px] tracking-[0.18em] font-bold mb-2" style={{ color: "#d97706" }}>DESGLOSE DEL DÍA</p>
+              <div className="space-y-1">
+                {([
+                  ["Tarifa",   todayTrips.reduce((a,b) => a + b.earnings, 0)],
+                  ["Propinas", todayTrips.reduce((a,b) => a + b.tips + b.extra, 0)],
+                  ["Peajes",   totalTollsToday],
+                ] as [string,number][]).map(([label, val]) => (
+                  <div key={label} className="flex items-center gap-4">
+                    <span className="text-[10px] text-neutral-500 font-mono-jet w-14">{label}</span>
+                    <span className="font-mono-jet text-[12px] font-semibold text-neutral-100">${val.toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="text-right flex-shrink-0">
+              <p className="text-[8px] text-neutral-600 tracking-widest uppercase mb-1">BRUTO HOY</p>
+              <p className="font-mono-jet text-[22px] font-black text-[#f6dd8c] leading-none">${grossToday.toFixed(2)}</p>
+              <p className="text-[9px] text-neutral-600 mt-0.5">{todayTrips.length} viaje{todayTrips.length !== 1 ? "s" : ""}</p>
             </div>
           </div>
-          {/* $/HORA GROSS — color tier: <$60 red · $60-70 yellow · $70-90 green · ≥$90 gold */}
-          {(() => {
-            const rateColor = perHourGross >= 90 ? "#f6dd8c"
-              : perHourGross >= 70 ? "#4ade80"
-              : perHourGross >= 60 ? "#fbbf24"
-              : perHourGross >  0  ? "#ef4444"
-              : "#374151";
-            const rateBg = perHourGross >= 90 ? "#1a1200"
-              : perHourGross >= 70 ? "#052e16"
-              : perHourGross >= 60 ? "#1a1200"
-              : perHourGross >  0  ? "#1a0505"
-              : "#0d0d0d";
-            const tierLabel = perHourGross >= 90 ? "EXCEPCIONAL"
-              : perHourGross >= 70 ? "EXCELENTE"
-              : perHourGross >= 60 ? "MÍNIMO OK"
-              : perHourGross >  0  ? "⚠ BAJO $60"
-              : null;
-            return (
-              <div className="rounded-xl overflow-hidden" style={{
-                background: rateBg,
-                border: `1px solid ${rateColor}33`,
-                borderLeft: `3px solid ${rateColor}`,
-              }}>
-                <div className="p-3.5">
-                  {/* Label row with status badge */}
-                  <div className="flex items-center justify-between">
-                    <p className="text-[9px] tracking-[0.18em] font-bold" style={{ color: "#d97706" }}>TARIFA BRUTA / HORA</p>
-                    {tierLabel && (
-                      <span className="font-mono-jet text-[8px] font-black px-1.5 py-0.5 rounded-full"
-                        style={{ background: `${rateColor}22`, color: rateColor, border: `1px solid ${rateColor}55` }}>
-                        {tierLabel}
-                      </span>
-                    )}
-                  </div>
-                  {/* Rate value */}
-                  <p className="font-mono-jet text-[24px] font-black mt-1.5 tracking-tight"
-                    style={{ color: rateColor }}>
-                    {perHourGross > 0 ? `$${perHourGross.toFixed(2)}` : "—"}
-                  </p>
-                  <div className="mt-1 space-y-0.5">
-                    <p className="text-[10px] text-neutral-500 font-mono-jet">
-                      {shiftActive ? activeHoursFormatted : cumulative.hoy > 0 ? `${cumulative.hoy.toFixed(2)}h hoy` : "sin turno"}
-                    </p>
-                    <p className="text-[9px] font-mono-jet text-neutral-600">Sem {cumulative.semana.toFixed(1)}h · Mes {cumulative.mes.toFixed(1)}h</p>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-          {/* GASTOS HOY */}
+          {/* GASTOS DEL DÍA */}
           <div className="rounded-xl p-3.5" style={{ background: "#0d0d0d", border: "1px solid #1e0a0a" }}>
             <p className="text-[9px] tracking-[0.18em] font-bold text-[#ef4444]">GASTOS DEL DÍA</p>
             <p className="font-mono-jet text-[22px] font-black text-[#ef4444] mt-2">
@@ -1362,7 +1323,7 @@ export default function App() {
               {expenses.filter(e => e.date === toYYYYMMDD(currentTime)).length} registros del día
             </p>
           </div>
-          {/* NET HOY */}
+          {/* GANANCIA NETA HOY */}
           <div className="rounded-xl p-3.5" style={{ background: "#0d0d0d", border: `1px solid ${netToday >= 0 ? "#0a1e0a" : "#1e0a0a"}` }}>
             <p className={`text-[9px] tracking-[0.18em] font-bold ${netToday >= 0 ? "text-[#4ade80]" : "text-[#ef4444]"}`}>GANANCIA NETA HOY</p>
             <p className={`font-mono-jet text-[22px] font-black mt-2 ${netToday >= 0 ? "text-[#4ade80]" : "text-[#ef4444]"}`}>
@@ -1382,29 +1343,66 @@ export default function App() {
           </span>
         </div>
 
-        {/* $500 daily goal progress bar */}
-        <div className="space-y-2">
+        {/* $/hr arc gauge — 5 color zones */}
+        {(() => {
+          const GCX=150,GCY=128,GR=104,GSW=18;
+          const gA=(v:number)=>180+Math.min(v/100,1)*180;
+          const gP=(r:number,deg:number)=>({x:GCX+r*Math.cos(deg*Math.PI/180),y:GCY+r*Math.sin(deg*Math.PI/180)});
+          const gPath=(r:number,a1:number,a2:number)=>{const s=gP(r,a1),e=gP(r,a2);return `M${s.x.toFixed(1)} ${s.y.toFixed(1)} A${r} ${r} 0 ${a2-a1>=180?1:0} 1 ${e.x.toFixed(1)} ${e.y.toFixed(1)}`;};
+          const zones=[{min:0,max:60,color:"#ef4444"},{min:60,max:70,color:"#fbbf24"},{min:70,max:90,color:"#4ade80"},{min:90,max:100,color:"#f6dd8c"}];
+          const activeZ=zones.find(z=>perHourGross>=z.min&&(z.max>=100||perHourGross<z.max))??zones[0];
+          const zColor=perHourGross>0?activeZ.color:"#374151";
+          const needleA=gA(perHourGross>0?Math.min(perHourGross,100):0);
+          const tip=gP(GR-14,needleA),b1=gP(9,needleA+90),b2=gP(9,needleA-90);
+          const goalA=gA(Math.min(goal,100));const gm1=gP(GR-GSW/2+1,goalA),gm2=gP(GR+GSW/2-3,goalA);
+          return (
+            <svg width="100%" height="136" viewBox="0 0 300 136" style={{overflow:'visible'}}>
+              <path d={gPath(GR,180,360)} fill="none" stroke="#1c1c1c" strokeWidth={GSW}/>
+              {zones.map(z=>(
+                <path key={z.min} d={gPath(GR,gA(z.min),gA(Math.min(z.max,100)))}
+                  fill="none" stroke={z.color} strokeWidth={GSW-5} strokeLinecap="butt" opacity={0.82}/>
+              ))}
+              {/* Goal marker */}
+              <line x1={gm1.x} y1={gm1.y} x2={gm2.x} y2={gm2.y} stroke="#f6dd8c" strokeWidth="3" opacity="0.9"/>
+              {/* Zone separators */}
+              {[60,70,90].map(v=>{const a=gA(v);const i=gP(GR-GSW/2+1,a),o=gP(GR+GSW/2-3,a);return <line key={v} x1={i.x} y1={i.y} x2={o.x} y2={o.y} stroke="#000" strokeWidth="2" opacity="0.5"/>;})}
+              {/* Boundary labels */}
+              {([{v:0,t:'$0'},{v:60,t:'$60'},{v:90,t:'$90'},{v:100,t:'$100'}] as {v:number,t:string}[]).map(({v,t})=>{
+                const a=gA(v);const p=gP(GR+GSW/2+9,a);
+                return <text key={v} x={p.x} y={p.y+4} textAnchor={v<=20?'end':'start'} fill="#4b5563" fontSize="9" fontFamily="monospace">{t}</text>;
+              })}
+              {/* Needle */}
+              {perHourGross>0&&<polygon points={`${tip.x},${tip.y} ${b1.x},${b1.y} ${b2.x},${b2.y}`} fill={zColor} opacity="0.92"/>}
+              <circle cx={GCX} cy={GCY} r="9" fill="#0a0a0a" stroke={zColor} strokeWidth="2"/>
+              <text x={GCX} y={GCY-26} textAnchor="middle" fill={zColor} fontSize="28" fontWeight="900" fontFamily="'JetBrains Mono',monospace">
+                {perHourGross>0?`$${perHourGross.toFixed(0)}`:'—'}
+              </text>
+              <text x={GCX} y={GCY-9} textAnchor="middle" fill="#6b7280" fontSize="9" fontFamily="monospace">/hora bruta</text>
+              {perHourGross>0&&(
+                <text x={GCX} y={GCY+18} textAnchor="middle" fill={zColor} fontSize="8" fontWeight="bold" fontFamily="monospace" letterSpacing="2">
+                  {perHourGross>=90?'EXCEPCIONAL':perHourGross>=70?'EXCELENTE':perHourGross>=60?'MÍNIMO OK':'⚠ BAJO $60'}
+                </text>
+              )}
+            </svg>
+          );
+        })()}
+
+        {/* Daily goal — slim bar below gauge */}
+        <div className="space-y-1.5">
           <div className="flex items-center justify-between text-[10px]">
             <span className="text-neutral-500 font-mono-jet">META DIARIA $500</span>
-            <span className={`font-mono-jet font-bold ${goalPct >= 100 ? "text-[#4ade80]" : goalPct >= 70 ? "text-[#f6dd8c]" : "text-neutral-400"}`}>
-              {goalPct.toFixed(0)}%
-            </span>
+            <span className={`font-mono-jet font-bold ${goalPct>=100?"text-[#4ade80]":goalPct>=70?"text-[#f6dd8c]":"text-neutral-400"}`}>{goalPct.toFixed(0)}%</span>
           </div>
-          <div className="h-3 bg-[#1a1a1a] rounded-full overflow-hidden border border-[#2a2a2a]">
+          <div className="h-2 bg-[#1a1a1a] rounded-full overflow-hidden border border-[#2a2a2a]">
             <div className="h-full rounded-full transition-all duration-500"
-              style={{
-                width: `${goalPct}%`,
-                background: goalPct >= 100 ? "#4ade80" : goalPct >= 70 ? "linear-gradient(90deg,#f6dd8c,#d9b64f)" : "linear-gradient(90deg,#374151,#f6dd8c)"
-              }} />
+              style={{width:`${goalPct}%`,background:goalPct>=100?"#4ade80":goalPct>=70?"linear-gradient(90deg,#f6dd8c,#d9b64f)":"linear-gradient(90deg,#374151,#f6dd8c)"}}/>
           </div>
           <div className="flex items-center justify-between text-[10px] font-mono-jet">
             <span className="text-neutral-500">
-              {grossToday >= todayGoal ? "🏆 ¡Meta alcanzada!" : `Faltan $${remainingToGoal.toFixed(2)} para la meta`}
+              {grossToday>=todayGoal?"🏆 ¡Meta alcanzada!":`Faltan $${remainingToGoal.toFixed(2)} para la meta`}
             </span>
             <span className="text-neutral-400">
-              {projectedFinish
-                ? `Llegas ~${projectedFinish.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
-                : grossToday >= todayGoal ? "✓ Completado" : "—"}
+              {projectedFinish?`Llegas ~${projectedFinish.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}`:grossToday>=todayGoal?"✓ Completado":"—"}
             </span>
           </div>
         </div>
@@ -2622,214 +2620,232 @@ export default function App() {
   const _ringPct=Math.min(_earnToday/Math.max(_todayPlan,1),1);
   const _CX=60,_CY=60;
 
+  const _finPageNames = ['Esta Semana','Proyecciones','Plataformas','Salud Financiera'];
+
   const FinancesContent = (
-    <div className="space-y-4">
-
-      {/* ── Label ── */}
-      <div>
-        <p className="text-[10px] tracking-[0.22em] text-neutral-500 font-semibold uppercase">Inteligencia Financiera</p>
-        <p className="text-[10px] text-neutral-600 mt-0.5">Real vs. proyectado · actualizado en vivo</p>
-      </div>
-
-
-      {/* ── ESTA SEMANA — barras ── */}
-      <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">ESTA SEMANA</p>
-          <div className="flex gap-3 text-[8px] text-neutral-600">
-            <span className="flex items-center gap-1"><span className="inline-block w-2 h-1.5 rounded bg-[#d9b64f]/30"/>Planeado</span>
-            <span className="flex items-center gap-1"><span className="inline-block w-2 h-1.5 rounded bg-[#f6dd8c]"/>Real</span>
-          </div>
+    <div>
+      {/* ── Header: page title + dot indicators ── */}
+      <div className="flex items-start justify-between px-4 pt-4 pb-3">
+        <div>
+          <p className="text-[10px] tracking-[0.22em] text-neutral-500 font-semibold uppercase">Inteligencia Financiera</p>
+          <p className="text-[12px] font-semibold text-neutral-200 mt-0.5">{_finPageNames[finPage]}</p>
         </div>
-        <ResponsiveContainer width="100%" height={90}>
-          <BarChart data={_weekChart} barGap={2} barSize={14} margin={{top:0,right:0,bottom:0,left:0}}>
-            <XAxis dataKey="day" tick={{fill:'#6b7280',fontSize:9}} axisLine={false} tickLine={false}/>
-            <YAxis hide domain={[0,Math.max(..._weekChart.map(d=>Math.max(d.projected,d.actual)),1)*1.15]}/>
-            <Tooltip contentStyle={{background:'#1a1a1a',border:'1px solid #2a2a2a',borderRadius:8,fontSize:11}}
-              labelStyle={{color:'#f6dd8c'}} formatter={(v:number)=>[`$${v.toFixed(0)}`]}/>
-            <Bar dataKey="projected" name="Planeado" fill="#d9b64f22" radius={[3,3,0,0]}/>
-            <Bar dataKey="actual"    name="Real"     fill="#f6dd8c"   radius={[3,3,0,0]}/>
-          </BarChart>
-        </ResponsiveContainer>
-        <div className="flex justify-between mt-2 pt-2 border-t border-[#1e1e1e]">
-          <div>
-            <p className="text-[9px] text-neutral-500">Acumulado</p>
-            <p className="text-[15px] font-bold text-[#f6dd8c] font-mono-jet">${_earnWeek.toFixed(2)}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-[9px] text-neutral-500">Plan fin de semana</p>
-            <p className="text-[15px] font-bold text-white font-mono-jet">${_projWeek.toFixed(2)}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* ── PROYECCIONES ── */}
-      <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
-        <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">PROYECCIONES · A ESTE RITMO</p>
-        <div className="grid grid-cols-3 gap-2 mb-3">
-          {([
-            {label:'Fin Semana',val:_projWeek,  sub:new Date(_finMon.getTime()+6*86400000).toLocaleDateString('es',{month:'short',day:'numeric'})},
-            {label:'Fin Mes',   val:_projMonth, sub:new Date(currentTime.getFullYear(),currentTime.getMonth()+1,0).toLocaleDateString('es',{month:'short',day:'numeric'})},
-            {label:'Fin Año',   val:_projYear,  sub:'31 dic'},
-          ] as {label:string,val:number,sub:string}[]).map(({label,val,sub})=>(
-            <div key={label} className="bg-black border border-[#1e1e1e] rounded-xl p-2.5 text-center">
-              <p className="text-[8px] text-neutral-500 uppercase tracking-widest leading-tight mb-1">{label}</p>
-              <p className="text-[15px] font-bold text-[#f6dd8c] font-mono-jet leading-none">${(val/1000).toFixed(1)}k</p>
-              <p className="text-[8px] text-neutral-600 mt-0.5">{sub}</p>
-            </div>
+        <div className="flex items-center gap-1.5 mt-1">
+          {[0,1,2,3].map(i=>(
+            <button key={i}
+              onClick={()=>{const el=finScrollRef.current;if(el)el.scrollTo({left:i*el.offsetWidth,behavior:'smooth'});}}
+              style={{width:i===finPage?16:8,height:8,borderRadius:4,background:i===finPage?'#f6dd8c':'#2a2a2a',transition:'all 0.3s',flexShrink:0,border:'none',padding:0,cursor:'pointer'}}
+            />
           ))}
         </div>
-        {/* Annual progress bar */}
-        <div className="bg-black border border-[#1e1e1e] rounded-xl p-3">
-          <div className="flex justify-between items-center mb-1.5">
-            <p className="text-[9px] text-neutral-500">Meta anual · Super Plus</p>
-            <p className="text-[9px] text-[#f6dd8c]">${(_annTarget/1000).toFixed(0)}k · {Math.round(_yearPct*100)}%</p>
-          </div>
-          <div className="h-2 bg-[#1e1e1e] rounded-full overflow-hidden">
-            <div className="h-full rounded-full transition-all duration-700"
-              style={{width:`${_yearPct*100}%`,background:'linear-gradient(to right,#d9b64f,#f6dd8c)'}}/>
-          </div>
-          <p className="text-[8px] text-neutral-600 mt-1.5">Basado en plan semanal · {workDays.length} día{workDays.length!==1?'s':''}/semana</p>
-        </div>
       </div>
 
-      {/* ── INGRESOS POR PLATAFORMA ── */}
-      {_platRows.length>0 && (
-        <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
-          <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">INGRESOS POR PLATAFORMA</p>
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr className="text-[8px] text-neutral-600 uppercase tracking-widest border-b border-[#1e1e1e]">
-                <th className="text-left pb-2 font-semibold">Plataforma</th>
-                <th className="text-right pb-2 font-semibold">Hoy</th>
-                <th className="text-right pb-2 font-semibold">Semana</th>
-                <th className="text-right pb-2 font-semibold">Mes</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#1a1a1a]">
-              {_platRows.map(([platform,d])=>{
-                const meta=getPlatformMeta(platform);
+      {/* ── Horizontal scroll container ── */}
+      <div ref={finScrollRef}
+        className="flex"
+        style={{overflowX:'scroll',scrollSnapType:'x mandatory',scrollbarWidth:'none'} as React.CSSProperties}
+        onScroll={e=>{const el=e.currentTarget;setFinPage(Math.round(el.scrollLeft/(el.offsetWidth||1)));}}
+      >
+
+        {/* ── PAGE 0 · Esta Semana ── */}
+        <div className="flex-shrink-0 w-full px-4 space-y-4 pb-6" style={{scrollSnapAlign:'start'}}>
+
+          {/* ESTA SEMANA chart */}
+          <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">ESTA SEMANA</p>
+              <div className="flex gap-3 text-[8px] text-neutral-600">
+                <span className="flex items-center gap-1"><span className="inline-block w-2 h-1.5 rounded bg-[#d9b64f]/30"/>Planeado</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-2 h-1.5 rounded bg-[#f6dd8c]"/>Real</span>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={90}>
+              <BarChart data={_weekChart} barGap={2} barSize={14} margin={{top:0,right:0,bottom:0,left:0}}>
+                <XAxis dataKey="day" tick={{fill:'#6b7280',fontSize:9}} axisLine={false} tickLine={false}/>
+                <YAxis hide domain={[0,Math.max(..._weekChart.map(d=>Math.max(d.projected,d.actual)),1)*1.15]}/>
+                <Tooltip contentStyle={{background:'#1a1a1a',border:'1px solid #2a2a2a',borderRadius:8,fontSize:11}}
+                  labelStyle={{color:'#f6dd8c'}} formatter={(v:number)=>[`$${v.toFixed(0)}`]}/>
+                <Bar dataKey="projected" name="Planeado" fill="#d9b64f22" radius={[3,3,0,0]}/>
+                <Bar dataKey="actual"    name="Real"     fill="#f6dd8c"   radius={[3,3,0,0]}/>
+              </BarChart>
+            </ResponsiveContainer>
+            <div className="flex justify-between mt-2 pt-2 border-t border-[#1e1e1e]">
+              <div>
+                <p className="text-[9px] text-neutral-500">Acumulado</p>
+                <p className="text-[15px] font-bold text-[#f6dd8c] font-mono-jet">${_earnWeek.toFixed(2)}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[9px] text-neutral-500">Plan fin de semana</p>
+                <p className="text-[15px] font-bold text-white font-mono-jet">${_projWeek.toFixed(2)}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* PLAN SEMANAL DE INGRESOS */}
+          <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">PLAN SEMANAL</p>
+              <span className="text-[9px] text-neutral-600">{workDays.length} día{workDays.length!==1?'s':''} activos</span>
+            </div>
+            <div className="grid grid-cols-7 gap-1 mb-1.5">
+              {([1,2,3,4,5,6,7] as const).map((iso,i)=>{
+                const on=workDays.includes(iso);
                 return (
-                  <tr key={platform}>
-                    <td className="py-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`w-5 h-5 rounded-full ${meta.bg} flex items-center justify-center text-[7px] font-bold text-black flex-shrink-0`}>{meta.initial}</span>
-                        <span className="text-neutral-300 text-[10px] truncate max-w-[70px]">{platform}</span>
-                      </div>
-                    </td>
-                    <td className="py-2 text-right font-mono-jet text-neutral-500 text-[10px]">{d.today>0?`$${d.today.toFixed(0)}`:'—'}</td>
-                    <td className="py-2 text-right font-mono-jet text-[#f6dd8c] font-semibold text-[10px]">${d.week.toFixed(0)}</td>
-                    <td className="py-2 text-right font-mono-jet text-white text-[10px]">${d.month.toFixed(0)}</td>
-                  </tr>
+                  <button key={iso}
+                    onClick={()=>setWorkDays(prev=>on?prev.filter(x=>x!==iso):[...prev,iso].sort())}
+                    className={`flex flex-col items-center py-2 rounded-lg border transition-all active:scale-95 ${on?'bg-black border-[#f6dd8c]/50':'bg-[#0a0a0a] border-[#1a1a1a]'}`}>
+                    <span className={`text-[9px] font-bold leading-none mb-1.5 ${on?'text-[#f6dd8c]':'text-neutral-600'}`}>{['L','Ma','Mi','J','V','S','D'][i]}</span>
+                    <span className={`w-3 h-3 rounded-full transition-colors ${on?'bg-[#f6dd8c]':'bg-[#252525]'}`}/>
+                  </button>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* ── SALUD FINANCIERA ── */}
-      <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
-        <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">
-          SALUD FINANCIERA · {currentTime.toLocaleDateString('es',{month:'long'}).toUpperCase()}
-        </p>
-        <div className="space-y-2.5">
-          {([
-            {label:'Ingresos reales este mes',        val:_earnMonth,   color:'text-[#4ade80]'},
-            {label:'Proyección fin de mes',            val:_projMonth,   color:'text-[#f6dd8c]'},
-            {label:'Gastos reales este mes',           val:-_expMonth,   color:'text-red-400'},
-            {label:'Gastos recurrentes proyectados',   val:-_monthFixed, color:'text-orange-400'},
-          ] as {label:string,val:number,color:string}[]).map(({label,val,color})=>(
-            <div key={label} className="flex justify-between items-center gap-2">
-              <p className="text-[11px] text-neutral-400 leading-tight">{label}</p>
-              <p className={`font-mono-jet text-[13px] font-bold flex-shrink-0 ${color}`}>
-                {val<0?`-$${Math.abs(val).toFixed(2)}`:`$${val.toFixed(2)}`}
-              </p>
             </div>
-          ))}
-          <div className="pt-2.5 border-t border-[#2a2a2a] flex justify-between items-center">
-            <p className="text-[12px] font-bold text-white">GANANCIA NETA PROYECTADA</p>
-            <p className={`font-mono-jet text-[19px] font-bold ${_netProj>=0?'text-[#4ade80]':'text-red-400'}`}>
-              {_netProj<0?`-$${Math.abs(_netProj).toFixed(2)}`:`$${_netProj.toFixed(2)}`}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* ── PLAN SEMANAL DE INGRESOS — layout horizontal compacto ── */}
-      <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">PLAN SEMANAL DE INGRESOS</p>
-          <span className="text-[9px] text-neutral-600">{workDays.length} día{workDays.length!==1?'s':''} activos</span>
-        </div>
-
-        {/* Fila 1 — toggle por día */}
-        <div className="grid grid-cols-7 gap-1 mb-1.5">
-          {([1,2,3,4,5,6,7] as const).map((iso,i)=>{
-            const on = workDays.includes(iso);
-            const abbr = ['L','Ma','Mi','J','V','S','D'][i];
-            return (
-              <button key={iso}
-                onClick={()=>setWorkDays(prev=>on?prev.filter(x=>x!==iso):[...prev,iso].sort())}
-                className={`flex flex-col items-center py-2 rounded-lg border transition-all active:scale-95 ${
-                  on ? 'bg-black border-[#f6dd8c]/50' : 'bg-[#0a0a0a] border-[#1a1a1a]'
-                }`}>
-                <span className={`text-[9px] font-bold leading-none mb-1.5 ${on ? 'text-[#f6dd8c]' : 'text-neutral-600'}`}>{abbr}</span>
-                <span className={`w-3 h-3 rounded-full transition-colors ${on ? 'bg-[#f6dd8c]' : 'bg-[#252525]'}`}/>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Fila 2 — monto por día */}
-        <div className="grid grid-cols-7 gap-1 mb-4">
-          {([1,2,3,4,5,6,7] as const).map((iso)=>{
-            const on = workDays.includes(iso);
-            return (
-              <div key={iso} className={`transition-opacity ${on ? 'opacity-100' : 'opacity-20'}`}>
-                <input
-                  type="number" min="0" max="9999" step="10"
-                  value={on ? (dayTargets[iso] ?? dailyGoal) : ''}
-                  disabled={!on}
-                  placeholder="—"
-                  onChange={e=>setDayTargets(prev=>({...prev,[iso]:parseFloat(e.target.value)||0}))}
-                  className="w-full text-center bg-transparent text-[10px] font-bold font-mono-jet text-[#f6dd8c] focus:outline-none disabled:cursor-default border-b border-[#2a2a2a] pb-0.5 focus:border-[#f6dd8c]/50 transition-colors"
-                />
+            <div className="grid grid-cols-7 gap-1 mb-4">
+              {([1,2,3,4,5,6,7] as const).map((iso)=>{
+                const on=workDays.includes(iso);
+                return (
+                  <div key={iso} className={`transition-opacity ${on?'opacity-100':'opacity-20'}`}>
+                    <input type="number" min="0" max="9999" step="10"
+                      value={on?(dayTargets[iso]??dailyGoal):''} disabled={!on} placeholder="—"
+                      onChange={e=>setDayTargets(prev=>({...prev,[iso]:parseFloat(e.target.value)||0}))}
+                      className="w-full text-center bg-transparent text-[10px] font-bold font-mono-jet text-[#f6dd8c] focus:outline-none disabled:cursor-default border-b border-[#2a2a2a] pb-0.5 focus:border-[#f6dd8c]/50 transition-colors"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="pt-3 border-t border-[#1e1e1e]">
+              <div className="flex items-baseline justify-between mb-0.5">
+                <p className="text-[9px] text-neutral-500 uppercase tracking-[0.15em]">Total semanal</p>
+                <p className="text-[22px] font-bold text-[#f6dd8c] font-mono-jet leading-none">
+                  ${_weekPlanTotal.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})}
+                </p>
               </div>
-            );
-          })}
-        </div>
-
-        {/* Total semanal + estimados */}
-        <div className="pt-3 border-t border-[#1e1e1e]">
-          <div className="flex items-baseline justify-between mb-0.5">
-            <p className="text-[9px] text-neutral-500 uppercase tracking-[0.15em]">Total semanal</p>
-            <p className="text-[22px] font-bold text-[#f6dd8c] font-mono-jet leading-none">
-              ${_weekPlanTotal.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})}
-            </p>
-          </div>
-          <p className="text-[8px] text-neutral-600 mb-3">promedio ${_avgDayTarget.toFixed(0)}/día</p>
-
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            <div className="bg-black border border-[#1e1e1e] rounded-xl p-2.5 text-center">
-              <p className="text-[8px] text-neutral-600 uppercase tracking-widest mb-0.5">Estimado mensual</p>
-              <p className="text-[13px] font-bold text-white font-mono-jet">${(_weekPlanTotal*4.33/1000).toFixed(1)}k</p>
-            </div>
-            <div className="bg-black border border-[#1e1e1e] rounded-xl p-2.5 text-center">
-              <p className="text-[8px] text-neutral-600 uppercase tracking-widest mb-0.5">Estimado anual</p>
-              <p className="text-[13px] font-bold text-white font-mono-jet">${(_annTarget/1000).toFixed(0)}k</p>
+              <p className="text-[8px] text-neutral-600 mb-3">promedio ${_avgDayTarget.toFixed(0)}/día</p>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <div className="bg-black border border-[#1e1e1e] rounded-xl p-2.5 text-center">
+                  <p className="text-[8px] text-neutral-600 uppercase tracking-widest mb-0.5">Est. mensual</p>
+                  <p className="text-[13px] font-bold text-white font-mono-jet">${(_weekPlanTotal*4.33/1000).toFixed(1)}k</p>
+                </div>
+                <div className="bg-black border border-[#1e1e1e] rounded-xl p-2.5 text-center">
+                  <p className="text-[8px] text-neutral-600 uppercase tracking-widest mb-0.5">Est. anual</p>
+                  <p className="text-[13px] font-bold text-white font-mono-jet">${(_annTarget/1000).toFixed(0)}k</p>
+                </div>
+              </div>
+              <div className="bg-[#0f0a00] border border-[#d9b64f]/20 rounded-xl p-2.5 flex items-center gap-2">
+                <span className="text-[#d9b64f] text-[12px]">💡</span>
+                <p className="text-[9px] text-[#a07820]">Días sin meta usan <strong className="text-[#d9b64f]">${dailyGoal}/día</strong> como base.</p>
+              </div>
             </div>
           </div>
 
-          <div className="bg-[#0f0a00] border border-[#d9b64f]/20 rounded-xl p-2.5 flex items-center gap-2">
-            <span className="text-[#d9b64f] text-[12px]">💡</span>
-            <p className="text-[9px] text-[#a07820] leading-relaxed">
-              Días sin meta usan <strong className="text-[#d9b64f]">${dailyGoal}/día</strong> como base.
-            </p>
-          </div>
-        </div>
-      </div>
+        </div>{/* end page 0 */}
 
+        {/* ── PAGE 1 · Proyecciones ── */}
+        <div className="flex-shrink-0 w-full px-4 space-y-4 pb-6" style={{scrollSnapAlign:'start'}}>
+          <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+            <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">PROYECCIONES · A ESTE RITMO</p>
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              {([
+                {label:'Fin Semana',val:_projWeek,  sub:new Date(_finMon.getTime()+6*86400000).toLocaleDateString('es',{month:'short',day:'numeric'})},
+                {label:'Fin Mes',   val:_projMonth, sub:new Date(currentTime.getFullYear(),currentTime.getMonth()+1,0).toLocaleDateString('es',{month:'short',day:'numeric'})},
+                {label:'Fin Año',   val:_projYear,  sub:'31 dic'},
+              ] as {label:string,val:number,sub:string}[]).map(({label,val,sub})=>(
+                <div key={label} className="bg-black border border-[#1e1e1e] rounded-xl p-2.5 text-center">
+                  <p className="text-[8px] text-neutral-500 uppercase tracking-widest leading-tight mb-1">{label}</p>
+                  <p className="text-[15px] font-bold text-[#f6dd8c] font-mono-jet leading-none">${(val/1000).toFixed(1)}k</p>
+                  <p className="text-[8px] text-neutral-600 mt-0.5">{sub}</p>
+                </div>
+              ))}
+            </div>
+            <div className="bg-black border border-[#1e1e1e] rounded-xl p-3">
+              <div className="flex justify-between items-center mb-1.5">
+                <p className="text-[9px] text-neutral-500">Meta anual · Super Plus</p>
+                <p className="text-[9px] text-[#f6dd8c]">${(_annTarget/1000).toFixed(0)}k · {Math.round(_yearPct*100)}%</p>
+              </div>
+              <div className="h-2 bg-[#1e1e1e] rounded-full overflow-hidden">
+                <div className="h-full rounded-full transition-all duration-700"
+                  style={{width:`${_yearPct*100}%`,background:'linear-gradient(to right,#d9b64f,#f6dd8c)'}}/>
+              </div>
+              <p className="text-[8px] text-neutral-600 mt-1.5">Basado en plan semanal · {workDays.length} día{workDays.length!==1?'s':''}/semana</p>
+            </div>
+          </div>
+        </div>{/* end page 1 */}
+
+        {/* ── PAGE 2 · Plataformas ── */}
+        <div className="flex-shrink-0 w-full px-4 pb-6" style={{scrollSnapAlign:'start'}}>
+          {_platRows.length>0 ? (
+            <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">INGRESOS POR PLATAFORMA</p>
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr className="text-[8px] text-neutral-600 uppercase tracking-widest border-b border-[#1e1e1e]">
+                    <th className="text-left pb-2 font-semibold">Plataforma</th>
+                    <th className="text-right pb-2 font-semibold">Hoy</th>
+                    <th className="text-right pb-2 font-semibold">Semana</th>
+                    <th className="text-right pb-2 font-semibold">Mes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1a1a1a]">
+                  {_platRows.map(([platform,d])=>{
+                    const meta=getPlatformMeta(platform);
+                    return (
+                      <tr key={platform}>
+                        <td className="py-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`w-5 h-5 rounded-full ${meta.bg} flex items-center justify-center text-[7px] font-bold text-black flex-shrink-0`}>{meta.initial}</span>
+                            <span className="text-neutral-300 text-[10px] truncate max-w-[70px]">{platform}</span>
+                          </div>
+                        </td>
+                        <td className="py-2 text-right font-mono-jet text-neutral-500 text-[10px]">{d.today>0?`$${d.today.toFixed(0)}`:'—'}</td>
+                        <td className="py-2 text-right font-mono-jet text-[#f6dd8c] font-semibold text-[10px]">${d.week.toFixed(0)}</td>
+                        <td className="py-2 text-right font-mono-jet text-white text-[10px]">${d.month.toFixed(0)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <span className="text-[44px] mb-3">🚕</span>
+              <p className="text-[13px] font-semibold text-neutral-400 mb-1">Sin viajes registrados</p>
+              <p className="text-[11px] text-neutral-600 leading-relaxed">Registra tu primer viaje para ver<br/>el desglose por plataforma aquí</p>
+            </div>
+          )}
+        </div>{/* end page 2 */}
+
+        {/* ── PAGE 3 · Salud Financiera ── */}
+        <div className="flex-shrink-0 w-full px-4 space-y-4 pb-6" style={{scrollSnapAlign:'start'}}>
+          <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+            <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">
+              SALUD FINANCIERA · {currentTime.toLocaleDateString('es',{month:'long'}).toUpperCase()}
+            </p>
+            <div className="space-y-2.5">
+              {([
+                {label:'Ingresos reales este mes',        val:_earnMonth,   color:'text-[#4ade80]'},
+                {label:'Proyección fin de mes',            val:_projMonth,   color:'text-[#f6dd8c]'},
+                {label:'Gastos reales este mes',           val:-_expMonth,   color:'text-red-400'},
+                {label:'Gastos recurrentes proyectados',   val:-_monthFixed, color:'text-orange-400'},
+              ] as {label:string,val:number,color:string}[]).map(({label,val,color})=>(
+                <div key={label} className="flex justify-between items-center gap-2">
+                  <p className="text-[11px] text-neutral-400 leading-tight">{label}</p>
+                  <p className={`font-mono-jet text-[13px] font-bold flex-shrink-0 ${color}`}>
+                    {val<0?`-$${Math.abs(val).toFixed(2)}`:`$${val.toFixed(2)}`}
+                  </p>
+                </div>
+              ))}
+              <div className="pt-2.5 border-t border-[#2a2a2a] flex justify-between items-center">
+                <p className="text-[12px] font-bold text-white">GANANCIA NETA PROYECTADA</p>
+                <p className={`font-mono-jet text-[19px] font-bold ${_netProj>=0?'text-[#4ade80]':'text-red-400'}`}>
+                  {_netProj<0?`-$${Math.abs(_netProj).toFixed(2)}`:`$${_netProj.toFixed(2)}`}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>{/* end page 3 */}
+
+      </div>{/* end horizontal scroll */}
     </div>
   );
 
