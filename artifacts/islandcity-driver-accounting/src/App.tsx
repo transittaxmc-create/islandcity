@@ -38,6 +38,8 @@ type TripForm = {
   pickup: string;
   dropoff: string;
   notes: string;
+  tripDate: string; // YYYY-MM-DD — actual date the trip happened (editable for late entries)
+  tripTime: string; // HH:MM     — actual time the trip happened (editable for late entries)
 };
 
 type GpsState = {
@@ -524,9 +526,14 @@ export default function App() {
   const [storageBytes, setStorageBytes] = useState(0);
 
 
-  const [tripForm, setTripForm] = useState<TripForm>({
-    reference: "", earnings: "", tips: "", extraCash: "", toll: "",
-    platformFee: "", platform: "Uber", pickup: "", dropoff: "", notes: "",
+  const [tripForm, setTripForm] = useState<TripForm>(() => {
+    const _n = new Date();
+    return {
+      reference: "", earnings: "", tips: "", extraCash: "", toll: "",
+      platformFee: "", platform: "Uber", pickup: "", dropoff: "", notes: "",
+      tripDate: toYYYYMMDD(_n),
+      tripTime: _n.toTimeString().slice(0, 5),
+    };
   });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [inlineEditId, setInlineEditId] = useState<string | null>(null);
@@ -1171,7 +1178,9 @@ export default function App() {
   }, [currentTime, grossToday, todayGoal, perHourGross]);
 
   const resetForm = () => {
-    setTripForm({ reference: "", earnings: "", tips: "", extraCash: "", toll: "", platformFee: "", platform: "Uber", pickup: "", dropoff: "", notes: "" });
+    const _nr = new Date();
+    setTripForm({ reference: "", earnings: "", tips: "", extraCash: "", toll: "", platformFee: "", platform: "Uber", pickup: "", dropoff: "", notes: "",
+      tripDate: toYYYYMMDD(_nr), tripTime: _nr.toTimeString().slice(0, 5) });
     setEditingId(null);
     setDetectedToll(null);
     setTollManuallyEdited(false);
@@ -1195,9 +1204,9 @@ export default function App() {
       dropoff: tripForm.dropoff.trim(),
       notes: tripForm.notes,
       grandTotal: e + t + ex + tl - f,
-      time: now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
-      date: toYYYYMMDD(now),
-      timestamp: now.toISOString(),
+      time: (() => { try { return new Date(`${tripForm.tripDate}T${tripForm.tripTime}:00`).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); } catch { return now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); } })(),
+      date: tripForm.tripDate || toYYYYMMDD(now),
+      timestamp: (() => { try { return new Date(`${tripForm.tripDate}T${tripForm.tripTime}:00`).toISOString(); } catch { return now.toISOString(); } })(),
       gps: gps.lat && gps.lng ? { lat: gps.lat, lng: gps.lng, acc: gps.acc ?? undefined } : undefined,
       status: "pending" as const,
       reviewed: false,
@@ -1211,10 +1220,13 @@ export default function App() {
 
   const handleEditToEntry = (trip: Trip) => {
     setEditingId(trip.id);
+    const _tsDt = (() => { try { return new Date(trip.timestamp || (trip.date + 'T12:00:00')); } catch { return new Date(); } })();
     setTripForm({
       reference: trip.reference, earnings: String(trip.earnings), tips: String(trip.tips),
       extraCash: String(trip.extra), toll: String(trip.toll), platformFee: String(trip.fee),
       platform: trip.platform, pickup: trip.pickup, dropoff: trip.dropoff, notes: trip.notes,
+      tripDate: trip.date,
+      tripTime: _tsDt.toTimeString().slice(0, 5),
     });
     setActiveTab("ENTRY");
   };
@@ -1943,6 +1955,30 @@ export default function App() {
         <span className="px-3 py-1 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-200 text-[11px] tracking-[0.12em] font-semibold uppercase">
           {editingId ? "EDITING" : "NEW TRIP"}
         </span>
+      </div>
+
+      {/* ── Trip date & time — editable for late entries ── */}
+      <div className={`rounded-xl border px-3 py-2.5 ${editingId ? 'border-amber-400/40 bg-amber-400/5' : 'border-[#1e1e1e] bg-black/20'}`}>
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-[9px] tracking-[0.12em] text-neutral-200 font-bold uppercase">⏱ Trip Date &amp; Time</label>
+          <span className={`text-[9px] font-medium ${editingId ? 'text-amber-400' : 'text-neutral-400'}`}>
+            {editingId ? '⚠ Correct if this was entered late' : 'Change if entering late'}
+          </span>
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="date"
+            value={tripForm.tripDate}
+            onChange={e => setTripForm(s => ({ ...s, tripDate: e.target.value }))}
+            className="flex-1 h-10 rounded-xl bg-black border border-[#262626] px-3 text-white text-[13px] focus:outline-none focus:border-amber-400/40"
+          />
+          <input
+            type="time"
+            value={tripForm.tripTime}
+            onChange={e => setTripForm(s => ({ ...s, tripTime: e.target.value }))}
+            className="w-[110px] h-10 rounded-xl bg-black border border-[#262626] px-3 text-white text-[13px] focus:outline-none focus:border-amber-400/40"
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
