@@ -12,6 +12,7 @@ type Trip = {
   earnings: number;
   tips: number;
   extra: number;
+  otherCash: number;
   toll: number;
   fee: number;
   platform: string;
@@ -33,6 +34,7 @@ type TripForm = {
   earnings: string;
   tips: string;
   extraCash: string;
+  otherCashIncome: string;
   toll: string;
   platformFee: string;
   platform: string;
@@ -288,7 +290,8 @@ const platformMeta: Record<string, PlatformMeta> = {
   "Street Hail":       { initial: "SH", bg: "bg-[#6b7280]", tags: [], logo: "/logos/streethail.png" },
   "Island City Transit": { initial: "ICT", bg: "bg-[#1f2937]", tags: ["PRIVATE"] },
   "Transit Tax":       { initial: "TT", bg: "bg-[#374151]", tags: ["TAX"] },
-  "Other":             { initial: "O", bg: "bg-[#9ca3af]", tags: [] },
+  "Throo":             { initial: "T",   bg: "bg-[#e11d48]", tags: [] },
+  "Other":             { initial: "O",   bg: "bg-[#9ca3af]", tags: [] },
 };
 
 const getPlatformMeta = (name: string): PlatformMeta =>
@@ -539,13 +542,14 @@ export default function App() {
   const [tripForm, setTripForm] = useState<TripForm>(() => {
     const _n = new Date();
     return {
-      reference: "", earnings: "", tips: "", extraCash: "", toll: "",
+      reference: "", earnings: "", tips: "", extraCash: "", otherCashIncome: "", toll: "",
       platformFee: "", platform: "Uber", pickup: "", dropoff: "", notes: "",
       tripDate: toYYYYMMDD(_n),
       tripTime: _n.toTimeString().slice(0, 5),
     };
   });
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [showPlatformDropdown, setShowPlatformDropdown] = useState(false);
   const [inlineEditId, setInlineEditId] = useState<string | null>(null);
   const [cloudBackupAt, setCloudBackupAt] = useState<Date | null>(() => {
     try { const r = localStorage.getItem("ic-last-cloud-backup"); return r ? new Date(r) : null; } catch { return null; }
@@ -972,8 +976,9 @@ export default function App() {
     if (isNewDay) {
       // New day — reset entry form so the screen starts clean
       setTripForm({
-        reference: "", earnings: "", tips: "", extraCash: "", toll: "",
+        reference: "", earnings: "", tips: "", extraCash: "", otherCashIncome: "", toll: "",
         platformFee: "", platform: "Uber", pickup: "", dropoff: "", notes: "",
+        tripDate: todayYMD, tripTime: new Date().toTimeString().slice(0, 5),
       });
       setEditingId(null);
       showToast(`Nuevo día ${todayYMD} · pantallas limpias ✓`);
@@ -1043,13 +1048,28 @@ export default function App() {
   const numericFilter = (val: string) => val === "" || /^\d*\.?\d*$/.test(val);
 
   const grandTotalLive = useMemo(() => {
-    const e = parseFloat(tripForm.earnings) || 0;
-    const t = parseFloat(tripForm.tips) || 0;
+    const e  = parseFloat(tripForm.earnings) || 0;
+    const t  = parseFloat(tripForm.tips) || 0;
     const ex = parseFloat(tripForm.extraCash) || 0;
+    const oci = parseFloat(tripForm.otherCashIncome) || 0;
     const tl = parseFloat(tripForm.toll) || 0;
-    const f = parseFloat(tripForm.platformFee) || 0;
-    return e + t + ex + tl - f;
-  }, [tripForm.earnings, tripForm.tips, tripForm.extraCash, tripForm.toll, tripForm.platformFee]);
+    const f  = parseFloat(tripForm.platformFee) || 0;
+    return e + t + ex + oci + tl - f;
+  }, [tripForm.earnings, tripForm.tips, tripForm.extraCash, tripForm.otherCashIncome, tripForm.toll, tripForm.platformFee]);
+
+  // Top 3 platforms by trip count — used for FARE TYPE quick chips
+  const topPlatforms = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const tr of trips) counts[tr.platform] = (counts[tr.platform] || 0) + 1;
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([p]) => p);
+    const defaults = ["Uber", "Lyft", "Gallant"];
+    const result: string[] = [];
+    for (const p of [...sorted, ...defaults]) {
+      if (!result.includes(p)) result.push(p);
+      if (result.length === 3) break;
+    }
+    return result;
+  }, [trips]);
 
   const todayTrips = useMemo(() => {
     // Always use today's calendar date — include ALL trips from today regardless
@@ -1238,7 +1258,7 @@ export default function App() {
 
   const resetForm = () => {
     const _nr = new Date();
-    setTripForm({ reference: "", earnings: "", tips: "", extraCash: "", toll: "", platformFee: "", platform: "Uber", pickup: "", dropoff: "", notes: "",
+    setTripForm({ reference: "", earnings: "", tips: "", extraCash: "", otherCashIncome: "", toll: "", platformFee: "", platform: "Uber", pickup: "", dropoff: "", notes: "",
       tripDate: toYYYYMMDD(_nr), tripTime: _nr.toTimeString().slice(0, 5) });
     setEditingId(null);
     setDetectedToll(null);
@@ -1249,20 +1269,21 @@ export default function App() {
   const handleSave = () => {
     if (!tripForm.earnings && !tripForm.pickup) { showToast("Enter at least earnings or pickup location"); return; }
     const now = new Date();
-    const e = parseFloat(tripForm.earnings) || 0;
-    const t = parseFloat(tripForm.tips) || 0;
-    const ex = parseFloat(tripForm.extraCash) || 0;
-    const tl = parseFloat(tripForm.toll) || 0;
-    const f = parseFloat(tripForm.platformFee) || 0;
+    const e   = parseFloat(tripForm.earnings) || 0;
+    const t   = parseFloat(tripForm.tips) || 0;
+    const ex  = parseFloat(tripForm.extraCash) || 0;
+    const oci = parseFloat(tripForm.otherCashIncome) || 0;
+    const tl  = parseFloat(tripForm.toll) || 0;
+    const f   = parseFloat(tripForm.platformFee) || 0;
     const newTrip: Trip = {
       id: editingId || Date.now().toString(),
       reference: tripForm.reference.trim(),
-      earnings: e, tips: t, extra: ex, toll: tl, fee: f,
+      earnings: e, tips: t, extra: ex, otherCash: oci, toll: tl, fee: f,
       platform: tripForm.platform,
       pickup: tripForm.pickup.trim(),
       dropoff: tripForm.dropoff.trim(),
       notes: tripForm.notes,
-      grandTotal: e + t + ex + tl - f,
+      grandTotal: e + t + ex + oci + tl - f,
       time: (() => { try { return new Date(`${tripForm.tripDate}T${tripForm.tripTime}:00`).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); } catch { return now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); } })(),
       date: tripForm.tripDate || toYYYYMMDD(now),
       timestamp: (() => { try { return new Date(`${tripForm.tripDate}T${tripForm.tripTime}:00`).toISOString(); } catch { return now.toISOString(); } })(),
@@ -1282,7 +1303,7 @@ export default function App() {
     const _tsDt = (() => { try { return new Date(trip.timestamp || (trip.date + 'T12:00:00')); } catch { return new Date(); } })();
     setTripForm({
       reference: trip.reference, earnings: String(trip.earnings), tips: String(trip.tips),
-      extraCash: String(trip.extra), toll: String(trip.toll), platformFee: String(trip.fee),
+      extraCash: String(trip.extra), otherCashIncome: String(trip.otherCash ?? 0), toll: String(trip.toll), platformFee: String(trip.fee),
       platform: trip.platform, pickup: trip.pickup, dropoff: trip.dropoff, notes: trip.notes,
       tripDate: trip.date,
       tripTime: _tsDt.toTimeString().slice(0, 5),
@@ -1864,7 +1885,7 @@ export default function App() {
           : smartSuggestion.type === "purple" ? "bg-[#1a1625] border border-[#2a2340] border-l-[#a78bfa]"
           : smartSuggestion.type === "cold" ? "bg-[#0a0a14] border border-[#1a1a2a] border-l-[#60a5fa]"
           : smartSuggestion.type === "warn" ? "bg-[#1a0f00] border border-[#2a1800] border-l-[#f59e0b]"
-          : "bg-[#141414] border border-[#222] border-l-[#374151]"
+          : "bg-[#141414] border border-[#2e2e2e] border-l-[#374151]"
         }`}>
           <div className="flex items-start gap-2">
             <span className="text-[16px] flex-shrink-0 mt-0.5">{smartSuggestion.emoji}</span>
@@ -2078,180 +2099,161 @@ export default function App() {
   const meta = getPlatformMeta(tripForm.platform);
 
   const EntryFormContent = (
-    <div id="trip-entry-form" className="w-full max-w-[480px] mx-auto space-y-0">
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between pb-3">
-        <h2 className="text-white font-black text-[20px] tracking-[0.06em] uppercase">
-          {editingId ? "✎ EDIT TRIP" : "ADD NEW TRIP"}
-        </h2>
-        <span className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-widest uppercase ${
-          editingId ? "bg-amber-400/15 border border-amber-400/40 text-amber-400" : "bg-[#0a1a0a] border border-[#166534] text-[#4ade80]"
-        }`}>{editingId ? "EDITING" : "NEW"}</span>
+    <div id="trip-entry-form" className="w-full max-w-[480px] mx-auto">
+
+      {/* ══ HEADER: title left · live NET TRIP TOTAL right (no box) ══ */}
+      <div className="flex items-start justify-between pb-4">
+        <div>
+          <h2 className="text-white font-black text-[22px] tracking-[0.04em] uppercase leading-none">DAILY ENTRY</h2>
+          {editingId && <span className="text-[10px] text-amber-400 font-bold mt-1.5 block">✎ EDITING MODE</span>}
+        </div>
+        <div className="text-right">
+          <p className="text-[9px] text-neutral-500 uppercase tracking-[0.14em] font-bold">NET TRIP TOTAL</p>
+          <p className="font-mono-jet font-black leading-none mt-0.5"
+            style={{ fontSize: 26, color: grandTotalLive > 0 ? "#facc15" : "#3a3a3a",
+              textShadow: grandTotalLive > 0 ? "0 0 16px rgba(250,204,21,0.55)" : "none" }}>
+            ${grandTotalLive.toFixed(2)}
+          </p>
+        </div>
       </div>
 
-      {/* ── DATE / TIME — compact row ── */}
-      <div className={`flex gap-2 pb-3 ${editingId ? '' : ''}`}>
+      {/* ── DATE / TIME ── */}
+      <div className="flex gap-2 pb-4">
         <input type="date" value={tripForm.tripDate}
           onChange={e => setTripForm(s => ({ ...s, tripDate: e.target.value }))}
           className={`flex-1 h-10 rounded-xl px-3 text-white text-[13px] focus:outline-none border ${
-            editingId ? "bg-amber-400/5 border-amber-400/40 focus:border-amber-400" : "bg-[#111] border-[#222] focus:border-[#333]"
+            editingId ? "bg-amber-400/5 border-amber-400/40 focus:border-amber-400" : "bg-[#111] border-[#333] focus:border-[#555]"
           }`} />
         <input type="time" value={tripForm.tripTime}
           onChange={e => setTripForm(s => ({ ...s, tripTime: e.target.value }))}
           className={`w-[108px] h-10 rounded-xl px-3 text-white text-[13px] focus:outline-none border ${
-            editingId ? "bg-amber-400/5 border-amber-400/40 focus:border-amber-400" : "bg-[#111] border-[#222] focus:border-[#333]"
+            editingId ? "bg-amber-400/5 border-amber-400/40 focus:border-amber-400" : "bg-[#111] border-[#333] focus:border-[#555]"
           }`} />
-        {editingId && <span className="self-center text-[9px] text-amber-400 font-bold">⚠ LATE?</span>}
+        {editingId && <span className="self-center text-[9px] text-amber-400 font-bold flex-shrink-0">⚠ LATE?</span>}
       </div>
 
-      {/* ══ PLATFORM ════════════════════════════════════ */}
-      <div className="border-t border-[#1a1a1a] pt-3 pb-1">
-        <p className="text-[10px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-2">PLATFORM</p>
-
-        {/* helper: logo container — siempre fondo blanco para que se vea claro */}
-        {/* TOP 3 — Uber · Lyft · Empower */}
-        <div className="grid grid-cols-3 gap-2 mb-2">
-          {(["Uber", "Lyft", "Empower"] as const).map(name => {
+      {/* ══ FARE TYPE — quick chips (top 3 platforms by history) ══ */}
+      <div className="border-t border-[#252525] pt-3 pb-3">
+        <p className="text-[9px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-2">FARE TYPE</p>
+        <div className="grid grid-cols-3 gap-2">
+          {topPlatforms.map(name => {
             const m = getPlatformMeta(name);
             const isSel = tripForm.platform === name;
+            const short = name === "Aventus Ride" ? "Aventus" : name === "Classic Ryde" ? "Classic" : name === "Island City Transit" ? "IC Transit" : name;
             return (
-              <button key={name} type="button" onClick={() => setTripForm(s => ({ ...s, platform: name }))}
-                className="h-[62px] rounded-2xl flex flex-col items-center justify-center gap-1 transition-all active:scale-95 border-2"
+              <button key={name} type="button"
+                onClick={() => { setTripForm(s => ({ ...s, platform: name })); setShowPlatformDropdown(false); }}
+                className="h-[46px] rounded-2xl flex items-center gap-2 px-3 transition-all active:scale-95 border-2"
                 style={{
-                  background: isSel ? "rgba(250,204,21,0.08)" : "#111",
-                  borderColor: isSel ? "#facc15" : "#1e1e1e",
-                  boxShadow: isSel ? "0 0 14px rgba(250,204,21,0.2)" : "none",
+                  background: isSel ? "rgba(250,204,21,0.1)" : "#0f0f0f",
+                  borderColor: isSel ? "#facc15" : "#2e2e2e",
+                  boxShadow: isSel ? "0 0 12px rgba(250,204,21,0.22)" : "none",
                 }}>
-                {/* fondo blanco siempre — logo claro y visible */}
-                <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center flex-shrink-0 overflow-hidden">
-                  {m.logo
-                    ? <img src={m.logo} alt={name} className="w-7 h-7 object-contain" />
-                    : <span className="text-[13px] font-black text-black">{m.initial}</span>
-                  }
+                <div className="w-7 h-7 rounded-lg bg-white flex items-center justify-center flex-shrink-0 overflow-hidden">
+                  {m.logo ? <img src={m.logo} alt={name} className="w-5 h-5 object-contain" />
+                    : <span className="text-[9px] font-black text-black">{m.initial}</span>}
                 </div>
-                <span className="text-[11px] font-bold leading-none" style={{ color: isSel ? "#facc15" : "#555" }}>{name}</span>
+                <span className="text-[11px] font-bold truncate leading-none" style={{ color: isSel ? "#facc15" : "#888" }}>{short}</span>
+                {isSel && <span className="ml-auto text-[#facc15] text-[10px] flex-shrink-0">✓</span>}
               </button>
             );
           })}
         </div>
-
-        {/* VOUCHER — 3 cols, mismo alto que TOP 3 */}
-        <div className="mb-1.5">
-          <p className="text-[8px] tracking-[0.2em] text-neutral-600 font-bold uppercase mb-1 flex items-center gap-1.5">
-            <span className="flex-1 h-px bg-[#1a1a1a]"/>VOUCHER<span className="flex-1 h-px bg-[#1a1a1a]"/>
-          </p>
-          <div className="grid grid-cols-3 gap-2">
-            {(["Gallant", "Aventus Ride", "Classic Ryde"] as const).map(name => {
-              const m = getPlatformMeta(name);
-              const isSel = tripForm.platform === name;
-              const short = name === "Aventus Ride" ? "Aventus" : name === "Classic Ryde" ? "Classic" : name;
-              return (
-                <button key={name} type="button" onClick={() => setTripForm(s => ({ ...s, platform: name }))}
-                  className="h-[62px] rounded-2xl flex flex-col items-center justify-center gap-1 transition-all active:scale-95 border-2"
-                  style={{
-                    background: isSel ? "rgba(250,204,21,0.08)" : "#111",
-                    borderColor: isSel ? "#facc15" : "#1e1e1e",
-                    boxShadow: isSel ? "0 0 14px rgba(250,204,21,0.2)" : "none",
-                  }}>
-                  <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center flex-shrink-0 overflow-hidden">
-                    {m.logo
-                      ? <img src={m.logo} alt={name} className="w-7 h-7 object-contain" />
-                      : <span className="text-[13px] font-black" style={{ color: m.bg.replace("bg-[", "").replace("]", "") }}>{m.initial}</span>
-                    }
-                  </div>
-                  <span className="text-[11px] font-bold leading-none" style={{ color: isSel ? "#facc15" : "#555" }}>{short}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* ACCESS-A-RIDE — 2 cols */}
-        <div className="mb-1.5">
-          <p className="text-[8px] tracking-[0.2em] text-[#3a5070] font-bold uppercase mb-1 flex items-center gap-1.5">
-            <span className="flex-1 h-px bg-[#0f1a2a]"/>ACCESS-A-RIDE<span className="flex-1 h-px bg-[#0f1a2a]"/>
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            {(["EcoRide", "Aki Technology"] as const).map(name => {
-              const m = getPlatformMeta(name);
-              const isSel = tripForm.platform === name;
-              const short = name === "Aki Technology" ? "Aki Technology" : name;
-              return (
-                <button key={name} type="button" onClick={() => setTripForm(s => ({ ...s, platform: name }))}
-                  className="h-[52px] rounded-2xl flex items-center gap-3 px-3 transition-all active:scale-95 border"
-                  style={{
-                    background: isSel ? "rgba(96,165,250,0.08)" : "#0a0f18",
-                    borderColor: isSel ? "#60a5fa" : "#1e2a3a",
-                    boxShadow: isSel ? "0 0 10px rgba(96,165,250,0.15)" : "none",
-                  }}>
-                  <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center flex-shrink-0 overflow-hidden">
-                    {m.logo
-                      ? <img src={m.logo} alt={name} className="w-7 h-7 object-contain" />
-                      : <span className="text-[13px] font-black text-sky-600">{m.initial}</span>
-                    }
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[12px] font-bold truncate leading-tight" style={{ color: isSel ? "#60a5fa" : "#888" }}>{short}</p>
-                    <p className="text-[9px] text-[#3a5070] font-semibold leading-none mt-0.5">ACCESS-A-RIDE</p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* OTHER — 3 cols */}
-        <div>
-          <p className="text-[8px] tracking-[0.2em] text-neutral-600 font-bold uppercase mb-1 flex items-center gap-1.5">
-            <span className="flex-1 h-px bg-[#1a1a1a]"/>OTHER<span className="flex-1 h-px bg-[#1a1a1a]"/>
-          </p>
-          <div className="grid grid-cols-3 gap-2">
-            {(["Island City Transit", "Transit Tax", "Other"] as const).map(name => {
-              const m = getPlatformMeta(name);
-              const isSel = tripForm.platform === name;
-              const short = name === "Island City Transit" ? "IC Transit" : name === "Transit Tax" ? "Transit Tax" : name;
-              const initColor = name === "Island City Transit" ? "#6366f1" : name === "Transit Tax" ? "#14b8a6" : "#9ca3af";
-              return (
-                <button key={name} type="button" onClick={() => setTripForm(s => ({ ...s, platform: name }))}
-                  className="h-[52px] rounded-xl flex flex-col items-center justify-center gap-1 transition-all active:scale-95 border"
-                  style={{
-                    background: isSel ? "rgba(250,204,21,0.06)" : "#0d0d0d",
-                    borderColor: isSel ? "#facc15" : "#1a1a1a",
-                  }}>
-                  <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center flex-shrink-0">
-                    <span className="text-[10px] font-black" style={{ color: initColor }}>{m.initial}</span>
-                  </div>
-                  <span className="text-[9px] font-bold text-center leading-none" style={{ color: isSel ? "#facc15" : "#555" }}>{short}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
       </div>
 
-      {/* ══ EARNINGS ════════════════════════════════════ */}
-      <div className="border-t border-[#1a1a1a] pt-3">
-        <p className="text-[10px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-2">EARNINGS <span className="text-neutral-600 normal-case font-normal tracking-normal">· Fare</span></p>
-        <div className="flex items-center rounded-2xl border-2 focus-within:border-[#facc15]/70 transition-colors"
-          style={{ height: 68, background: "#080808", borderColor: tripForm.earnings ? "#facc15" : "#1a1a1a" }}>
-          <span className="pl-4 text-[24px] font-black text-neutral-600 select-none">$</span>
+      {/* ══ REVENUE SOURCE — dropdown ════════════════════════════ */}
+      <div className="border-t border-[#252525] pt-3 pb-3">
+        <p className="text-[9px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-2">REVENUE SOURCE</p>
+
+        {/* Collapsed trigger */}
+        <button type="button" onClick={() => setShowPlatformDropdown(v => !v)}
+          className="w-full h-[58px] rounded-2xl flex items-center gap-3 px-4 border-2 transition-all active:scale-[0.99]"
+          style={{
+            background: "#0f0f0f",
+            borderColor: showPlatformDropdown ? "#facc15" : "#333",
+            boxShadow: showPlatformDropdown ? "0 0 14px rgba(250,204,21,0.14)" : "none",
+          }}>
+          <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center flex-shrink-0 overflow-hidden">
+            {meta.logo ? <img src={meta.logo} alt={tripForm.platform} className="w-8 h-8 object-contain" />
+              : <span className="text-[14px] font-black text-black">{meta.initial}</span>}
+          </div>
+          <div className="flex-1 text-left min-w-0">
+            <p className="text-white font-bold text-[15px] truncate leading-tight">{tripForm.platform}</p>
+            {meta.tags.length > 0 && (
+              <p className="text-[9px] text-neutral-500 font-semibold leading-none mt-0.5">{meta.tags.join(" · ")}</p>
+            )}
+          </div>
+          <span className="text-neutral-400 text-[14px] flex-shrink-0 transition-transform duration-200"
+            style={{ transform: showPlatformDropdown ? "rotate(180deg)" : "none" }}>▾</span>
+        </button>
+
+        {/* Expanded list */}
+        {showPlatformDropdown && (
+          <div className="mt-2 rounded-2xl border border-[#333] bg-[#0a0a0a] overflow-hidden">
+            {([
+              { label: "RIDESHARE",      platforms: ["Uber", "Lyft", "Empower"] },
+              { label: "VOUCHER",        platforms: ["Gallant", "Aventus Ride", "Classic Ryde"] },
+              { label: "ACCESS-A-RIDE",  platforms: ["EcoRide", "Aki Technology"] },
+              { label: "OTHER",          platforms: ["Island City Transit", "Transit Tax", "Throo", "Other"] },
+            ] as { label: string; platforms: string[] }[]).map(group => (
+              <div key={group.label}>
+                <p className="px-4 pt-2.5 pb-1 text-[8px] tracking-[0.2em] text-neutral-600 font-bold uppercase">{group.label}</p>
+                {group.platforms.map(name => {
+                  const m2 = getPlatformMeta(name);
+                  const isSel = tripForm.platform === name;
+                  return (
+                    <button key={name} type="button"
+                      onClick={() => { setTripForm(s => ({ ...s, platform: name })); setShowPlatformDropdown(false); }}
+                      className="w-full flex items-center gap-3 px-4 h-[52px] transition-all active:bg-white/5"
+                      style={{
+                        background: isSel ? "rgba(250,204,21,0.07)" : "transparent",
+                        borderLeft: isSel ? "3px solid #facc15" : "3px solid transparent",
+                      }}>
+                      <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center flex-shrink-0 overflow-hidden">
+                        {m2.logo ? <img src={m2.logo} alt={name} className="w-6 h-6 object-contain" />
+                          : <span className="text-[11px] font-black text-black">{m2.initial}</span>}
+                      </div>
+                      <span className="flex-1 text-left text-[14px] font-semibold truncate" style={{ color: isSel ? "#facc15" : "#ccc" }}>{name}</span>
+                      {isSel && <span className="text-[#facc15] text-[16px] flex-shrink-0">✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ══ GROSS FARE — hero field ════════════════════════════════ */}
+      <div className="border-t border-[#252525] pt-3 pb-3">
+        <p className="text-[9px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-2">GROSS FARE</p>
+        <div className="flex items-center rounded-2xl transition-all"
+          style={{
+            height: 72, background: "#080808",
+            border: `2.5px solid ${tripForm.earnings ? "#facc15" : "#333"}`,
+            boxShadow: tripForm.earnings ? "0 0 24px rgba(250,204,21,0.18)" : "none",
+          }}>
+          <span className="pl-4 font-black select-none" style={{ fontSize: 30, color: tripForm.earnings ? "#facc15" : "#555" }}>$</span>
           <input inputMode="decimal" value={tripForm.earnings}
             onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, earnings: e.target.value })); }}
             placeholder="0.00"
-            className="flex-1 h-full bg-transparent pl-2 pr-4 text-[38px] font-black font-mono-jet placeholder:text-[#2a2a2a] focus:outline-none"
-            style={{ color: tripForm.earnings ? "#facc15" : undefined }} />
+            className="flex-1 h-full bg-transparent pl-2 pr-4 font-black font-mono-jet placeholder:text-[#2a2a2a] focus:outline-none"
+            style={{ fontSize: 42, color: tripForm.earnings ? "#facc15" : undefined }} />
         </div>
       </div>
 
-      {/* ══ PICKUP ══════════════════════════════════════ */}
-      <div className="border-t border-[#1a1a1a] pt-3">
-        <p className="text-[10px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-1.5">PICKUP</p>
-        <div className="flex items-center gap-2 rounded-xl border border-[#1e1e1e] bg-[#080808] px-3 h-11">
-          <span className="text-[#4ade80] text-[16px] flex-shrink-0">📍</span>
+      {/* ══ ORIGIN (PICKUP LOCATION) ══════════════════════════════ */}
+      <div className="border-t border-[#252525] pt-3">
+        <p className="text-[9px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-1.5">
+          ORIGIN <span className="text-neutral-600 normal-case font-normal tracking-normal">· Pickup Location</span>
+        </p>
+        <div className="flex items-center gap-2 rounded-xl bg-[#080808] px-3 border"
+          style={{ height: 54, borderColor: "#444" }}>
+          <span className="text-[#4ade80] text-[18px] flex-shrink-0">📍</span>
           <input value={tripForm.pickup}
             onChange={e => setTripForm(s => ({ ...s, pickup: e.target.value }))}
-            placeholder={gps.lat ? `${gps.lat.toFixed(4)}, ${gps.lng?.toFixed(4)}` : "Address or GPS location"}
-            className="flex-1 bg-transparent text-white text-[13px] placeholder:text-[#333] focus:outline-none min-w-0" />
+            placeholder={gps.lat ? `${gps.lat.toFixed(4)}, ${gps.lng?.toFixed(4)}` : "Street, City"}
+            className="flex-1 bg-transparent text-white text-[15px] placeholder:text-[#444] focus:outline-none min-w-0" />
           <button type="button" onClick={async () => {
             if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
             setPickupResolving(true);
@@ -2263,7 +2265,7 @@ export default function App() {
               setTripForm(s => ({ ...s, pickup: `${gps.lat!.toFixed(5)},${gps.lng!.toFixed(5)}` }));
               showToast("GPS coordinates saved (offline)");
             } finally { setPickupResolving(false); }
-          }} className="flex-shrink-0 w-8 h-8 rounded-lg bg-[#052e16] border border-[#166534] flex items-center justify-center text-[12px] active:scale-90 transition-all">
+          }} className="flex-shrink-0 w-10 h-10 rounded-xl bg-[#052e16] border border-[#166534] flex items-center justify-center text-[11px] font-bold text-[#4ade80] active:scale-90 transition-all">
             {pickupResolving ? <span className="animate-spin text-[10px]">⏳</span> : "GPS"}
           </button>
         </div>
@@ -2274,15 +2276,18 @@ export default function App() {
         )}
       </div>
 
-      {/* ══ DROP-OFF ════════════════════════════════════ */}
-      <div className="border-t border-[#1a1a1a] pt-3">
-        <p className="text-[10px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-1.5">DROP-OFF</p>
-        <div className="flex items-center gap-2 rounded-xl border border-[#1e1e1e] bg-[#080808] px-3 h-11">
-          <span className="text-[#60a5fa] text-[16px] flex-shrink-0">📍</span>
+      {/* ══ DESTINATION (DROP-OFF LOCATION) ══════════════════════ */}
+      <div className="border-t border-[#252525] pt-3 pb-3">
+        <p className="text-[9px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-1.5">
+          DESTINATION <span className="text-neutral-600 normal-case font-normal tracking-normal">· Drop-off Location</span>
+        </p>
+        <div className="flex items-center gap-2 rounded-xl bg-[#080808] px-3 border"
+          style={{ height: 54, borderColor: "#444" }}>
+          <span className="text-[#60a5fa] text-[18px] flex-shrink-0">📍</span>
           <input value={tripForm.dropoff}
             onChange={e => setTripForm(s => ({ ...s, dropoff: e.target.value }))}
-            placeholder="Address or destination"
-            className="flex-1 bg-transparent text-white text-[13px] placeholder:text-[#333] focus:outline-none min-w-0" />
+            placeholder="Street, City"
+            className="flex-1 bg-transparent text-white text-[15px] placeholder:text-[#444] focus:outline-none min-w-0" />
           <button type="button" onClick={async () => {
             if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
             setDropoffResolving(true);
@@ -2294,116 +2299,116 @@ export default function App() {
               setTripForm(s => ({ ...s, dropoff: `${gps.lat!.toFixed(5)},${gps.lng!.toFixed(5)}` }));
               showToast("GPS coordinates saved (offline)");
             } finally { setDropoffResolving(false); }
-          }} className="flex-shrink-0 w-8 h-8 rounded-lg bg-[#0c1a33] border border-[#1e3a8a] flex items-center justify-center text-[12px] active:scale-90 transition-all">
+          }} className="flex-shrink-0 w-10 h-10 rounded-xl bg-[#0c1a33] border border-[#1e3a8a] flex items-center justify-center text-[11px] font-bold text-[#60a5fa] active:scale-90 transition-all">
             {dropoffResolving ? <span className="animate-spin text-[10px]">⏳</span> : "GPS"}
           </button>
         </div>
       </div>
 
-      {/* ══ LOCATION CATEGORY ═══════════════════════════ */}
-      <div className="border-t border-[#1a1a1a] pt-3">
+      {/* ══ LOCATION CATEGORY ════════════════════════════════════ */}
+      <div className="border-t border-[#252525] pt-3 pb-3">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-[10px] tracking-[0.2em] text-neutral-500 font-bold uppercase">LOCATION CATEGORY</p>
+          <p className="text-[9px] tracking-[0.2em] text-neutral-500 font-bold uppercase">LOCATION CATEGORY</p>
           <div className="flex gap-1.5">
             <button type="button" onClick={() => { if (!gps.lat) startGPS(); setShowPickupMenu(v => !v); setShowDropoffMenu(false); }}
-              className={`px-2 h-6 rounded-full text-[8px] font-bold tracking-wider border transition-all ${showPickupMenu ? "bg-[#052e16] border-[#166534] text-[#4ade80]" : "bg-transparent border-[#1e1e1e] text-neutral-500"}`}>
-              📍 PICKUP
-            </button>
+              className={`px-2.5 h-6 rounded-full text-[8px] font-bold tracking-wider border transition-all ${
+                showPickupMenu ? "bg-[#052e16] border-[#166534] text-[#4ade80]" : "bg-transparent border-[#333] text-neutral-400 hover:text-neutral-300"
+              }`}>PICKUP</button>
             <button type="button" onClick={() => { if (!gps.lat) startGPS(); setShowDropoffMenu(v => !v); setShowPickupMenu(false); }}
-              className={`px-2 h-6 rounded-full text-[8px] font-bold tracking-wider border transition-all ${showDropoffMenu ? "bg-[#0c1a33] border-[#1e3a8a] text-[#60a5fa]" : "bg-transparent border-[#1e1e1e] text-neutral-500"}`}>
-              📍 DROP-OFF
-            </button>
+              className={`px-2.5 h-6 rounded-full text-[8px] font-bold tracking-wider border transition-all ${
+                showDropoffMenu ? "bg-[#0c1a33] border-[#1e3a8a] text-[#60a5fa]" : "bg-transparent border-[#333] text-neutral-400 hover:text-neutral-300"
+              }`}>DROP-OFF</button>
           </div>
         </div>
-
-        {/* Category grid — always visible, tap pickup/dropoff toggle to assign */}
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-5 gap-1.5">
           {LOCATION_CATEGORIES.map(cat => {
             const ICONS: Record<string,string> = {
               "Hospital":"🏥","City":"🏙","Home":"🏠","Suburbs":"🌳",
-              "Office":"🏢","Airport":"✈️","Restaurant":"🍽","Two-cities":"🗺",
-              "Hotel":"🏨","Mall":"🛍","School":"🎓","Station":"🚉",
+              "Office":"🏢","Airport":"✈️","Restaurant":"🍽","Train/Bus":"🚉",
+              "Hotel":"🏨","Tourist":"🌍",
             };
             const icon = ICONS[cat] || "📌";
-            const isPickupSel = showPickupMenu;
-            const isDropSel = showDropoffMenu;
+            const isPickupSet = tripForm.pickup.startsWith(cat);
+            const isDropSet   = tripForm.dropoff.startsWith(cat);
+            const isSet = isPickupSet || isDropSet;
             return (
               <button key={cat} type="button" onClick={() => {
                 const coord = gps.lat ? ` (${gps.lat.toFixed(4)},${gps.lng?.toFixed(4)})` : "";
                 if (showPickupMenu) {
                   setTripForm(s => ({ ...s, pickup: `${cat}${coord}` }));
-                  setShowPickupMenu(false);
-                  showToast(`Pickup: ${cat}`);
+                  setShowPickupMenu(false); showToast(`Pickup: ${cat}`);
                 } else if (showDropoffMenu) {
                   setTripForm(s => ({ ...s, dropoff: `${cat}${coord}` }));
-                  setShowDropoffMenu(false);
-                  showToast(`Drop-off: ${cat}`);
+                  setShowDropoffMenu(false); showToast(`Drop-off: ${cat}`);
                 } else {
-                  // Default: set dropoff
                   setTripForm(s => ({ ...s, dropoff: `${cat}${coord}` }));
                   showToast(`Drop-off: ${cat}`);
                 }
               }}
-                className="h-14 rounded-xl flex flex-col items-center justify-center gap-1 border transition-all active:scale-95"
+                className="h-[52px] rounded-xl flex flex-col items-center justify-center gap-0.5 border-2 transition-all active:scale-95"
                 style={{
-                  background: (isPickupSel || isDropSel) ? "#0f0f0f" : "#0a0a0a",
-                  borderColor: (isPickupSel || isDropSel) ? "#2a2a2a" : "#141414",
+                  background: isSet ? "rgba(250,204,21,0.08)" : (showPickupMenu || showDropoffMenu) ? "#111" : "#0a0a0a",
+                  borderColor: isSet ? "#facc15" : (showPickupMenu || showDropoffMenu) ? "#2e2e2e" : "#1e1e1e",
                 }}>
-                <span className="text-[20px] leading-none">{icon}</span>
-                <span className="text-[8px] font-bold text-neutral-500 leading-none">{cat}</span>
+                <span className="text-[18px] leading-none">{icon}</span>
+                <span className="text-[7px] font-bold leading-none" style={{ color: isSet ? "#facc15" : "#666" }}>{cat}</span>
               </button>
             );
           })}
         </div>
         {gps.lat && (showPickupMenu || showDropoffMenu) && (
           <p className="font-mono-jet text-[9px] text-[#4ade80] mt-1.5 truncate px-0.5">
-            📍 GPS · {gps.lat.toFixed(4)}, {gps.lng?.toFixed(4)}{gpsAddress ? ` · ${gpsAddress}` : ""}
+            📍 {gps.lat.toFixed(4)}, {gps.lng?.toFixed(4)}{gpsAddress ? ` · ${gpsAddress}` : ""}
           </p>
         )}
       </div>
 
-      {/* ══ FINANCIAL DETAILS ═══════════════════════════ */}
-      <div className="border-t border-[#1a1a1a] pt-3">
-        <p className="text-[10px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-2">EXTRAS</p>
+      {/* ══ ADDITIONAL INCOME & DEDUCTIONS ═══════════════════════ */}
+      <div className="border-t border-[#252525] pt-3 pb-3">
+        <p className="text-[9px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-2">ADDITIONAL INCOME &amp; DEDUCTIONS</p>
         <div className="grid grid-cols-2 gap-2">
-          {/* TIPS */}
-          <div>
-            <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-wider">Tips</label>
-            <div className="flex items-center h-10 rounded-xl border border-[#1e1e1e] bg-[#080808] px-3 mt-1 focus-within:border-[#4ade80]/40">
-              <span className="text-neutral-600 text-[13px] mr-1">$</span>
+          {/* TIPS (GRATUITY) */}
+          <div className="rounded-2xl border bg-[#080808] px-3 pt-2.5 pb-3 focus-within:border-[#facc15]/50 transition-colors"
+            style={{ minHeight: 64, borderColor: "#333" }}>
+            <label className="text-[8px] text-neutral-500 font-bold uppercase tracking-wider block mb-2">TIPS (GRATUITY)</label>
+            <div className="flex items-center">
+              <span className="text-neutral-500 text-[13px] mr-1.5">$</span>
               <input inputMode="decimal" value={tripForm.tips}
                 onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, tips: e.target.value })); }}
                 placeholder="0.00"
-                className="flex-1 bg-transparent text-white text-[15px] font-bold font-mono-jet placeholder:text-[#2a2a2a] focus:outline-none" />
+                className="flex-1 bg-transparent text-white text-[20px] font-bold font-mono-jet placeholder:text-[#2a2a2a] focus:outline-none" />
             </div>
           </div>
-          {/* EXTRA CASH */}
-          <div>
-            <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-wider">Extra Cash</label>
-            <div className="flex items-center h-10 rounded-xl border border-[#1e1e1e] bg-[#080808] px-3 mt-1">
-              <span className="text-neutral-600 text-[13px] mr-1">$</span>
-              <input inputMode="decimal" value={tripForm.extraCash}
-                onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, extraCash: e.target.value })); }}
+
+          {/* OTHER CASH INCOME */}
+          <div className="rounded-2xl border bg-[#080808] px-3 pt-2.5 pb-3 focus-within:border-[#facc15]/50 transition-colors"
+            style={{ minHeight: 64, borderColor: "#333" }}>
+            <label className="text-[8px] text-neutral-500 font-bold uppercase tracking-wider block mb-2">OTHER CASH INCOME</label>
+            <div className="flex items-center">
+              <span className="text-neutral-500 text-[13px] mr-1.5">$</span>
+              <input inputMode="decimal" value={tripForm.otherCashIncome}
+                onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, otherCashIncome: e.target.value })); }}
                 placeholder="0.00"
-                className="flex-1 bg-transparent text-white text-[15px] font-bold font-mono-jet placeholder:text-[#2a2a2a] focus:outline-none" />
+                className="flex-1 bg-transparent text-white text-[20px] font-bold font-mono-jet placeholder:text-[#2a2a2a] focus:outline-none" />
             </div>
           </div>
-          {/* TOLL */}
-          <div>
-            <div className="flex items-center gap-1.5">
-              <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-wider">Toll</label>
+
+          {/* TOLL REIMBURSEMENT */}
+          <div className="rounded-2xl border bg-[#080808] px-3 pt-2.5 pb-3 transition-colors"
+            style={{ minHeight: 64, borderColor: detectedToll && !tollManuallyEdited ? "#166534" : detectedToll && tollManuallyEdited ? "#92400e" : "#333" }}>
+            <div className="flex items-center gap-1.5 mb-2">
+              <label className="text-[8px] text-neutral-500 font-bold uppercase tracking-wider">TOLL REIMB.</label>
               {detectedToll ? (
                 tollManuallyEdited
                   ? <span className="text-[7px] font-bold text-amber-400 animate-pulse">✎ EDITED</span>
-                  : <span className="text-[7px] font-bold text-[#4ade80]">⚡ {detectedToll.plaza}</span>
+                  : <span className="text-[7px] font-bold text-[#4ade80]">⚡ AUTO</span>
               ) : <span className="text-[7px] font-bold text-neutral-600">GPS AUTO</span>}
             </div>
             {detectedToll && (
-              <p className="text-[8px] text-neutral-600 font-mono-jet mt-0.5">${detectedToll.rate.toFixed(2)}{detectedToll.rate === 16.79 ? " Peak" : detectedToll.rate === 14.79 ? " Off-pk" : ""}</p>
+              <p className="text-[8px] text-neutral-600 font-mono-jet mb-1 -mt-1">{detectedToll.plaza} · ${detectedToll.rate.toFixed(2)}{detectedToll.rate === 16.79 ? " Peak" : detectedToll.rate === 14.79 ? " Off-pk" : ""}</p>
             )}
-            <div className="flex items-center h-10 rounded-xl border bg-[#080808] px-3 mt-1 focus-within:border-[#4ade80]/40"
-              style={{ borderColor: detectedToll && !tollManuallyEdited ? "#166534" : detectedToll && tollManuallyEdited ? "#92400e" : "#1e1e1e" }}>
-              <span className="text-neutral-600 text-[13px] mr-1">$</span>
+            <div className="flex items-center">
+              <span className="text-neutral-500 text-[13px] mr-1.5">$</span>
               <input inputMode="decimal" value={tripForm.toll}
                 onChange={e => {
                   if (!numericFilter(e.target.value)) return;
@@ -2411,73 +2416,59 @@ export default function App() {
                   if (detectedToll) setTollManuallyEdited(true);
                 }}
                 placeholder="0.00"
-                className="flex-1 bg-transparent text-white text-[15px] font-bold font-mono-jet placeholder:text-[#2a2a2a] focus:outline-none" />
+                className="flex-1 bg-transparent text-white text-[20px] font-bold font-mono-jet placeholder:text-[#2a2a2a] focus:outline-none" />
             </div>
           </div>
-          {/* PLATFORM FEE */}
-          <div>
-            <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-wider">Platform Fee</label>
-            <div className="flex items-center h-10 rounded-xl border border-[#1e1e1e] bg-[#080808] px-3 mt-1">
-              <span className="text-neutral-600 text-[13px] mr-1">$</span>
+
+          {/* PLATFORM COMMISSION */}
+          <div className="rounded-2xl border bg-[#080808] px-3 pt-2.5 pb-3 focus-within:border-red-500/40 transition-colors"
+            style={{ minHeight: 64, borderColor: "#333" }}>
+            <label className="text-[8px] text-neutral-500 font-bold uppercase tracking-wider block mb-2">PLATFORM COMM.</label>
+            <div className="flex items-center">
+              <span className="text-neutral-500 text-[13px] mr-1.5">$</span>
               <input inputMode="decimal" value={tripForm.platformFee}
                 onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, platformFee: e.target.value })); }}
                 placeholder="0.00"
-                className="flex-1 bg-transparent text-white text-[15px] font-bold font-mono-jet placeholder:text-[#2a2a2a] focus:outline-none" />
+                className="flex-1 bg-transparent text-white text-[20px] font-bold font-mono-jet placeholder:text-[#2a2a2a] focus:outline-none" />
             </div>
           </div>
         </div>
       </div>
 
-      {/* ══ REFERENCE + NOTES ═══════════════════════════ */}
-      <div className="border-t border-[#1a1a1a] pt-3 space-y-2">
-        <div className="flex items-center gap-2 rounded-xl border border-[#141414] bg-[#080808] px-3 h-10">
-          <span className="text-[9px] text-neutral-600 font-bold uppercase tracking-wider flex-shrink-0">REF</span>
+      {/* ══ REF + NOTES ═══════════════════════════════════════════ */}
+      <div className="border-t border-[#252525] pt-3 pb-3 space-y-2">
+        <div className="flex items-center gap-3 rounded-xl border bg-[#080808] px-3 h-10" style={{ borderColor: "#2e2e2e" }}>
+          <span className="text-[9px] text-neutral-500 font-bold uppercase tracking-wider flex-shrink-0">REF</span>
           <input value={tripForm.reference}
             onChange={e => setTripForm(s => ({ ...s, reference: e.target.value }))}
-            placeholder="Invoice / reference number (optional)"
-            className="flex-1 bg-transparent text-white text-[12px] placeholder:text-[#2a2a2a] focus:outline-none min-w-0" />
+            placeholder="Invoice / reference (optional)"
+            className="flex-1 bg-transparent text-white text-[13px] placeholder:text-[#333] focus:outline-none min-w-0" />
         </div>
-        <div className="flex items-start gap-2 rounded-xl border border-[#141414] bg-[#080808] px-3 py-2.5">
-          <span className="text-[9px] text-neutral-600 font-bold uppercase tracking-wider flex-shrink-0 mt-0.5">NOTE</span>
+        <div className="flex items-start gap-3 rounded-xl border bg-[#080808] px-3 py-2.5" style={{ borderColor: "#2e2e2e" }}>
+          <span className="text-[9px] text-neutral-500 font-bold uppercase tracking-wider flex-shrink-0 mt-0.5">NOTE</span>
           <textarea value={tripForm.notes} onChange={e => setTripForm(s => ({ ...s, notes: e.target.value }))}
             placeholder="Surge, traffic, late toll, details…" rows={1}
-            className="flex-1 bg-transparent text-[12px] text-[#d1d5db] placeholder:text-[#2a2a2a] focus:outline-none resize-none leading-relaxed min-w-0" />
+            className="flex-1 bg-transparent text-[13px] text-[#d1d5db] placeholder:text-[#333] focus:outline-none resize-none leading-relaxed min-w-0" />
         </div>
       </div>
 
-      {/* ══ GRAND TOTAL + SAVE ══════════════════════════ */}
-      <div className="border-t border-[#1a1a1a] pt-3 space-y-2">
-        {/* Total bar */}
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-2">
-            <PlatformAvatar meta={meta} size="sm" />
-            <span className="text-[12px] font-semibold text-neutral-400">{tripForm.platform}</span>
-            {meta.tags.map(tg => (
-              <span key={tg} className={`text-[7px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${getTagStyle(tg)}`}>{tg}</span>
-            ))}
-          </div>
-          <div className="text-right">
-            <p className="text-[8px] text-neutral-600 uppercase tracking-widest">GRAND TOTAL</p>
-            <p className="font-mono-jet text-[26px] font-black leading-none" style={{ color: grandTotalLive > 0 ? "#facc15" : "#333" }}>
-              ${grandTotalLive.toFixed(2)}
-            </p>
-          </div>
-        </div>
-
-        {/* Save button */}
+      {/* ══ POST TRANSACTION ══════════════════════════════════════ */}
+      <div className="border-t border-[#252525] pt-4 space-y-2 pb-2">
         <button type="button" onClick={handleSave}
-          className="w-full h-14 rounded-2xl font-black text-[16px] tracking-[0.1em] uppercase transition-all active:scale-[0.98]"
+          className="w-full rounded-2xl font-black text-[17px] tracking-[0.08em] uppercase transition-all active:scale-[0.98]"
           style={{
+            height: 60,
             background: grandTotalLive > 0 ? "#facc15" : "#1a1a1a",
             color: grandTotalLive > 0 ? "#000" : "#444",
-            boxShadow: grandTotalLive > 0 ? "0 0 20px rgba(250,204,21,0.25)" : "none",
+            boxShadow: grandTotalLive > 0 ? "0 0 28px rgba(250,204,21,0.32)" : "none",
           }}>
-          {editingId ? "UPDATE TRIP" : "SAVE TRIP"}
+          {editingId ? "✓ UPDATE TRANSACTION" : "✓ POST TRANSACTION"}
         </button>
 
         {editingId && (
           <button type="button" onClick={resetForm}
-            className="w-full h-10 rounded-xl border border-[#222] text-[11px] font-semibold tracking-[0.08em] text-neutral-500 active:text-white transition-colors">
+            className="w-full h-10 rounded-xl border text-[11px] font-semibold tracking-[0.08em] text-neutral-500 active:text-white transition-colors"
+            style={{ borderColor: "#2e2e2e" }}>
             CANCEL EDIT
           </button>
         )}
@@ -2489,7 +2480,7 @@ export default function App() {
             <span className={`text-[8px] font-bold tracking-widest ${storageVerified ? "text-[#4ade80]" : "text-red-400"}`}>
               {storageVerified ? "STORAGE OK" : "STORAGE ERR"}
             </span>
-            <span className="text-[8px] text-neutral-600 font-mono-jet">· {trips.length} trips · {(storageBytes / 1024).toFixed(1)}KB</span>
+            <span className="text-[8px] text-neutral-500 font-mono-jet">· {trips.length} trips · {(storageBytes / 1024).toFixed(1)}KB</span>
           </div>
           <div className="flex gap-1.5">
             <button onClick={() => {
@@ -2498,11 +2489,11 @@ export default function App() {
                 if (raw) showToast(`✓ ${JSON.parse(raw).length} trips · ${(new Blob([raw]).size / 1024).toFixed(2)}KB`);
                 else showToast("No data on disk yet");
               } catch { showToast("Error reading storage"); }
-            }} className="px-2 h-5 rounded-full bg-[#111] border border-[#222] text-[7px] font-bold tracking-widest text-neutral-500 active:text-white">VERIFY</button>
+            }} className="px-2 h-5 rounded-full bg-[#111] border border-[#2e2e2e] text-[7px] font-bold tracking-widest text-neutral-500 active:text-white">VERIFY</button>
             <button onClick={() => {
               navigator.clipboard?.writeText(localStorage.getItem("island-city-trips") || "");
               showToast("JSON copied — backup ready");
-            }} className="px-2 h-5 rounded-full bg-[#111] border border-[#222] text-[7px] font-bold tracking-widest text-neutral-500 active:text-white">BACKUP</button>
+            }} className="px-2 h-5 rounded-full bg-[#111] border border-[#2e2e2e] text-[7px] font-bold tracking-widest text-neutral-500 active:text-white">BACKUP</button>
           </div>
         </div>
       </div>
@@ -2556,7 +2547,7 @@ export default function App() {
             ["TODAY",   "$" + pendingTodayAmt.toFixed(2)],
             ["TOTAL",   "$" + pendingTotal.toFixed(2)],
           ] as [string, string][]).map(([lbl, val]) => (
-            <div key={lbl} className="bg-[#0d0d0d] border border-[#1e1e1e] rounded-xl p-2 text-center">
+            <div key={lbl} className="bg-[#0d0d0d] border border-[#2e2e2e] rounded-xl p-2 text-center">
               <p className="text-[8px] tracking-[0.15em] text-neutral-400 font-bold uppercase">{lbl}</p>
               <p className="font-mono-jet text-[14px] font-bold text-[#f6dd8c] mt-0.5">{val}</p>
             </div>
@@ -2577,7 +2568,7 @@ export default function App() {
 
       {/* Empty state */}
       {pendingTrips.length === 0 ? (
-        <div className="bg-[#141414] border border-[#222] rounded-2xl p-10 text-center space-y-2">
+        <div className="bg-[#141414] border border-[#2e2e2e] rounded-2xl p-10 text-center space-y-2">
           <p className="text-[15px] font-semibold text-white">All trips posted ✓</p>
           <p className="text-[12px] text-neutral-400">Queue is clear — all revenue is in the Ledger</p>
           <button onClick={() => { setActiveTab("TRIPS"); setTripsTab("ENTRY"); }}
@@ -2628,7 +2619,7 @@ export default function App() {
                   const liveTotal = liveFare + t.tips + t.extra + t.toll - t.fee;
 
                   return (
-                    <div key={t.id} className={`border rounded-2xl p-4 space-y-3 transition-all duration-150 ${isSel ? "bg-[#141410] border-[#facc15]/30" : "bg-[#141414] border-[#222]"}`}>
+                    <div key={t.id} className={`border rounded-2xl p-4 space-y-3 transition-all duration-150 ${isSel ? "bg-[#141410] border-[#facc15]/30" : "bg-[#141414] border-[#2e2e2e]"}`}>
                       <div className="flex items-start gap-3">
                         {/* Per-trip checkbox */}
                         <button
@@ -2678,7 +2669,7 @@ export default function App() {
 
                       {/* Inline edit form */}
                       {inlineEditId === t.id ? (
-                        <div className="bg-[#0a0a0a] border border-[#222] rounded-xl p-3 space-y-2">
+                        <div className="bg-[#0a0a0a] border border-[#2e2e2e] rounded-xl p-3 space-y-2">
                           {[["Reference", "reference"], ["Pickup", "pickup"], ["Drop-off", "dropoff"]].map(([ph, key]) => (
                             <input key={key}
                               value={inlineForm[key as keyof typeof inlineForm]}
@@ -2691,7 +2682,7 @@ export default function App() {
                             placeholder="Earnings"
                             className="w-full h-10 rounded-lg bg-black border border-[#262626] px-3 text-[13px] text-white font-mono-jet placeholder:text-[#6b7280] focus:outline-none" />
                           {/* Live total preview */}
-                          <div className="flex items-center justify-between bg-black rounded-lg px-3 py-2 border border-[#1e1e1e]">
+                          <div className="flex items-center justify-between bg-black rounded-lg px-3 py-2 border border-[#2e2e2e]">
                             <span className="font-mono-jet text-[9px] text-neutral-400 truncate pr-2">
                               ${liveFare.toFixed(2)} fare + ${t.tips.toFixed(2)} tips + ${t.extra.toFixed(2)} extra + ${t.toll.toFixed(2)} toll − ${t.fee.toFixed(2)} fee
                             </span>
@@ -2800,7 +2791,7 @@ export default function App() {
       </div>
 
       {postedTrips.length === 0 ? (
-        <div className="bg-[#141414] border border-[#222] rounded-2xl p-10 text-center space-y-2">
+        <div className="bg-[#141414] border border-[#2e2e2e] rounded-2xl p-10 text-center space-y-2">
           <p className="text-[15px] font-semibold text-white">Ledger is empty</p>
           <p className="text-[12px] text-neutral-400">Review and approve trips in the Revenue Queue first</p>
           <button onClick={() => { setActiveTab("TRIPS"); setTripsTab("REGISTER"); }}
@@ -3260,7 +3251,7 @@ export default function App() {
             <div>
               <p className="text-[10px] tracking-[0.22em] text-neutral-400 font-semibold mb-2.5">EXPENSE LOG · {filtered.length} entries</p>
               {filtered.length === 0 ? (
-                <div className="bg-[#141414] border border-[#222] rounded-2xl p-10 text-center">
+                <div className="bg-[#141414] border border-[#2e2e2e] rounded-2xl p-10 text-center">
                   <p className="text-[32px] mb-2">🧾</p>
                   <p className="text-[14px] text-neutral-400">No expenses for this period</p>
                   <p className="text-[11px] text-neutral-400 mt-1">Change the filter or add an expense above</p>
@@ -3268,7 +3259,7 @@ export default function App() {
               ) : (
                 <div className="space-y-2">
                   {[...filtered].sort((a,b)=>b.date.localeCompare(a.date)).map(ex=>(
-                    <div key={ex.id} className={`bg-[#141414] border rounded-xl p-3.5 transition-colors ${ex.verified?"border-[#4ade80]/30":"border-[#222]"}`}>
+                    <div key={ex.id} className={`bg-[#141414] border rounded-xl p-3.5 transition-colors ${ex.verified?"border-[#4ade80]/30":"border-[#2e2e2e]"}`}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
@@ -3470,7 +3461,7 @@ export default function App() {
     <div className="space-y-4">
       <h2 className="text-[22px] font-bold text-white">Reports</h2>
 
-      <div className="bg-[#141414] border border-[#222] rounded-[20px] p-5 space-y-4">
+      <div className="bg-[#141414] border border-[#2e2e2e] rounded-[20px] p-5 space-y-4">
         <div className="flex justify-between items-center">
           <p className="text-[11px] tracking-[0.18em] text-neutral-400 font-semibold">FINANCIAL SUMMARY</p>
           <span className="text-[10px] font-mono-jet px-2 py-1 rounded-full bg-[#1a1a1a] border border-[#2a2a2a] text-neutral-400">
@@ -3814,7 +3805,7 @@ export default function App() {
         <div className="flex-shrink-0 w-full px-4 space-y-4 pb-6" style={{scrollSnapAlign:'start'}}>
 
           {/* ESTA SEMANA chart */}
-          <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+          <div className="bg-[#101010] border border-[#2e2e2e] rounded-2xl p-4">
             <div className="flex items-center justify-between mb-2">
               <p className="text-[9px] tracking-[0.22em] text-neutral-300 font-bold uppercase">THIS WEEK</p>
               <div className="flex gap-3 text-[8px] text-neutral-400">
@@ -3832,7 +3823,7 @@ export default function App() {
                 <Bar dataKey="actual"    name="Actual"  fill="#f6dd8c"   radius={[3,3,0,0]}/>
               </BarChart>
             </ResponsiveContainer>
-            <div className="flex justify-between mt-2 pt-2 border-t border-[#1e1e1e]">
+            <div className="flex justify-between mt-2 pt-2 border-t border-[#2e2e2e]">
               <div>
                 <p className="text-[9px] text-neutral-400">Earned so far</p>
                 <p className="text-[15px] font-bold text-[#f6dd8c] font-mono-jet">${_earnWeek.toFixed(2)}</p>
@@ -3847,7 +3838,7 @@ export default function App() {
           </div>
 
           {/* PLAN SEMANAL DE INGRESOS */}
-          <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+          <div className="bg-[#101010] border border-[#2e2e2e] rounded-2xl p-4">
             <div className="flex items-center justify-between mb-3">
               <p className="text-[9px] tracking-[0.22em] text-neutral-300 font-bold uppercase">WEEKLY INCOME PLAN</p>
               <span className="text-[9px] text-neutral-400">{workDays.length} active day{workDays.length!==1?'s':''}</span>
@@ -3879,7 +3870,7 @@ export default function App() {
                 );
               })}
             </div>
-            <div className="pt-3 border-t border-[#1e1e1e]">
+            <div className="pt-3 border-t border-[#2e2e2e]">
               <div className="flex items-baseline justify-between mb-0.5">
                 <p className="text-[9px] text-neutral-400 uppercase tracking-[0.15em]">Weekly total</p>
                 <p className="text-[22px] font-bold text-[#f6dd8c] font-mono-jet leading-none">
@@ -3888,11 +3879,11 @@ export default function App() {
               </div>
               <p className="text-[8px] text-neutral-400 mb-3">avg ${_avgDayTarget.toFixed(0)}/day</p>
               <div className="grid grid-cols-2 gap-2 mb-3">
-                <div className="bg-black border border-[#1e1e1e] rounded-xl p-2.5 text-center">
+                <div className="bg-black border border-[#2e2e2e] rounded-xl p-2.5 text-center">
                   <p className="text-[8px] text-neutral-400 uppercase tracking-widest mb-0.5">Est. monthly</p>
                   <p className="text-[13px] font-bold text-white font-mono-jet">${(_weekPlanTotal*4.33/1000).toFixed(1)}k</p>
                 </div>
-                <div className="bg-black border border-[#1e1e1e] rounded-xl p-2.5 text-center">
+                <div className="bg-black border border-[#2e2e2e] rounded-xl p-2.5 text-center">
                   <p className="text-[8px] text-neutral-400 uppercase tracking-widest mb-0.5">Est. yearly</p>
                   <p className="text-[13px] font-bold text-white font-mono-jet">${(_annTarget/1000).toFixed(0)}k</p>
                 </div>
@@ -3905,7 +3896,7 @@ export default function App() {
           </div>
 
           {/* ── 🔁 Repeat this weekly pattern until a date ── */}
-          <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4 space-y-3">
+          <div className="bg-[#101010] border border-[#2e2e2e] rounded-2xl p-4 space-y-3">
 
             {/* Active plan summary */}
             {recurringPlan.enabled && !showRepeatIncomePicker && (
@@ -4031,7 +4022,7 @@ export default function App() {
                 </div>
                 <input type="text" placeholder="Optional note (e.g. car repair −$270)" value={bankEditNote}
                   onChange={e=>setBankEditNote(e.target.value)}
-                  className="w-full bg-black border border-[#1e1e1e] rounded-xl px-3 py-1.5 text-neutral-300 text-[11px] focus:outline-none focus:border-[#f6dd8c]/30"/>
+                  className="w-full bg-black border border-[#2e2e2e] rounded-xl px-3 py-1.5 text-neutral-300 text-[11px] focus:outline-none focus:border-[#f6dd8c]/30"/>
                 <div className="flex gap-2">
                   <button onClick={()=>{
                     const nv=parseFloat(bankEditVal);
@@ -4143,7 +4134,7 @@ export default function App() {
                   )}
 
                   {/* 🔁 Repeat until date toggle */}
-                  <div className="border border-[#1e1e1e] rounded-xl p-3 space-y-2">
+                  <div className="border border-[#2e2e2e] rounded-xl p-3 space-y-2">
                     <button onClick={()=>setProjExpForm(s=>({...s,repeatEnabled:!s.repeatEnabled,repeatUntil:''}))}
                       className="w-full flex items-center gap-2.5 text-left">
                       <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${projExpForm.repeatEnabled?'bg-[#f6dd8c] border-[#f6dd8c]':'bg-transparent border-[#3a3a3a]'}`}>
@@ -4194,7 +4185,7 @@ export default function App() {
 
           {/* 1b · Daily recurring drain */}
           {_cfDailyRecur > 0 && (
-            <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl px-4 py-3 flex items-center justify-between">
+            <div className="bg-[#101010] border border-[#2e2e2e] rounded-2xl px-4 py-3 flex items-center justify-between">
               <div>
                 <p className="text-[9px] tracking-[0.18em] text-orange-400 font-bold uppercase">RECURRING DRAIN</p>
                 <p className="text-[10px] text-neutral-400 mt-0.5">Daily / weekly / monthly expenses combined</p>
@@ -4208,7 +4199,7 @@ export default function App() {
 
           {/* 2 · Upcoming payments (next 14 days) */}
           {_cfPayments14.length > 0 && (
-            <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+            <div className="bg-[#101010] border border-[#2e2e2e] rounded-2xl p-4">
               <p className="text-[9px] tracking-[0.22em] text-[#f6dd8c]/90 font-bold uppercase mb-3">⚡ UPCOMING PAYMENTS</p>
               <div className="space-y-2">
                 {_cfPayments14.map(p=>(
@@ -4235,7 +4226,7 @@ export default function App() {
           )}
 
           {/* 3 · Daily balance bar chart */}
-          <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+          <div className="bg-[#101010] border border-[#2e2e2e] rounded-2xl p-4">
             <p className="text-[9px] tracking-[0.22em] text-[#f6dd8c]/90 font-bold uppercase mb-3">DAILY BALANCE</p>
             <ResponsiveContainer width="100%" height={110}>
               <BarChart data={_cfDays.map(d=>({label:d.shortLabel,balance:d.balance,isToday:d.isToday,neg:d.balance<0}))}
@@ -4258,11 +4249,11 @@ export default function App() {
           </div>
 
           {/* 4 · Detailed timeline */}
-          <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+          <div className="bg-[#101010] border border-[#2e2e2e] rounded-2xl p-4">
             <p className="text-[9px] tracking-[0.22em] text-[#f6dd8c]/90 font-bold uppercase mb-1">DETAILED TIMELINE</p>
             <div>
               {_cfDays.map((d,i)=>(
-                <div key={d.dateStr} className={`flex items-start gap-3 py-2.5 ${i<_cfDays.length-1?'border-b border-[#141414]':''}`}>
+                <div key={d.dateStr} className={`flex items-start gap-3 py-2.5 ${i<_cfDays.length-1?'border-b border-[#1e1e1e]':''}`}>
                   {/* Day label */}
                   <div className="w-[44px] flex-shrink-0 pt-0.5">
                     {d.isToday ? (
@@ -4301,7 +4292,7 @@ export default function App() {
           </div>
 
           {/* 5 · Annual outlook (preserved) */}
-          <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+          <div className="bg-[#101010] border border-[#2e2e2e] rounded-2xl p-4">
             <p className="text-[9px] tracking-[0.22em] text-[#f6dd8c]/90 font-bold uppercase mb-3">ANNUAL OUTLOOK</p>
             <div className="grid grid-cols-3 gap-2 mb-3">
               {([
@@ -4309,13 +4300,13 @@ export default function App() {
                 {label:'End of Month',val:_projMonth},
                 {label:'End of Year', val:_projYear},
               ] as {label:string,val:number}[]).map(({label,val})=>(
-                <div key={label} className="bg-black border border-[#1e1e1e] rounded-xl p-2.5 text-center">
+                <div key={label} className="bg-black border border-[#2e2e2e] rounded-xl p-2.5 text-center">
                   <p className="text-[8px] text-neutral-400 uppercase tracking-widest leading-tight mb-1">{label}</p>
                   <p className="text-[14px] font-bold text-[#f6dd8c] font-mono-jet">${(val/1000).toFixed(1)}k</p>
                 </div>
               ))}
             </div>
-            <div className="bg-black border border-[#1e1e1e] rounded-xl p-3">
+            <div className="bg-black border border-[#2e2e2e] rounded-xl p-3">
               <div className="flex justify-between items-center mb-1.5">
                 <p className="text-[9px] text-neutral-400">Annual goal · Super Plus</p>
                 <p className="text-[9px] text-[#f6dd8c]">${(_annTarget/1000).toFixed(0)}k · {Math.round(_yearPct*100)}%</p>
@@ -4333,11 +4324,11 @@ export default function App() {
         {/* ── PAGE 2 · Platforms ── */}
         <div className="flex-shrink-0 w-full px-4 pb-6" style={{scrollSnapAlign:'start'}}>
           {_platRows.length>0 ? (
-            <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+            <div className="bg-[#101010] border border-[#2e2e2e] rounded-2xl p-4">
               <p className="text-[9px] tracking-[0.22em] text-neutral-300 font-bold uppercase mb-3">INCOME BY PLATFORM</p>
               <table className="w-full text-[11px]">
                 <thead>
-                  <tr className="text-[8px] text-neutral-400 uppercase tracking-widest border-b border-[#1e1e1e]">
+                  <tr className="text-[8px] text-neutral-400 uppercase tracking-widest border-b border-[#2e2e2e]">
                     <th className="text-left pb-2 font-semibold">Platform</th>
                     <th className="text-right pb-2 font-semibold">Today</th>
                     <th className="text-right pb-2 font-semibold">Week</th>
@@ -4376,7 +4367,7 @@ export default function App() {
         {/* ── PAGE 3 · Financial Health ── */}
         <div className="flex-shrink-0 w-full px-4 space-y-4 pb-6" style={{scrollSnapAlign:'start'}}>
           {/* Monthly summary */}
-          <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+          <div className="bg-[#101010] border border-[#2e2e2e] rounded-2xl p-4">
             <p className="text-[9px] tracking-[0.22em] text-neutral-300 font-bold uppercase mb-3">
               FINANCIAL HEALTH · {currentTime.toLocaleDateString('en-US',{month:'long'}).toUpperCase()}
             </p>
@@ -4405,7 +4396,7 @@ export default function App() {
 
           {/* Recurring expenses breakdown — all frequencies */}
           {expenses.some(e => e.frequency && e.frequency !== 'none') && (
-            <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+            <div className="bg-[#101010] border border-[#2e2e2e] rounded-2xl p-4">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-[9px] tracking-[0.22em] text-neutral-300 font-bold uppercase">RECURRING EXPENSES</p>
                 <span className="font-mono-jet text-[11px] text-orange-400 font-bold">
@@ -4450,7 +4441,7 @@ export default function App() {
 
           {/* Bank balance history */}
           {bankAdjHistory.length > 0 && (
-            <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+            <div className="bg-[#101010] border border-[#2e2e2e] rounded-2xl p-4">
               <p className="text-[9px] tracking-[0.22em] text-neutral-300 font-bold uppercase mb-3">BALANCE ADJUSTMENT HISTORY</p>
               <div className="space-y-2">
                 {bankAdjHistory.slice(0,6).map(adj => (
@@ -4502,7 +4493,7 @@ export default function App() {
           <div className="flex items-center gap-2">
             <span className="font-mono-jet text-[10px] text-neutral-400 hidden sm:block">{currentTime.toLocaleTimeString()}</span>
             <button onClick={() => { setShowSettings(true); setResetStep(0); }}
-              className="w-8 h-8 rounded-full bg-[#141414] border border-[#222] flex items-center justify-center text-[12px] font-semibold text-[#f6dd8c] hover:border-[#d9b64f]/50 transition-colors">M</button>
+              className="w-8 h-8 rounded-full bg-[#141414] border border-[#2e2e2e] flex items-center justify-center text-[12px] font-semibold text-[#f6dd8c] hover:border-[#d9b64f]/50 transition-colors">M</button>
           </div>
         </div>{/* end inner h-[68px] row */}
         </div>{/* end sticky header wrapper */}
@@ -4513,7 +4504,7 @@ export default function App() {
             style={{ top: 'calc(68px + env(safe-area-inset-top))' }}>
             <div className="flex gap-2">
               {([
-                { key: "ENTRY",    label: "💰 Revenue", badge: 0 },
+                { key: "ENTRY",    label: "💰 Daily Entry", badge: 0 },
                 { key: "REGISTER", label: "📋 Queue",   badge: pendingTrips.length },
                 { key: "LEDGER",   label: "📖 Ledger",  badge: postedTrips.length },
               ] as { key: TripsTab; label: string; badge: number }[]).map(({ key, label, badge }) => {
@@ -4636,7 +4627,7 @@ export default function App() {
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
 
             {/* Sheet */}
-            <div className="relative bg-[#0e0e0e] border-t border-[#222] rounded-t-[28px] px-5 pt-5 pb-10 space-y-5 max-w-[480px] w-full mx-auto"
+            <div className="relative bg-[#0e0e0e] border-t border-[#2e2e2e] rounded-t-[28px] px-5 pt-5 pb-10 space-y-5 max-w-[480px] w-full mx-auto"
               onClick={e => e.stopPropagation()}>
 
               {/* Handle */}
@@ -4650,7 +4641,7 @@ export default function App() {
               </div>
 
               {/* Profile row */}
-              <div className="flex items-center gap-3 bg-[#141414] border border-[#222] rounded-2xl p-3.5">
+              <div className="flex items-center gap-3 bg-[#141414] border border-[#2e2e2e] rounded-2xl p-3.5">
                 <div className="w-10 h-10 rounded-full bg-[#1a1a1a] border border-[#2a2a2a] flex items-center justify-center text-[15px] font-bold text-[#f6dd8c]">M</div>
                 <div>
                   <p className="text-[13px] font-semibold">Miguel</p>
@@ -4663,7 +4654,7 @@ export default function App() {
               </div>
 
               {/* Storage info */}
-              <div className="bg-[#141414] border border-[#222] rounded-2xl p-3.5 space-y-1.5">
+              <div className="bg-[#141414] border border-[#2e2e2e] rounded-2xl p-3.5 space-y-1.5">
                 <p className="text-[9px] tracking-[0.16em] text-neutral-400 font-semibold uppercase">Storage</p>
                 <div className="flex items-center justify-between">
                   <span className="text-[12px] text-neutral-300">Trips saved</span>
@@ -4708,7 +4699,7 @@ export default function App() {
               </div>
 
               {/* Backup — #8 */}
-              <div className="bg-[#141414] border border-[#222] rounded-2xl p-4 space-y-3">
+              <div className="bg-[#141414] border border-[#2e2e2e] rounded-2xl p-4 space-y-3">
                 <p className="text-[9px] tracking-[0.16em] text-neutral-400 font-semibold uppercase">📦 Data Backup</p>
                 <p className="text-[11px] text-neutral-400 leading-relaxed">
                   Download a <span className="font-mono-jet text-white">.json</span> file with all your trips, expenses, and hours. Save it to your phone, Google Drive, or iCloud as a backup.
