@@ -1032,26 +1032,28 @@ export default function App() {
   // $/h uses GROSS only — not influenced by expenses
   // Starts as soon as there's any shift time (live) OR logged hours today
   const perHourGross = useMemo(() => {
-    // 1. Use live shift timer (most accurate)
+    // 1. Use live shift timer (most accurate — requires START button)
     const h = activeHoursDecimal > 0 ? activeHoursDecimal : (cumulative.hoy ?? 0);
     if (h > 0.002 && grossToday > 0) return grossToday / h;
-    // 2. Fallback: estimate from first→last trip timestamp of today
-    //    (covers the case where iOS reloaded and lost the shift timer)
-    if (grossToday > 0 && todayTrips.length >= 2) {
+
+    // 2. No shift timer — use time from FIRST trip today until NOW as denominator.
+    //    This makes the gauge live and reactive without requiring the START button.
+    if (grossToday > 0 && todayTrips.length >= 1) {
       const ts = todayTrips
-        .map(t => { try { return new Date(t.timestamp || t.date+'T12:00:00').getTime(); } catch { return null; } })
+        .map(t => { try { return new Date(t.timestamp || t.date + 'T12:00:00').getTime(); } catch { return null; } })
         .filter((n): n is number => n !== null && !isNaN(n));
-      if (ts.length >= 2) {
-        const spanH = (Math.max(...ts) - Math.min(...ts)) / 3600000;
-        if (spanH >= 0.083) return grossToday / spanH; // at least 5 min span
+      if (ts.length >= 1) {
+        const firstTripMs = Math.min(...ts);
+        const nowMs = currentTime.getTime();
+        const spanH = (nowMs - firstTripMs) / 3600000;
+        // If at least 3 minutes have passed since first trip, use live elapsed time
+        if (spanH >= 0.05) return grossToday / spanH;
+        // Too recent — estimate based on 15 min (will become accurate as time passes)
+        return grossToday / 0.25;
       }
     }
-    // 3. Single trip today — show rate based on avg trip being ~15 min
-    if (grossToday > 0 && todayTrips.length === 1) {
-      return grossToday / 0.25; // rough estimate: 15 min active
-    }
     return 0;
-  }, [grossToday, activeHoursDecimal, cumulative.hoy, todayTrips]);
+  }, [grossToday, activeHoursDecimal, cumulative.hoy, todayTrips, currentTime]);
   const perHourLive = perHourGross; // alias kept for compatibility
 
   // ── Expenses today (from Expenses section) ────────────────────
