@@ -20,6 +20,7 @@ description: Architecture decisions for the EntryFormContent redesign (DAILY ENT
 - `Trip.otherCash: number` — backward compat: use `trip.otherCash ?? 0` everywhere
 - `TripForm.otherCashIncome: string` — included in grandTotalLive and handleSave
 - `"Throo"` added to platformMeta: `{ initial: "T", bg: "bg-[#e11d48]", tags: [] }`
+- `HoursEntry.miles?: number` — GPS miles per shift, saved in handleClockOut
 
 ## State additions
 - `showPlatformDropdown: boolean` — controls expanded REVENUE SOURCE list
@@ -28,6 +29,13 @@ description: Architecture decisions for the EntryFormContent redesign (DAILY ENT
 ## Grand total formula
 `e + t + ex + oci + tl - f` (earnings + tips + extraCash + otherCashIncome + toll − platformFee)
 
-**Why:** otherCashIncome was added as a new income category (cash jobs, bonus payments, etc.) that wasn't tracked before.
+## _tripNet formula (Finances calculations)
+`(t.earnings||0)+(t.tips||0)+(t.extra||0)+(t.otherCash||0)+(t.toll||0)`
+MUST stay in sync with grandTotal logic. otherCash was missing — fixed.
+
+## grossToday formula (Dashboard gauge)
+`earnings + tips + extra + (otherCash ?? 0) + toll` per trip — otherCash was missing — fixed.
+
+**Why:** otherCashIncome is a new income category (cash jobs, bonus payments) that wasn't tracked before. Consistency between grandTotal / _tripNet / grossToday is critical for financial accuracy.
 
 **How to apply:** Any display of trip total must include `trip.otherCash ?? 0` for backward compat with trips saved before this field existed.

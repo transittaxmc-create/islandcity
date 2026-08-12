@@ -58,6 +58,7 @@ type HoursEntry = {
   clockIn: string;
   clockOut: string;
   breakMs: number;
+  miles?: number; // GPS-tracked shift miles (accumulated via haversine)
 };
 
 type Expense = {
@@ -843,7 +844,7 @@ export default function App() {
     return () => controller.abort();
   }, [gps.lat, gps.lng]);
 
-  const IRS_RATE_PER_MILE = 0.70; // 2025 IRS standard mileage rate
+  const IRS_RATE_PER_MILE = 0.70; // 2025 IRS standard mileage rate — verify at irs.gov for the current tax year
 
   const startGPS = () => {
     if (!navigator.geolocation) { setGps(s => ({ ...s, status: "error" })); return; }
@@ -1020,7 +1021,7 @@ export default function App() {
     const activeMs = now.getTime() - clockInTime.getTime() - breakMs;
     const hours = Math.max(0, activeMs / 3600000);
     setHoursLog(p => [
-      { date: toYYYYMMDD(now), hours, clockIn: clockInTime.toISOString(), clockOut: now.toISOString(), breakMs },
+      { date: toYYYYMMDD(now), hours, clockIn: clockInTime.toISOString(), clockOut: now.toISOString(), breakMs, miles: shiftMiles },
       ...p,
     ].slice(0, 60));
     setShiftActive(false);
@@ -1086,9 +1087,9 @@ export default function App() {
   const todayEarnings = useMemo(() => todayTrips.reduce((a, b) => a + b.grandTotal, 0), [todayTrips]);
   const totalTollsToday = useMemo(() => todayTrips.reduce((a, b) => a + b.toll, 0), [todayTrips]);
 
-  // GROSS = fare + tips + extra + toll (everything customer paid, before platform fee)
+  // GROSS = fare + tips + extra + otherCash + toll (everything received, before platform fee)
   const grossToday = useMemo(() =>
-    todayTrips.reduce((a, b) => a + b.earnings + b.tips + b.extra + b.toll, 0),
+    todayTrips.reduce((a, b) => a + b.earnings + b.tips + b.extra + (b.otherCash ?? 0) + b.toll, 0),
     [todayTrips]
   );
 
@@ -3403,55 +3404,114 @@ export default function App() {
         '<td style="padding:4px 8px;font-size:11px">',t.platform||'','</td>',
         '<td style="padding:4px 8px;font-size:11px">',t.pickup||'',' → ',t.dropoff||'','</td>',
         '<td style="padding:4px 8px;text-align:right;font-family:monospace;font-size:11px">$',t.grandTotal.toFixed(2),'</td></tr>'].join('')).join('');
-    const hrsTotal = hoursLog.reduce((a,h)=>a+h.hours,0);
+    const hrsTotal    = hoursLog.reduce((a,h)=>a+h.hours,0);
     const gEarn = postedTrips.reduce((a,t)=>a+(t.earnings||0),0);
     const gTips = postedTrips.reduce((a,t)=>a+(t.tips||0),0);
     const gExt  = postedTrips.reduce((a,t)=>a+(t.extra||0),0);
+    const gOther= postedTrips.reduce((a,t)=>a+(t.otherCash||0),0);
     const gToll = postedTrips.reduce((a,t)=>a+(t.toll||0),0);
-    const netCls = netAll>=0?'net-pos':'net-neg';
+    // Total gross: sum of all income components (same as grandTotal basis)
+    const gTotal = gEarn + gTips + gExt + gOther + gToll;
+    // Mileage deduction — GPS miles tracked per shift (stored since this build)
+    const milesTotal       = hoursLog.reduce((a,h)=>a+(h.miles||0),0);
+    const mileageDeduction = +(milesTotal * IRS_RATE_PER_MILE).toFixed(2);
+    // Net after expenses then mileage (Schedule C)
+    const netAfterExp      = gTotal - expensesAll;
+    const netAfterMileage  = +(netAfterExp - mileageDeduction).toFixed(2);
+    const netCls           = netAfterMileage>=0?'net-pos':'net-neg';
     const tripSection = postedTrips.length>0
       ? '<h2>Trip Detail (Most Recent 50 of '+postedTrips.length+')</h2>'
         +'<table><tr><th>Date</th><th>Platform</th><th>Route</th><th style="text-align:right">Total</th></tr>'
         +tripRows+'</table>'
       : '';
+    // Other Cash Income row — shown only when non-zero
+    const otherCashRow = gOther>0
+      ? '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Other Cash Income</td>'
+        +'<td style="padding:6px 12px;text-align:right;font-family:monospace">$'+gOther.toFixed(2)+'</td></tr>'
+      : '';
+    // Mileage section — shown only when miles tracked
+    const mileageSection = milesTotal>0
+      ? '<h2>IRS Standard Mileage Deduction (Schedule C, Part II Line 9)</h2>'
+        +'<table><tr><th>Description</th><th style="text-align:right">Amount</th></tr>'
+        +'<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">GPS Miles Tracked</td>'
+        +'<td style="padding:6px 12px;text-align:right;font-family:monospace">'+milesTotal.toFixed(1)+' mi</td></tr>'
+        +'<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">IRS Standard Rate (2025 — verify at irs.gov)</td>'
+        +'<td style="padding:6px 12px;text-align:right;font-family:monospace">$'+IRS_RATE_PER_MILE.toFixed(2)+'/mi</td></tr>'
+        +'<tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:bold">MILEAGE DEDUCTION</td>'
+        +'<td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:bold;color:#c0392b">−$'+mileageDeduction.toFixed(2)+'</td></tr></table>'
+        +'<p style="font-size:11px;color:#777;margin:6px 0 0">⚠ Use the standard mileage rate <em>or</em> actual vehicle expenses — not both. Consult a licensed tax professional.</p>'
+      : '<p style="font-size:11px;color:#aaa;margin:4px 0">No GPS miles recorded yet. Miles are tracked starting from this app build when a shift is clocked out.</p>';
     const html = [
       '<!DOCTYPE html><html><head><meta charset="utf-8">',
       '<title>IslandCity · IRS Financial Statement '+yr+'</title>',
       '<style>body{font-family:Georgia,serif;max-width:720px;margin:40px auto;color:#111;font-size:13px;line-height:1.6}',
-      'h1{font-size:22px;margin:0 0 4px}h2{font-size:14px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;margin:28px 0 8px;border-bottom:2px solid #111;padding-bottom:4px}',
-      'table{width:100%;border-collapse:collapse}th{text-align:left;padding:6px 12px;background:#f5f5f5;font-size:11px;text-transform:uppercase;letter-spacing:.06em}',
+      'h1{font-size:22px;margin:0 0 4px}',
+      'h2{font-size:14px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;margin:28px 0 8px;border-bottom:2px solid #111;padding-bottom:4px}',
+      'table{width:100%;border-collapse:collapse}',
+      'th{text-align:left;padding:6px 12px;background:#f5f5f5;font-size:11px;text-transform:uppercase;letter-spacing:.06em}',
       '.total{font-weight:bold;font-size:16px}.net-pos{color:#1a7a4a}.net-neg{color:#c0392b}',
       '.footer{margin-top:40px;font-size:10px;color:#777;border-top:1px solid #ddd;padding-top:12px}',
       '@media print{body{margin:20px}}</style></head><body>',
       '<h1>IslandCity Driver Accounting</h1>',
       '<p style="color:#555;margin:0 0 20px">Schedule C Financial Statement · Tax Year '+yr+' · Printed '+new Date().toLocaleDateString()+'</p>',
-      '<h2>Income Summary (Posted Trips Only)</h2>',
+
+      // ── Income Summary ────────────────────────────────────────
+      '<h2>Gross Income (Posted Trips Only)</h2>',
       '<table><tr><th>Description</th><th style="text-align:right">Amount</th></tr>',
-      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Gross Rideshare Earnings</td><td style="padding:6px 12px;text-align:right;font-family:monospace">$'+gEarn.toFixed(2)+'</td></tr>',
-      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Tips</td><td style="padding:6px 12px;text-align:right;font-family:monospace">$'+gTips.toFixed(2)+'</td></tr>',
+      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Rideshare Fare Earnings</td><td style="padding:6px 12px;text-align:right;font-family:monospace">$'+gEarn.toFixed(2)+'</td></tr>',
+      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Tips / Gratuity</td><td style="padding:6px 12px;text-align:right;font-family:monospace">$'+gTips.toFixed(2)+'</td></tr>',
       '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Extras / Bonuses</td><td style="padding:6px 12px;text-align:right;font-family:monospace">$'+gExt.toFixed(2)+'</td></tr>',
+      otherCashRow,
       '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Toll Reimbursements</td><td style="padding:6px 12px;text-align:right;font-family:monospace">$'+gToll.toFixed(2)+'</td></tr>',
-      '<tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:bold">TOTAL GROSS INCOME</td><td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:bold" class="total">$'+grossAll.toFixed(2)+'</td></tr></table>',
-      '<h2>Business Expenses (Schedule C)</h2>',
+      '<tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:bold">TOTAL GROSS INCOME</td>',
+      '<td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:bold" class="total">$'+gTotal.toFixed(2)+'</td></tr></table>',
+
+      // ── Business Expenses ─────────────────────────────────────
+      '<h2>Business Expenses (Schedule C, Part II)</h2>',
       '<table><tr><th>Category</th><th style="text-align:right">Total</th></tr>',
       catRows,
-      '<tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:bold">TOTAL EXPENSES</td><td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:bold">$'+expensesAll.toFixed(2)+'</td></tr></table>',
-      '<h2>Net Earnings</h2>',
+      '<tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:bold">TOTAL EXPENSES</td>',
+      '<td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:bold">$'+expensesAll.toFixed(2)+'</td></tr></table>',
+
+      // ── IRS Mileage Deduction ─────────────────────────────────
+      mileageSection,
+
+      // ── Net Taxable Income ────────────────────────────────────
+      '<h2>Net Taxable Income (Schedule C)</h2>',
       '<table><tr><th>Description</th><th style="text-align:right">Amount</th></tr>',
-      '<tr><td style="padding:8px 12px">Gross Income</td><td style="padding:8px 12px;text-align:right;font-family:monospace">$'+grossAll.toFixed(2)+'</td></tr>',
-      '<tr><td style="padding:8px 12px">Business Expenses</td><td style="padding:8px 12px;text-align:right;font-family:monospace">−$'+expensesAll.toFixed(2)+'</td></tr>',
+      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Gross Income</td>',
+      '<td style="padding:6px 12px;text-align:right;font-family:monospace">$'+gTotal.toFixed(2)+'</td></tr>',
+      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Business Expenses</td>',
+      '<td style="padding:6px 12px;text-align:right;font-family:monospace">−$'+expensesAll.toFixed(2)+'</td></tr>',
+      (milesTotal>0
+        ? '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">IRS Mileage Deduction ('+milesTotal.toFixed(1)+' mi × $'+IRS_RATE_PER_MILE.toFixed(2)+')</td>'
+          +'<td style="padding:6px 12px;text-align:right;font-family:monospace">−$'+mileageDeduction.toFixed(2)+'</td></tr>'
+        : ''),
       '<tr style="background:#f0f0f0"><td style="padding:10px 12px;font-weight:bold;font-size:15px">NET PROFIT / LOSS</td>',
-      '<td style="padding:10px 12px;text-align:right;font-family:monospace;font-size:18px;font-weight:bold" class="'+netCls+'">$'+netAll.toFixed(2)+'</td></tr></table>',
-      '<h2>Hours Log Summary</h2>',
+      '<td style="padding:10px 12px;text-align:right;font-family:monospace;font-size:18px;font-weight:bold" class="'+netCls+'">',
+      (netAfterMileage>=0?'$'+netAfterMileage.toFixed(2):'−$'+Math.abs(netAfterMileage).toFixed(2)),
+      '</td></tr></table>',
+
+      // ── Hours & Activity Log ──────────────────────────────────
+      '<h2>Hours &amp; Activity Log</h2>',
       '<table><tr><th>Metric</th><th style="text-align:right">Value</th></tr>',
-      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Total Driving Hours</td><td style="padding:6px 12px;text-align:right;font-family:monospace">'+hrsTotal.toFixed(1)+' hrs</td></tr>',
-      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Total Shifts Logged</td><td style="padding:6px 12px;text-align:right;font-family:monospace">'+hoursLog.length+'</td></tr>',
-      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Total Trips Posted</td><td style="padding:6px 12px;text-align:right;font-family:monospace">'+postedTrips.length+'</td></tr>',
-      '<tr><td style="padding:6px 12px">Avg Earnings/Hour</td><td style="padding:6px 12px;text-align:right;font-family:monospace">'+(hrsTotal>0?'$'+(grossAll/hrsTotal).toFixed(2):'-')+'/hr</td></tr></table>',
+      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Total Driving Hours</td>',
+      '<td style="padding:6px 12px;text-align:right;font-family:monospace">'+hrsTotal.toFixed(1)+' hrs</td></tr>',
+      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Total Miles Tracked (GPS)</td>',
+      '<td style="padding:6px 12px;text-align:right;font-family:monospace">'+milesTotal.toFixed(1)+' mi</td></tr>',
+      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Total Shifts Logged</td>',
+      '<td style="padding:6px 12px;text-align:right;font-family:monospace">'+hoursLog.length+'</td></tr>',
+      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Total Trips Posted</td>',
+      '<td style="padding:6px 12px;text-align:right;font-family:monospace">'+postedTrips.length+'</td></tr>',
+      '<tr><td style="padding:6px 12px">Average Earnings / Hour</td>',
+      '<td style="padding:6px 12px;text-align:right;font-family:monospace">'+(hrsTotal>0?'$'+(gTotal/hrsTotal).toFixed(2):'-')+'/hr</td></tr></table>',
+
       tripSection,
-      '<div class="footer"><p><strong>IslandCity Driver Accounting</strong> · Generated '+new Date().toLocaleString()+'</p>',
-      '<p>This statement is based on trips posted to the Ledger. Pending trips in the Register are excluded. Consult a licensed tax professional before filing.</p></div>',
-      '</body></html>',
+      '<div class="footer">',
+      '<p><strong>IslandCity Driver Accounting</strong> · Generated '+new Date().toLocaleString()+'</p>',
+      '<p>Based on trips posted to the Ledger. Pending Register trips excluded. IRS mileage rate: $'+IRS_RATE_PER_MILE.toFixed(2)+'/mi (2025) — confirm current year rate at <strong>irs.gov</strong>.</p>',
+      '<p>Consult a licensed tax professional before filing. This document does not constitute tax advice.</p>',
+      '</div></body></html>',
     ].join('\n');
     const win = window.open('','_blank');
     if (win) { win.document.write(html); win.document.close(); setTimeout(()=>win.print(),400); }
@@ -3552,7 +3612,8 @@ export default function App() {
   const _finWeekStart  = toYYYYMMDD(_finMon);
   const _finMonthStart = `${currentTime.getFullYear()}-${String(currentTime.getMonth()+1).padStart(2,'0')}-01`;
   const _finYearStart  = `${currentTime.getFullYear()}-01-01`;
-  const _tripNet = (t: Trip) => (t.earnings||0)+(t.tips||0)+(t.extra||0)+(t.toll||0);
+  // _tripNet: gross income per trip — must match grandTotal logic (includes otherCash)
+  const _tripNet = (t: Trip) => (t.earnings||0)+(t.tips||0)+(t.extra||0)+(t.otherCash||0)+(t.toll||0);
 
   const _earnToday = trips.filter(t=>t.date===_finToday).reduce((a,t)=>a+_tripNet(t),0);
   const _earnWeek  = trips.filter(t=>t.date>=_finWeekStart).reduce((a,t)=>a+_tripNet(t),0);
