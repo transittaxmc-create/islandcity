@@ -540,7 +540,10 @@ export default function App() {
     frequency: "none" as "none" | "daily" | "weekly" | "monthly",
     dueDate: "",
   });
-  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  const [editingExpenseId,   setEditingExpenseId]   = useState<string | null>(null);
+  const [scanningReceipt,   setScanningReceipt]   = useState(false);
+  const [receiptScanError,  setReceiptScanError]  = useState<string | null>(null);
+  const receiptInputRef = useRef<HTMLInputElement>(null);
 
   // Custom expense types & categories (user-added items, persisted)
   const [customExpenseTypes, setCustomExpenseTypes] = useState<string[]>(() => {
@@ -1288,6 +1291,93 @@ export default function App() {
     setEditingExpenseId(null);
     setShowExpenseForm(false);
     showToast(`Gasto guardado ✓ $${newExpense.amount.toFixed(2)}`);
+  };
+
+  // Receipt scan via Gemini Vision — sends image to API server, auto-fills expense form
+  const handleReceiptScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setReceiptScanError(null);
+    setScanningReceipt(true);
+    try {
+      // Compress to max 1 MB before sending (canvas resize)
+      const imageBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = ev => {
+          const dataUrl = ev.target?.result as string;
+          const img = new Image();
+          img.onload = () => {
+            const MAX_PX = 1024;
+            const scale = Math.min(1, MAX_PX / Math.max(img.width, img.height));
+            const canvas = document.createElement("canvas");
+            canvas.width  = Math.round(img.width  * scale);
+            canvas.height = Math.round(img.height * scale);
+            const ctx = canvas.getContext("2d");
+            if (!ctx) { reject(new Error("canvas")); return; }
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            // Strip the data:image/...;base64, prefix
+            const b64 = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
+            resolve(b64);
+          };
+          img.onerror = reject;
+          img.src = dataUrl;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const res = await fetch("/api/receipt-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64, mimeType: "image/jpeg" }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Server error" }));
+        throw new Error((err as {error:string}).error || "Server error");
+      }
+
+      const data = await res.json() as {
+        vendor: string; amount: number; date: string; category: string; note: string;
+      };
+
+      // Map Gemini's category to our IRS categories
+      const CAT_MAP: Record<string, string> = {
+        "Gas/Fuel":             "Vehicle & Fuel",
+        "Car Wash":             "Vehicle & Fuel",
+        "Tolls":                "Tolls & Parking",
+        "Food & Drink":         "Meals & Entertainment",
+        "Vehicle Maintenance":  "Vehicle & Fuel",
+        "Insurance":            "Insurance",
+        "Phone":                "Phone & Communications",
+        "Parking":              "Tolls & Parking",
+        "Supplies":             "Supplies & Equipment",
+        "Other":                "Other",
+      };
+
+      setExpenseForm(s => ({
+        ...s,
+        name:        data.vendor  || s.name,
+        amount:      data.amount  > 0 ? String(data.amount.toFixed(2)) : s.amount,
+        date:        data.date    || s.date,
+        category:    CAT_MAP[data.category] ?? s.category,
+        description: data.note    || s.description,
+      }));
+
+      const filled = [
+        data.vendor  && "vendor",
+        data.amount > 0 && "amount",
+        data.date    && "date",
+      ].filter(Boolean).join(", ");
+      showToast(`✅ Receipt scanned · filled: ${filled || "no data found"}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Scan failed";
+      setReceiptScanError(msg);
+      showToast(`❌ ${msg}`, 3500);
+    } finally {
+      setScanningReceipt(false);
+    }
   };
 
   const handleDeleteExpense = (id: string) => {
@@ -2522,15 +2612,39 @@ export default function App() {
       {/* Entry / Edit form */}
       {showExpenseForm && (
         <div className="bg-[#101010] border border-[#2a2a2a] rounded-2xl p-4 space-y-3">
+          {/* Hidden file input for camera/gallery */}
+          <input
+            ref={receiptInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handleReceiptScan}
+          />
+
           <div className="flex items-center justify-between">
             <h3 className="text-[11px] font-bold tracking-[0.16em] text-white uppercase">
               {editingExpenseId ? "✏️ Edit Expense" : "New Expense"}
             </h3>
-            {editingExpenseId && (
-              <button onClick={() => { setEditingExpenseId(null); resetExpenseForm(); setShowExpenseForm(false); }}
-                className="text-[10px] text-neutral-500 hover:text-white transition-colors">← Cancel</button>
-            )}
-          </div>
+            <div className="flex items-center gap-2">
+              {/* Receipt scan button */}
+              <button
+                onClick={() => { setReceiptScanError(null); receiptInputRef.current?.click(); }}
+                disabled={scanningReceipt}
+                className="flex items-center gap-1.5 h-8 px-3 rounded-full border text-[10px] font-bold transition-colors disabled:opacity-50"
+                style={{ background: scanningReceipt ? "#1a1a1a" : "#0d1f0d", borderColor: "#4ade8033", color: "#4ade80" }}
+              >
+                {scanningReceipt
+                  ? <><span className="animate-spin inline-block w-3 h-3 border border-[#4ade80] border-t-transparent rounded-full"/>Scanning…</>
+                  : <>📷 Scan Receipt</>
+                }
+              </button>
+              {editingExpenseId && (
+                <button onClick={() => { setEditingExpenseId(null); resetExpenseForm(); setShowExpenseForm(false); }}
+                  className="text-[10px] text-neutral-500 hover:text-white transition-colors">← Cancel</button>
+              )}
+            </div>{/* end flex items-center gap-2 */}
+          </div>{/* end flex items-center justify-between */}
 
           {/* Vendor / Name dropdown */}
           <div>

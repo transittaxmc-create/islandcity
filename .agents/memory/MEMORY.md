@@ -4,3 +4,4 @@
 - [Shift state persistence](shift-persistence.md) — Shift clock (shiftActive, clockInTime, totalBreakMs, isOnBreak, breakStart) persisted to ic-shift-* localStorage keys; restored only if ic-shift-date matches today.
 - [IRS Statement implementation](irs-statement.md) — handlePrintIRSStatement uses string concatenation (not template literals) to avoid TSX parser confusion with HTML angle brackets; opens print dialog in new window.
 - [NYC vendors and data flow](data-flow-decisions.md) — NYC_DEFAULT_VENDORS constant at module level; allVendors = defaults + custom (deduped); expPeriodFiltered useMemo computed before ExpensesContent for period-aware header.
+- [Gemini receipt scan architecture](receipt-scan.md) — POST /api/receipt-scan; frontend compresses to JPEG 1024px before sending; @google/genai must NOT be in esbuild externals (removed @google/* wildcard, kept @google-cloud/*).
