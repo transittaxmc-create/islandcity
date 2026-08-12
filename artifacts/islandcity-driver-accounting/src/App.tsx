@@ -2078,64 +2078,138 @@ export default function App() {
   const meta = getPlatformMeta(tripForm.platform);
 
   const EntryFormContent = (
-    <div id="trip-entry-form" className="w-full max-w-[480px] mx-auto bg-[#101010] border border-[#222] rounded-[24px] p-3 space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="w-1 h-6 bg-[#22c55e] rounded-full inline-block" />
-          <h2 className="text-white font-bold text-[18px] tracking-[0.14em] uppercase">TRIP ENTRY</h2>
-        </div>
-        <span className="px-3 py-1 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-200 text-[11px] tracking-[0.12em] font-semibold uppercase">
-          {editingId ? "EDITING" : "NEW TRIP"}
-        </span>
+    <div id="trip-entry-form" className="w-full max-w-[480px] mx-auto space-y-0">
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between pb-3">
+        <h2 className="text-white font-black text-[20px] tracking-[0.06em] uppercase">
+          {editingId ? "✎ EDIT TRIP" : "ADD NEW TRIP"}
+        </h2>
+        <span className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-widest uppercase ${
+          editingId ? "bg-amber-400/15 border border-amber-400/40 text-amber-400" : "bg-[#0a1a0a] border border-[#166534] text-[#4ade80]"
+        }`}>{editingId ? "EDITING" : "NEW"}</span>
       </div>
 
-      {/* ── Trip date & time — editable for late entries ── */}
-      <div className={`rounded-xl border px-3 py-2.5 ${editingId ? 'border-amber-400/40 bg-amber-400/5' : 'border-[#1e1e1e] bg-black/20'}`}>
-        <div className="flex items-center justify-between mb-2">
-          <label className="text-[9px] tracking-[0.12em] text-neutral-200 font-bold uppercase">⏱ Trip Date &amp; Time</label>
-          <span className={`text-[9px] font-medium ${editingId ? 'text-amber-400' : 'text-neutral-400'}`}>
-            {editingId ? '⚠ Correct if this was entered late' : 'Change if entering late'}
-          </span>
+      {/* ── DATE / TIME — compact row ── */}
+      <div className={`flex gap-2 pb-3 ${editingId ? '' : ''}`}>
+        <input type="date" value={tripForm.tripDate}
+          onChange={e => setTripForm(s => ({ ...s, tripDate: e.target.value }))}
+          className={`flex-1 h-10 rounded-xl px-3 text-white text-[13px] focus:outline-none border ${
+            editingId ? "bg-amber-400/5 border-amber-400/40 focus:border-amber-400" : "bg-[#111] border-[#222] focus:border-[#333]"
+          }`} />
+        <input type="time" value={tripForm.tripTime}
+          onChange={e => setTripForm(s => ({ ...s, tripTime: e.target.value }))}
+          className={`w-[108px] h-10 rounded-xl px-3 text-white text-[13px] focus:outline-none border ${
+            editingId ? "bg-amber-400/5 border-amber-400/40 focus:border-amber-400" : "bg-[#111] border-[#222] focus:border-[#333]"
+          }`} />
+        {editingId && <span className="self-center text-[9px] text-amber-400 font-bold">⚠ LATE?</span>}
+      </div>
+
+      {/* ══ PLATFORM ════════════════════════════════════ */}
+      <div className="border-t border-[#1a1a1a] pt-3 pb-1">
+        <p className="text-[10px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-2">PLATFORM</p>
+
+        {/* TOP 3 */}
+        <div className="grid grid-cols-3 gap-2 mb-2">
+          {(["Uber", "Lyft", "Empower"] as const).map(name => {
+            const m = getPlatformMeta(name);
+            const isSel = tripForm.platform === name;
+            return (
+              <button key={name} type="button" onClick={() => setTripForm(s => ({ ...s, platform: name }))}
+                className="h-[62px] rounded-2xl flex flex-col items-center justify-center gap-1 transition-all active:scale-95 border-2"
+                style={{
+                  background: isSel ? "rgba(250,204,21,0.08)" : "#111",
+                  borderColor: isSel ? "#facc15" : "#1e1e1e",
+                  boxShadow: isSel ? "0 0 14px rgba(250,204,21,0.2)" : "none",
+                }}>
+                {m.logo
+                  ? <img src={m.logo} alt={name} className={`w-8 h-8 object-contain rounded-lg ${m.logoBg || ""}`} style={{ padding: m.logoBg ? 2 : 0 }} />
+                  : <span className={`w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-black text-white ${m.bg}`}>{m.initial}</span>
+                }
+                <span className="text-[11px] font-bold" style={{ color: isSel ? "#facc15" : "#555" }}>{name}</span>
+              </button>
+            );
+          })}
         </div>
-        <div className="flex gap-2">
-          <input
-            type="date"
-            value={tripForm.tripDate}
-            onChange={e => setTripForm(s => ({ ...s, tripDate: e.target.value }))}
-            className="flex-1 h-10 rounded-xl bg-black border border-[#262626] px-3 text-white text-[13px] focus:outline-none focus:border-amber-400/40"
-          />
-          <input
-            type="time"
-            value={tripForm.tripTime}
-            onChange={e => setTripForm(s => ({ ...s, tripTime: e.target.value }))}
-            className="w-[110px] h-10 rounded-xl bg-black border border-[#262626] px-3 text-white text-[13px] focus:outline-none focus:border-amber-400/40"
-          />
+
+        {/* VOUCHER row */}
+        <div className="mb-1.5">
+          <p className="text-[8px] tracking-[0.2em] text-neutral-600 font-bold uppercase mb-1 flex items-center gap-1.5">
+            <span className="flex-1 h-px bg-[#1a1a1a]"/>VOUCHER<span className="flex-1 h-px bg-[#1a1a1a]"/>
+          </p>
+          <div className="grid grid-cols-3 gap-1.5">
+            {(["Gallant", "Aventus Ride", "Classic Ryde"] as const).map(name => {
+              const m = getPlatformMeta(name);
+              const isSel = tripForm.platform === name;
+              const short = name === "Aventus Ride" ? "Aventus" : name === "Classic Ryde" ? "Classic" : name;
+              return (
+                <button key={name} type="button" onClick={() => setTripForm(s => ({ ...s, platform: name }))}
+                  className="h-11 rounded-xl flex items-center gap-2 px-2.5 transition-all active:scale-95 border"
+                  style={{ background: isSel ? "rgba(250,204,21,0.06)" : "#0d0d0d", borderColor: isSel ? "#facc15" : "#1e1e1e" }}>
+                  {m.logo
+                    ? <img src={m.logo} alt={name} className="w-5 h-5 object-contain rounded flex-shrink-0" />
+                    : <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-black text-white flex-shrink-0 ${m.bg}`}>{m.initial}</span>
+                  }
+                  <span className="text-[10px] font-bold truncate" style={{ color: isSel ? "#facc15" : "#555" }}>{short}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ACCESS-A-RIDE + OTHER combined compact row */}
+        <div>
+          <p className="text-[8px] tracking-[0.2em] text-[#3a5070] font-bold uppercase mb-1 flex items-center gap-1.5">
+            <span className="flex-1 h-px bg-[#0f1a2a]"/>ACCESS-A-RIDE / OTHER<span className="flex-1 h-px bg-[#0f1a2a]"/>
+          </p>
+          <div className="grid grid-cols-5 gap-1.5">
+            {(["EcoRide", "Aki Technology", "Island City Transit", "Transit Tax", "Other"] as const).map(name => {
+              const m = getPlatformMeta(name);
+              const isSel = tripForm.platform === name;
+              const isAAR = m.tags.includes("ACCESS-A-RIDE");
+              const short = name === "Aki Technology" ? "Aki" : name === "Island City Transit" ? "IC Transit" : name === "Transit Tax" ? "Tax" : name;
+              return (
+                <button key={name} type="button" onClick={() => setTripForm(s => ({ ...s, platform: name }))}
+                  className="h-10 rounded-xl flex flex-col items-center justify-center gap-0.5 py-1 transition-all active:scale-95 border"
+                  style={{
+                    background: isSel ? (isAAR ? "rgba(96,165,250,0.08)" : "rgba(250,204,21,0.05)") : "#0a0a0a",
+                    borderColor: isSel ? (isAAR ? "#60a5fa" : "#facc15") : "#1a1a1a",
+                  }}>
+                  {m.logo
+                    ? <img src={m.logo} alt={name} className={`w-5 h-5 object-contain rounded ${m.logoBg || ""}`} style={{ padding: m.logoBg ? 1 : 0 }} />
+                    : <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-black text-white ${m.bg}`}>{m.initial}</span>
+                  }
+                  <span className="text-[8px] font-bold text-center leading-none"
+                    style={{ color: isSel ? (isAAR ? "#60a5fa" : "#facc15") : "#444" }}>{short}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      {/* EARNINGS — full width, prominent */}
-      <div className="space-y-1">
-        <label className="text-[10px] tracking-[0.08em] text-neutral-200 font-bold uppercase">EARNINGS <span className="font-normal normal-case opacity-70">Fare</span></label>
-        <div className="relative flex items-center rounded-2xl border-2 border-[#262626] bg-black focus-within:border-[#facc15]/60 transition-colors"
-          style={{ height: 72 }}>
-          <span className="pl-4 text-[22px] font-black text-neutral-500 select-none">$</span>
+      {/* ══ EARNINGS ════════════════════════════════════ */}
+      <div className="border-t border-[#1a1a1a] pt-3">
+        <p className="text-[10px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-2">EARNINGS <span className="text-neutral-600 normal-case font-normal tracking-normal">· Fare</span></p>
+        <div className="flex items-center rounded-2xl border-2 focus-within:border-[#facc15]/70 transition-colors"
+          style={{ height: 68, background: "#080808", borderColor: tripForm.earnings ? "#facc15" : "#1a1a1a" }}>
+          <span className="pl-4 text-[24px] font-black text-neutral-600 select-none">$</span>
           <input inputMode="decimal" value={tripForm.earnings}
             onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, earnings: e.target.value })); }}
             placeholder="0.00"
-            className="flex-1 h-full bg-transparent pl-2 pr-4 text-[36px] font-black font-mono-jet placeholder:text-[#3a3a3a] focus:outline-none"
+            className="flex-1 h-full bg-transparent pl-2 pr-4 text-[38px] font-black font-mono-jet placeholder:text-[#2a2a2a] focus:outline-none"
             style={{ color: tripForm.earnings ? "#facc15" : undefined }} />
         </div>
       </div>
 
-      {/* ── Pickup & Drop-off — compact card, close to earnings ── */}
-      <div className="rounded-2xl border border-[#1e1e1e] bg-black overflow-hidden">
-        {/* Pickup row */}
-        <div className="flex items-center gap-2 px-3" style={{ minHeight: 48 }}>
-          <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-[#052e16] border border-[#166534] text-[#4ade80] text-[9px] font-bold tracking-widest uppercase">FROM</span>
+      {/* ══ PICKUP ══════════════════════════════════════ */}
+      <div className="border-t border-[#1a1a1a] pt-3">
+        <p className="text-[10px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-1.5">PICKUP</p>
+        <div className="flex items-center gap-2 rounded-xl border border-[#1e1e1e] bg-[#080808] px-3 h-11">
+          <span className="text-[#4ade80] text-[16px] flex-shrink-0">📍</span>
           <input value={tripForm.pickup}
             onChange={e => setTripForm(s => ({ ...s, pickup: e.target.value }))}
-            placeholder={gps.lat ? `GPS: ${gps.lat.toFixed(4)},${gps.lng?.toFixed(4)}` : "Pickup address"}
-            className="flex-1 bg-transparent text-white text-[13px] font-medium placeholder:text-[#4b5563] focus:outline-none min-w-0 py-3" />
+            placeholder={gps.lat ? `${gps.lat.toFixed(4)}, ${gps.lng?.toFixed(4)}` : "Address or GPS location"}
+            className="flex-1 bg-transparent text-white text-[13px] placeholder:text-[#333] focus:outline-none min-w-0" />
           <button type="button" onClick={async () => {
             if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
             setPickupResolving(true);
@@ -2147,32 +2221,26 @@ export default function App() {
               setTripForm(s => ({ ...s, pickup: `${gps.lat!.toFixed(5)},${gps.lng!.toFixed(5)}` }));
               showToast("GPS coordinates saved (offline)");
             } finally { setPickupResolving(false); }
-          }} className="flex-shrink-0 w-9 h-9 rounded-xl bg-[#052e16] border border-[#166534] flex items-center justify-center text-[14px] active:scale-90 transition-all">
-            {pickupResolving ? <span className="animate-spin text-[10px]">⏳</span> : "📍"}
+          }} className="flex-shrink-0 w-8 h-8 rounded-lg bg-[#052e16] border border-[#166534] flex items-center justify-center text-[12px] active:scale-90 transition-all">
+            {pickupResolving ? <span className="animate-spin text-[10px]">⏳</span> : "GPS"}
           </button>
         </div>
-
-        {/* GPS status — single compact line */}
         {gps.lat && (
-          <div className="px-3 pb-1.5">
-            <p className="font-mono-jet text-[9px] text-[#4ade80] truncate">
-              GPS · {gps.lat.toFixed(4)},{gps.lng?.toFixed(4)} · ±{gps.acc ? Math.round(gps.acc) : "?"}m
-              {gpsAddress ? ` · ${gpsAddress}` : ""}
-              {gpsAirport ? ` · ✈ ${gpsAirport}` : ""}
-            </p>
-          </div>
+          <p className="font-mono-jet text-[9px] text-[#4ade80] mt-1 truncate px-1">
+            {gps.lat.toFixed(5)}, {gps.lng?.toFixed(5)} · ±{gps.acc ? Math.round(gps.acc) : "?"}m{gpsAddress ? ` · ${gpsAddress}` : ""}{gpsAirport ? ` · ✈ ${gpsAirport}` : ""}
+          </p>
         )}
+      </div>
 
-        {/* Divider */}
-        <div className="h-px bg-[#1e1e1e]" />
-
-        {/* Dropoff row */}
-        <div className="flex items-center gap-2 px-3" style={{ minHeight: 48 }}>
-          <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-[#0c1a33] border border-[#1e3a8a] text-[#60a5fa] text-[9px] font-bold tracking-widest uppercase">TO</span>
+      {/* ══ DROP-OFF ════════════════════════════════════ */}
+      <div className="border-t border-[#1a1a1a] pt-3">
+        <p className="text-[10px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-1.5">DROP-OFF</p>
+        <div className="flex items-center gap-2 rounded-xl border border-[#1e1e1e] bg-[#080808] px-3 h-11">
+          <span className="text-[#60a5fa] text-[16px] flex-shrink-0">📍</span>
           <input value={tripForm.dropoff}
             onChange={e => setTripForm(s => ({ ...s, dropoff: e.target.value }))}
-            placeholder="Drop-off address"
-            className="flex-1 bg-transparent text-white text-[13px] font-medium placeholder:text-[#4b5563] focus:outline-none min-w-0 py-3" />
+            placeholder="Address or destination"
+            className="flex-1 bg-transparent text-white text-[13px] placeholder:text-[#333] focus:outline-none min-w-0" />
           <button type="button" onClick={async () => {
             if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
             setDropoffResolving(true);
@@ -2184,300 +2252,216 @@ export default function App() {
               setTripForm(s => ({ ...s, dropoff: `${gps.lat!.toFixed(5)},${gps.lng!.toFixed(5)}` }));
               showToast("GPS coordinates saved (offline)");
             } finally { setDropoffResolving(false); }
-          }} className="flex-shrink-0 w-9 h-9 rounded-xl bg-[#0c1a33] border border-[#1e3a8a] flex items-center justify-center text-[14px] active:scale-90 transition-all">
-            {dropoffResolving ? <span className="animate-spin text-[10px]">⏳</span> : "📍"}
+          }} className="flex-shrink-0 w-8 h-8 rounded-lg bg-[#0c1a33] border border-[#1e3a8a] flex items-center justify-center text-[12px] active:scale-90 transition-all">
+            {dropoffResolving ? <span className="animate-spin text-[10px]">⏳</span> : "GPS"}
           </button>
         </div>
       </div>
 
-      {/* Quick location buttons */}
-      <div className="grid grid-cols-2 gap-2">
-        <button type="button" onClick={() => { if (!gps.lat) startGPS(); setShowPickupMenu(v => !v); setShowDropoffMenu(false); }}
-          className="h-9 rounded-xl bg-black border border-[#14532d] px-3 flex items-center gap-2 text-white text-[10px] font-bold text-left active:bg-[#052e16]/30 transition-colors">
-          <span className="text-[#22c55e] text-[12px]">📍</span>
-          <span className="truncate">Quick Pickup…</span>
-        </button>
-        <button type="button" onClick={() => { if (!gps.lat) startGPS(); setShowDropoffMenu(v => !v); setShowPickupMenu(false); }}
-          className="h-9 rounded-xl bg-black border border-[#1e3a8a] px-3 flex items-center gap-2 text-white text-[10px] font-bold text-left active:bg-[#0c1a33]/60 transition-colors">
-          <span className="text-[#60a5fa] text-[12px]">📍</span>
-          <span className="truncate">Quick Drop Off…</span>
-        </button>
-      </div>
-
-      {showPickupMenu && (
-        <div className="bg-[#141414] border border-[#222] rounded-2xl p-3">
-          <p className="text-[11px] tracking-[0.12em] text-neutral-300 font-bold uppercase mb-2">PICKUP CATEGORY</p>
-          {gps.lat && (
-            <div className="w-full rounded-xl bg-black border border-[#262626] px-3 py-2 text-[12px] text-neutral-300 mb-3 flex flex-col">
-              <span className="font-mono-jet truncate">📍 {gps.lat.toFixed(5)},{gps.lng?.toFixed(5)}{gps.acc ? ` · ±${Math.round(gps.acc)}m` : ""}</span>
-              {gpsAddress && <span className="font-mono-jet text-[11px] text-neutral-400 mt-0.5">{gpsAddress}</span>}
-              {gpsAirport && <span className="font-mono-jet text-[11px] text-[#f6dd8c] mt-0.5">✈ {gpsAirport}</span>}
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-2.5">
-            {LOCATION_CATEGORIES.map(cat => (
-              <button key={`p-${cat}`} type="button" onClick={() => {
-                const coord = gps.lat ? ` (${gps.lat.toFixed(4)},${gps.lng?.toFixed(4)})` : "";
-                setTripForm(s => ({ ...s, pickup: `${cat}${coord}` }));
-                setShowPickupMenu(false);
-                showToast(`Pickup: ${cat}`);
-              }} className="h-14 rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] text-white text-[14px] font-medium active:bg-[#2a2a2a] transition-colors text-center">
-                {cat}
-              </button>
-            ))}
+      {/* ══ LOCATION CATEGORY ═══════════════════════════ */}
+      <div className="border-t border-[#1a1a1a] pt-3">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[10px] tracking-[0.2em] text-neutral-500 font-bold uppercase">LOCATION CATEGORY</p>
+          <div className="flex gap-1.5">
+            <button type="button" onClick={() => { if (!gps.lat) startGPS(); setShowPickupMenu(v => !v); setShowDropoffMenu(false); }}
+              className={`px-2 h-6 rounded-full text-[8px] font-bold tracking-wider border transition-all ${showPickupMenu ? "bg-[#052e16] border-[#166534] text-[#4ade80]" : "bg-transparent border-[#1e1e1e] text-neutral-500"}`}>
+              📍 PICKUP
+            </button>
+            <button type="button" onClick={() => { if (!gps.lat) startGPS(); setShowDropoffMenu(v => !v); setShowPickupMenu(false); }}
+              className={`px-2 h-6 rounded-full text-[8px] font-bold tracking-wider border transition-all ${showDropoffMenu ? "bg-[#0c1a33] border-[#1e3a8a] text-[#60a5fa]" : "bg-transparent border-[#1e1e1e] text-neutral-500"}`}>
+              📍 DROP-OFF
+            </button>
           </div>
         </div>
-      )}
 
-      {showDropoffMenu && (
-        <div className="bg-[#141414] border border-[#222] rounded-2xl p-3">
-          <p className="text-[11px] tracking-[0.12em] text-neutral-300 font-bold uppercase mb-2">DROP OFF CATEGORY</p>
-          <div className="grid grid-cols-2 gap-2.5">
-            {LOCATION_CATEGORIES.map(cat => (
-              <button key={`d-${cat}`} type="button" onClick={() => {
-                const coord = gps.lat ? ` (${gps.lat.toFixed(4)},${gps.lng?.toFixed(4)})` : "";
-                setTripForm(s => ({ ...s, dropoff: `${cat}${coord}` }));
-                setShowDropoffMenu(false);
-                showToast(`Drop-off: ${cat}`);
-              }} className="h-14 rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] text-white text-[14px] font-medium active:bg-[#2a2a2a] transition-colors text-center">
-                {cat}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-2">
-        <div className="space-y-1">
-          <label className="text-[10px] tracking-[0.08em] text-neutral-200 font-bold uppercase">TIPS</label>
-          <input inputMode="decimal" value={tripForm.tips}
-            onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, tips: e.target.value })); }}
-            placeholder="0.00"
-            className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[16px] font-bold font-mono-jet placeholder:text-[#6b7280] focus:outline-none focus:border-[#3a3a3a]" />
-        </div>
-        <div className="space-y-1">
-          <label className="text-[10px] tracking-[0.08em] text-neutral-200 font-bold uppercase">EXTRA CASH</label>
-          <input inputMode="decimal" value={tripForm.extraCash}
-            onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, extraCash: e.target.value })); }}
-            placeholder="0.00"
-            className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[16px] font-bold font-mono-jet placeholder:text-[#6b7280] focus:outline-none focus:border-[#3a3a3a]" />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <label className="text-[10px] tracking-[0.08em] text-neutral-200 font-bold uppercase">TOLL ($)</label>
-            {detectedToll ? (
-              tollManuallyEdited ? (
-                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#2d1b00] border border-[#92400e] text-[#fbbf24] text-[10px] font-bold tracking-wider animate-pulse">
-                  ✎ EDITED · detected ${detectedToll.rate.toFixed(2)}
-                </span>
-              ) : (
-                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#052e16] border border-[#166534] text-[#4ade80] text-[10px] font-bold tracking-wider">
-                  ⚡ DETECTED · {detectedToll.plaza}
-                </span>
-              )
-            ) : (
-              <span className="px-2 py-0.5 rounded-full bg-[#1a1a1a] border border-[#2a2a2a] text-neutral-400 text-[10px] font-bold tracking-widest">GPS AUTO</span>
-            )}
-          </div>
-          {detectedToll && (
-            <p className="text-[10px] text-neutral-400 font-mono-jet">
-              {detectedToll.plaza} · ${detectedToll.rate.toFixed(2)} · {detectedToll.at}
-              {detectedToll.rate === 16.79 || detectedToll.rate === 14.79
-                ? detectedToll.rate === 16.79 ? " · Peak" : " · Off-peak"
-                : ""} · {TOLL_YEAR}
-            </p>
-          )}
-          <input inputMode="decimal" value={tripForm.toll}
-            onChange={e => {
-              if (!numericFilter(e.target.value)) return;
-              setTripForm(s => ({ ...s, toll: e.target.value }));
-              if (detectedToll) setTollManuallyEdited(true);
-            }}
-            placeholder="e.g. 7.46"
-            className={`w-full h-11 rounded-xl bg-black px-3 text-white text-[16px] font-bold font-mono-jet placeholder:text-[#6b7280] focus:outline-none transition-colors border ${
-              detectedToll && !tollManuallyEdited
-                ? "border-[#166534] focus:border-[#4ade80]"
-                : detectedToll && tollManuallyEdited
-                ? "border-[#92400e] focus:border-[#fbbf24]"
-                : "border-[#262626] focus:border-[#3a3a3a]"
-            }`} />
-        </div>
-        <div className="space-y-1">
-          <label className="text-[10px] tracking-[0.08em] text-neutral-200 font-bold uppercase">PLATFORM FEE ($)</label>
-          <input inputMode="decimal" value={tripForm.platformFee}
-            onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, platformFee: e.target.value })); }}
-            placeholder="0.00"
-            className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[16px] font-bold font-mono-jet placeholder:text-[#6b7280] focus:outline-none focus:border-[#3a3a3a]" />
-        </div>
-      </div>
-
-      {/* Platform selector — visual tap grid */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <label className="text-[10px] tracking-[0.08em] text-neutral-200 font-bold uppercase">PLATFORM</label>
-          <PlatformAvatar meta={meta} size="sm" />
-          <span className="text-[11px] font-semibold text-white truncate">{tripForm.platform}</span>
-          {meta.tags.map(tg => (
-            <span key={tg} className={`text-[8px] font-bold uppercase tracking-[0.1em] px-1.5 py-0.5 rounded-full border ${getTagStyle(tg)}`}>{tg}</span>
-          ))}
-          {meta.note && <span className="text-[9px] text-neutral-400 italic">{meta.note}</span>}
-        </div>
-
-        {/* TOP 3 — most common platforms */}
-        <div className="grid grid-cols-3 gap-2">
-          {(["Uber", "Lyft", "Empower"] as const).map(name => {
-            const m = getPlatformMeta(name);
-            const isSel = tripForm.platform === name;
+        {/* Category grid — always visible, tap pickup/dropoff toggle to assign */}
+        <div className="grid grid-cols-4 gap-2">
+          {LOCATION_CATEGORIES.map(cat => {
+            const ICONS: Record<string,string> = {
+              "Hospital":"🏥","City":"🏙","Home":"🏠","Suburbs":"🌳",
+              "Office":"🏢","Airport":"✈️","Restaurant":"🍽","Two-cities":"🗺",
+              "Hotel":"🏨","Mall":"🛍","School":"🎓","Station":"🚉",
+            };
+            const icon = ICONS[cat] || "📌";
+            const isPickupSel = showPickupMenu;
+            const isDropSel = showDropoffMenu;
             return (
-              <button key={name} type="button" onClick={() => setTripForm(s => ({ ...s, platform: name }))}
-                className={`h-16 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all border-2 ${
-                  isSel ? "border-[#facc15] shadow-[0_0_12px_rgba(250,204,21,0.25)]" : "border-[#1e1e1e] hover:border-[#333]"
-                }`}
-                style={{ background: isSel ? "rgba(250,204,21,0.07)" : "#141414" }}>
-                {m.logo
-                  ? <img src={m.logo} alt={name} className={`w-8 h-8 object-contain rounded-lg ${m.logoBg || ""}`} style={{ padding: m.logoBg ? 2 : 0 }} />
-                  : <span className={`w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-black text-white ${m.bg}`}>{m.initial}</span>
+              <button key={cat} type="button" onClick={() => {
+                const coord = gps.lat ? ` (${gps.lat.toFixed(4)},${gps.lng?.toFixed(4)})` : "";
+                if (showPickupMenu) {
+                  setTripForm(s => ({ ...s, pickup: `${cat}${coord}` }));
+                  setShowPickupMenu(false);
+                  showToast(`Pickup: ${cat}`);
+                } else if (showDropoffMenu) {
+                  setTripForm(s => ({ ...s, dropoff: `${cat}${coord}` }));
+                  setShowDropoffMenu(false);
+                  showToast(`Drop-off: ${cat}`);
+                } else {
+                  // Default: set dropoff
+                  setTripForm(s => ({ ...s, dropoff: `${cat}${coord}` }));
+                  showToast(`Drop-off: ${cat}`);
                 }
-                <span className={`text-[11px] font-bold leading-none ${isSel ? "text-[#facc15]" : "text-neutral-400"}`}>{name}</span>
+              }}
+                className="h-14 rounded-xl flex flex-col items-center justify-center gap-1 border transition-all active:scale-95"
+                style={{
+                  background: (isPickupSel || isDropSel) ? "#0f0f0f" : "#0a0a0a",
+                  borderColor: (isPickupSel || isDropSel) ? "#2a2a2a" : "#141414",
+                }}>
+                <span className="text-[20px] leading-none">{icon}</span>
+                <span className="text-[8px] font-bold text-neutral-500 leading-none">{cat}</span>
               </button>
             );
           })}
         </div>
-
-        {/* VOUCHER group */}
-        <div>
-          <p className="text-[8px] tracking-[0.18em] text-neutral-500 font-bold uppercase mb-1.5 flex items-center gap-2">
-            <span className="flex-1 h-px bg-[#1e1e1e]" />VOUCHER<span className="flex-1 h-px bg-[#1e1e1e]" />
+        {gps.lat && (showPickupMenu || showDropoffMenu) && (
+          <p className="font-mono-jet text-[9px] text-[#4ade80] mt-1.5 truncate px-0.5">
+            📍 GPS · {gps.lat.toFixed(4)}, {gps.lng?.toFixed(4)}{gpsAddress ? ` · ${gpsAddress}` : ""}
           </p>
-          <div className="grid grid-cols-3 gap-1.5">
-            {(["Gallant", "Aventus Ride", "Classic Ryde"] as const).map(name => {
-              const m = getPlatformMeta(name);
-              const isSel = tripForm.platform === name;
-              const short = name === "Aventus Ride" ? "Aventus" : name === "Classic Ryde" ? "Classic" : name;
-              return (
-                <button key={name} type="button" onClick={() => setTripForm(s => ({ ...s, platform: name }))}
-                  className={`h-13 rounded-xl flex flex-col items-center justify-center gap-0.5 py-2 transition-all border ${
-                    isSel ? "border-[#facc15]" : "border-[#1e1e1e] hover:border-[#333]"
-                  }`}
-                  style={{ background: isSel ? "rgba(250,204,21,0.06)" : "#111" }}>
-                  {m.logo
-                    ? <img src={m.logo} alt={name} className={`w-6 h-6 object-contain rounded ${m.logoBg || ""}`} style={{ padding: m.logoBg ? 1 : 0 }} />
-                    : <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-black text-white ${m.bg}`}>{m.initial}</span>
-                  }
-                  <span className={`text-[9px] font-bold leading-none text-center ${isSel ? "text-[#facc15]" : "text-neutral-500"}`}>{short}</span>
-                </button>
-              );
-            })}
+        )}
+      </div>
+
+      {/* ══ FINANCIAL DETAILS ═══════════════════════════ */}
+      <div className="border-t border-[#1a1a1a] pt-3">
+        <p className="text-[10px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-2">EXTRAS</p>
+        <div className="grid grid-cols-2 gap-2">
+          {/* TIPS */}
+          <div>
+            <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-wider">Tips</label>
+            <div className="flex items-center h-10 rounded-xl border border-[#1e1e1e] bg-[#080808] px-3 mt-1 focus-within:border-[#4ade80]/40">
+              <span className="text-neutral-600 text-[13px] mr-1">$</span>
+              <input inputMode="decimal" value={tripForm.tips}
+                onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, tips: e.target.value })); }}
+                placeholder="0.00"
+                className="flex-1 bg-transparent text-white text-[15px] font-bold font-mono-jet placeholder:text-[#2a2a2a] focus:outline-none" />
+            </div>
           </div>
-        </div>
-
-        {/* ACCESS-A-RIDE group */}
-        <div>
-          <p className="text-[8px] tracking-[0.18em] text-[#60a5fa] font-bold uppercase mb-1.5 flex items-center gap-2">
-            <span className="flex-1 h-px bg-[#1e2a3a]" />ACCESS-A-RIDE<span className="flex-1 h-px bg-[#1e2a3a]" />
-          </p>
-          <div className="grid grid-cols-3 gap-1.5">
-            {(["EcoRide", "Aki Technology"] as const).map(name => {
-              const m = getPlatformMeta(name);
-              const isSel = tripForm.platform === name;
-              const short = name === "Aki Technology" ? "Aki Tech" : name;
-              return (
-                <button key={name} type="button" onClick={() => setTripForm(s => ({ ...s, platform: name }))}
-                  className={`h-13 rounded-xl flex flex-col items-center justify-center gap-0.5 py-2 transition-all border ${
-                    isSel ? "border-[#60a5fa]" : "border-[#1e2a3a] hover:border-[#2a3a5a]"
-                  }`}
-                  style={{ background: isSel ? "rgba(96,165,250,0.08)" : "#0a0f18" }}>
-                  {m.logo
-                    ? <img src={m.logo} alt={name} className={`w-6 h-6 object-contain rounded ${m.logoBg || ""}`} style={{ padding: m.logoBg ? 1 : 0 }} />
-                    : <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-black text-white ${m.bg}`}>{m.initial}</span>
-                  }
-                  <span className={`text-[9px] font-bold leading-none text-center ${isSel ? "text-[#60a5fa]" : "text-[#3a5070]"}`}>{short}</span>
-                </button>
-              );
-            })}
+          {/* EXTRA CASH */}
+          <div>
+            <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-wider">Extra Cash</label>
+            <div className="flex items-center h-10 rounded-xl border border-[#1e1e1e] bg-[#080808] px-3 mt-1">
+              <span className="text-neutral-600 text-[13px] mr-1">$</span>
+              <input inputMode="decimal" value={tripForm.extraCash}
+                onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, extraCash: e.target.value })); }}
+                placeholder="0.00"
+                className="flex-1 bg-transparent text-white text-[15px] font-bold font-mono-jet placeholder:text-[#2a2a2a] focus:outline-none" />
+            </div>
           </div>
-        </div>
-
-        {/* OTHER group */}
-        <div>
-          <p className="text-[8px] tracking-[0.18em] text-neutral-500 font-bold uppercase mb-1.5 flex items-center gap-2">
-            <span className="flex-1 h-px bg-[#1e1e1e]" />OTHER<span className="flex-1 h-px bg-[#1e1e1e]" />
-          </p>
-          <div className="grid grid-cols-4 gap-1.5">
-            {(["Island City Transit", "Transit Tax", "Other"] as const).map(name => {
-              const m = getPlatformMeta(name);
-              const isSel = tripForm.platform === name;
-              const short = name === "Island City Transit" ? "IC Transit" : name === "Transit Tax" ? "Tax" : name;
-              return (
-                <button key={name} type="button" onClick={() => setTripForm(s => ({ ...s, platform: name }))}
-                  className={`h-12 rounded-xl flex flex-col items-center justify-center gap-0.5 py-1.5 transition-all border ${
-                    isSel ? "border-[#facc15]" : "border-[#1e1e1e] hover:border-[#333]"
-                  }`}
-                  style={{ background: isSel ? "rgba(250,204,21,0.05)" : "#0d0d0d" }}>
-                  {m.logo
-                    ? <img src={m.logo} alt={name} className="w-5 h-5 object-contain rounded" />
-                    : <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-black text-white ${m.bg}`}>{m.initial}</span>
-                  }
-                  <span className={`text-[8px] font-bold leading-none text-center ${isSel ? "text-[#facc15]" : "text-neutral-600"}`}>{short}</span>
-                </button>
-              );
-            })}
+          {/* TOLL */}
+          <div>
+            <div className="flex items-center gap-1.5">
+              <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-wider">Toll</label>
+              {detectedToll ? (
+                tollManuallyEdited
+                  ? <span className="text-[7px] font-bold text-amber-400 animate-pulse">✎ EDITED</span>
+                  : <span className="text-[7px] font-bold text-[#4ade80]">⚡ {detectedToll.plaza}</span>
+              ) : <span className="text-[7px] font-bold text-neutral-600">GPS AUTO</span>}
+            </div>
+            {detectedToll && (
+              <p className="text-[8px] text-neutral-600 font-mono-jet mt-0.5">${detectedToll.rate.toFixed(2)}{detectedToll.rate === 16.79 ? " Peak" : detectedToll.rate === 14.79 ? " Off-pk" : ""}</p>
+            )}
+            <div className="flex items-center h-10 rounded-xl border bg-[#080808] px-3 mt-1 focus-within:border-[#4ade80]/40"
+              style={{ borderColor: detectedToll && !tollManuallyEdited ? "#166534" : detectedToll && tollManuallyEdited ? "#92400e" : "#1e1e1e" }}>
+              <span className="text-neutral-600 text-[13px] mr-1">$</span>
+              <input inputMode="decimal" value={tripForm.toll}
+                onChange={e => {
+                  if (!numericFilter(e.target.value)) return;
+                  setTripForm(s => ({ ...s, toll: e.target.value }));
+                  if (detectedToll) setTollManuallyEdited(true);
+                }}
+                placeholder="0.00"
+                className="flex-1 bg-transparent text-white text-[15px] font-bold font-mono-jet placeholder:text-[#2a2a2a] focus:outline-none" />
+            </div>
+          </div>
+          {/* PLATFORM FEE */}
+          <div>
+            <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-wider">Platform Fee</label>
+            <div className="flex items-center h-10 rounded-xl border border-[#1e1e1e] bg-[#080808] px-3 mt-1">
+              <span className="text-neutral-600 text-[13px] mr-1">$</span>
+              <input inputMode="decimal" value={tripForm.platformFee}
+                onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, platformFee: e.target.value })); }}
+                placeholder="0.00"
+                className="flex-1 bg-transparent text-white text-[15px] font-bold font-mono-jet placeholder:text-[#2a2a2a] focus:outline-none" />
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="space-y-1">
-        <label className="text-[10px] tracking-[0.08em] text-neutral-200 font-bold uppercase">NOTES</label>
-        <textarea value={tripForm.notes} onChange={e => setTripForm(s => ({ ...s, notes: e.target.value }))}
-          placeholder="Surge, traffic, late toll, invoice details…" rows={1}
-          className="w-full rounded-xl bg-black border border-[#262626] px-3 py-2.5 text-[12px] text-[#d1d5db] placeholder:text-[#6b7280] focus:outline-none focus:border-[#3a3a3a] resize-none leading-[1.5]" />
+      {/* ══ REFERENCE + NOTES ═══════════════════════════ */}
+      <div className="border-t border-[#1a1a1a] pt-3 space-y-2">
+        <div className="flex items-center gap-2 rounded-xl border border-[#141414] bg-[#080808] px-3 h-10">
+          <span className="text-[9px] text-neutral-600 font-bold uppercase tracking-wider flex-shrink-0">REF</span>
+          <input value={tripForm.reference}
+            onChange={e => setTripForm(s => ({ ...s, reference: e.target.value }))}
+            placeholder="Invoice / reference number (optional)"
+            className="flex-1 bg-transparent text-white text-[12px] placeholder:text-[#2a2a2a] focus:outline-none min-w-0" />
+        </div>
+        <div className="flex items-start gap-2 rounded-xl border border-[#141414] bg-[#080808] px-3 py-2.5">
+          <span className="text-[9px] text-neutral-600 font-bold uppercase tracking-wider flex-shrink-0 mt-0.5">NOTE</span>
+          <textarea value={tripForm.notes} onChange={e => setTripForm(s => ({ ...s, notes: e.target.value }))}
+            placeholder="Surge, traffic, late toll, details…" rows={1}
+            className="flex-1 bg-transparent text-[12px] text-[#d1d5db] placeholder:text-[#2a2a2a] focus:outline-none resize-none leading-relaxed min-w-0" />
+        </div>
       </div>
 
-      {/* Grand total preview */}
-      <div className="rounded-xl bg-black border border-[#262626] px-4 py-2.5 flex items-center justify-between">
-        <span className="text-[10px] tracking-[0.08em] text-neutral-200 font-bold uppercase">GRAND TOTAL</span>
-        <span className="font-mono-jet text-[22px] font-bold text-[#facc15] tracking-tight">${grandTotalLive.toFixed(2)}</span>
-      </div>
+      {/* ══ GRAND TOTAL + SAVE ══════════════════════════ */}
+      <div className="border-t border-[#1a1a1a] pt-3 space-y-2">
+        {/* Total bar */}
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-2">
+            <PlatformAvatar meta={meta} size="sm" />
+            <span className="text-[12px] font-semibold text-neutral-400">{tripForm.platform}</span>
+            {meta.tags.map(tg => (
+              <span key={tg} className={`text-[7px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${getTagStyle(tg)}`}>{tg}</span>
+            ))}
+          </div>
+          <div className="text-right">
+            <p className="text-[8px] text-neutral-600 uppercase tracking-widest">GRAND TOTAL</p>
+            <p className="font-mono-jet text-[26px] font-black leading-none" style={{ color: grandTotalLive > 0 ? "#facc15" : "#333" }}>
+              ${grandTotalLive.toFixed(2)}
+            </p>
+          </div>
+        </div>
 
-      <button type="button" onClick={handleSave}
-        className="w-full h-12 rounded-xl bg-[#facc15] hover:bg-[#fde047] text-black font-bold text-[16px] tracking-[0.14em] uppercase transition-colors shadow-[0_0_16px_rgba(250,204,21,0.2)]">
-        {editingId ? "UPDATE TRIP" : "+ SAVE TRIP"}
-      </button>
-      {editingId && (
-        <button type="button" onClick={resetForm}
-          className="w-full h-11 rounded-2xl border border-[#2a2a2a] bg-[#0a0a0a] text-[12px] font-semibold tracking-[0.08em] text-neutral-400 hover:text-white transition-colors">
-          CANCEL EDIT
+        {/* Save button */}
+        <button type="button" onClick={handleSave}
+          className="w-full h-14 rounded-2xl font-black text-[16px] tracking-[0.1em] uppercase transition-all active:scale-[0.98]"
+          style={{
+            background: grandTotalLive > 0 ? "#facc15" : "#1a1a1a",
+            color: grandTotalLive > 0 ? "#000" : "#444",
+            boxShadow: grandTotalLive > 0 ? "0 0 20px rgba(250,204,21,0.25)" : "none",
+          }}>
+          {editingId ? "UPDATE TRIP" : "SAVE TRIP"}
         </button>
-      )}
 
-      {/* Storage status — compact bar */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${storageVerified ? "bg-[#22c55e] animate-pulse" : "bg-red-500"}`} />
-          <span className={`text-[9px] font-bold tracking-widest ${storageVerified ? "text-[#4ade80]" : "text-red-400"}`}>
-            {storageVerified ? "STORAGE ACTIVE" : "STORAGE ERROR"}
-          </span>
-          <span className="text-[9px] text-neutral-400 font-mono-jet">· {trips.length} trips · {(storageBytes / 1024).toFixed(1)}KB</span>
-        </div>
-        <div className="flex gap-1.5">
-          <button onClick={() => {
-            try {
-              const raw = localStorage.getItem("island-city-trips");
-              if (raw) showToast(`✓ ${JSON.parse(raw).length} trips · ${(new Blob([raw]).size / 1024).toFixed(2)}KB`);
-              else showToast("No data on disk yet");
-            } catch { showToast("Error reading storage"); }
-          }} className="px-2 h-6 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-[8px] font-bold tracking-widest text-neutral-400 hover:text-white">
-            VERIFY
+        {editingId && (
+          <button type="button" onClick={resetForm}
+            className="w-full h-10 rounded-xl border border-[#222] text-[11px] font-semibold tracking-[0.08em] text-neutral-500 active:text-white transition-colors">
+            CANCEL EDIT
           </button>
-          <button onClick={() => {
-            navigator.clipboard?.writeText(localStorage.getItem("island-city-trips") || "");
-            showToast("JSON copied — backup ready");
-          }} className="px-2 h-6 rounded-full bg-[#0a0a0a] border border-[#222] text-[8px] font-bold tracking-widest text-neutral-400 hover:text-white">
-            BACKUP
-          </button>
+        )}
+
+        {/* Storage status — minimal */}
+        <div className="flex items-center justify-between pt-1">
+          <div className="flex items-center gap-1.5">
+            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${storageVerified ? "bg-[#22c55e] animate-pulse" : "bg-red-500"}`} />
+            <span className={`text-[8px] font-bold tracking-widest ${storageVerified ? "text-[#4ade80]" : "text-red-400"}`}>
+              {storageVerified ? "STORAGE OK" : "STORAGE ERR"}
+            </span>
+            <span className="text-[8px] text-neutral-600 font-mono-jet">· {trips.length} trips · {(storageBytes / 1024).toFixed(1)}KB</span>
+          </div>
+          <div className="flex gap-1.5">
+            <button onClick={() => {
+              try {
+                const raw = localStorage.getItem("island-city-trips");
+                if (raw) showToast(`✓ ${JSON.parse(raw).length} trips · ${(new Blob([raw]).size / 1024).toFixed(2)}KB`);
+                else showToast("No data on disk yet");
+              } catch { showToast("Error reading storage"); }
+            }} className="px-2 h-5 rounded-full bg-[#111] border border-[#222] text-[7px] font-bold tracking-widest text-neutral-500 active:text-white">VERIFY</button>
+            <button onClick={() => {
+              navigator.clipboard?.writeText(localStorage.getItem("island-city-trips") || "");
+              showToast("JSON copied — backup ready");
+            }} className="px-2 h-5 rounded-full bg-[#111] border border-[#222] text-[7px] font-bold tracking-widest text-neutral-500 active:text-white">BACKUP</button>
+          </div>
         </div>
       </div>
     </div>
