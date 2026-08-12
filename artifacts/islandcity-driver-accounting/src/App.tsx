@@ -277,7 +277,7 @@ const TAG_STYLES: Record<string, string> = {
 
 const platformMeta: Record<string, PlatformMeta> = {
   "EcoRide - 10% fee": { initial: "E", bg: "bg-[#22c55e]", tags: ["ACCESS-A-RIDE", "VOUCHER"] },
-  "EcoRide":           { initial: "E", bg: "bg-[#22c55e]", tags: ["ACCESS-A-RIDE", "VOUCHER"] },
+  "EcoRide":           { initial: "E", bg: "bg-[#22c55e]", logoBg: "bg-white", tags: ["ACCESS-A-RIDE", "VOUCHER"], logo: "/logos/ecoride.png" },
   "Uber":              { initial: "U", bg: "bg-white",     logoBg: "bg-white", tags: [], logo: "/logos/uber.png" },
   "Lyft":              { initial: "L", bg: "bg-[#ff00bf]", logoBg: "bg-black", tags: [], logo: "/logos/lyft.png" },
   "Empower":           { initial: "E", bg: "bg-[#3b82f6]", logoBg: "bg-white", tags: [], logo: "/logos/empower.png" },
@@ -2269,10 +2269,10 @@ export default function App() {
             <span className="flex-1 h-px bg-[#1e2a3a]" />ACCESS-A-RIDE<span className="flex-1 h-px bg-[#1e2a3a]" />
           </p>
           <div className="grid grid-cols-3 gap-1.5">
-            {(["EcoRide - 10% fee", "EcoRide", "Aki Technology"] as const).map(name => {
+            {(["EcoRide", "Aki Technology"] as const).map(name => {
               const m = getPlatformMeta(name);
               const isSel = tripForm.platform === name;
-              const short = name === "EcoRide - 10% fee" ? "Eco 10%" : name === "Aki Technology" ? "Aki Tech" : name;
+              const short = name === "Aki Technology" ? "Aki Tech" : name;
               return (
                 <button key={name} type="button" onClick={() => setTripForm(s => ({ ...s, platform: name }))}
                   className={`h-13 rounded-xl flex flex-col items-center justify-center gap-0.5 py-2 transition-all border ${
@@ -2296,10 +2296,10 @@ export default function App() {
             <span className="flex-1 h-px bg-[#1e1e1e]" />OTHER<span className="flex-1 h-px bg-[#1e1e1e]" />
           </p>
           <div className="grid grid-cols-4 gap-1.5">
-            {(["Street Hail", "Island City Transit", "Transit Tax", "Other"] as const).map(name => {
+            {(["Island City Transit", "Transit Tax", "Other"] as const).map(name => {
               const m = getPlatformMeta(name);
               const isSel = tripForm.platform === name;
-              const short = name === "Island City Transit" ? "IC Transit" : name === "Transit Tax" ? "Tax" : name === "Street Hail" ? "St. Hail" : name;
+              const short = name === "Island City Transit" ? "IC Transit" : name === "Transit Tax" ? "Tax" : name;
               return (
                 <button key={name} type="button" onClick={() => setTripForm(s => ({ ...s, platform: name }))}
                   className={`h-12 rounded-xl flex flex-col items-center justify-center gap-0.5 py-1.5 transition-all border ${
