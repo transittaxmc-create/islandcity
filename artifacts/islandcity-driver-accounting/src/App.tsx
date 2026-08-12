@@ -2113,21 +2113,27 @@ export default function App() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <div className="space-y-1">
-          <label className="text-[10px] tracking-[0.08em] text-neutral-200 font-bold uppercase">REFERENCE / INVOICE</label>
-          <input value={tripForm.reference}
-            onChange={e => setTripForm(s => ({ ...s, reference: e.target.value }))}
-            placeholder="e.g. INV-2026-001"
-            className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[13px] font-medium placeholder:text-[#6b7280] focus:outline-none focus:border-[#3a3a3a]" />
-        </div>
-        <div className="space-y-1">
-          <label className="text-[10px] tracking-[0.08em] text-neutral-200 font-bold uppercase">EARNINGS <span className="font-normal normal-case opacity-70">Fare</span></label>
+      {/* EARNINGS — full width, prominent */}
+      <div className="space-y-1">
+        <label className="text-[10px] tracking-[0.08em] text-neutral-200 font-bold uppercase">EARNINGS <span className="font-normal normal-case opacity-70">Fare</span></label>
+        <div className="relative flex items-center rounded-2xl border-2 border-[#262626] bg-black focus-within:border-[#facc15]/60 transition-colors"
+          style={{ height: 72 }}>
+          <span className="pl-4 text-[22px] font-black text-neutral-500 select-none">$</span>
           <input inputMode="decimal" value={tripForm.earnings}
             onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, earnings: e.target.value })); }}
             placeholder="0.00"
-            className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[16px] font-bold font-mono-jet placeholder:text-[#6b7280] focus:outline-none focus:border-[#3a3a3a]" />
+            className="flex-1 h-full bg-transparent pl-2 pr-4 text-[36px] font-black font-mono-jet placeholder:text-[#3a3a3a] focus:outline-none"
+            style={{ color: tripForm.earnings ? "#facc15" : undefined }} />
         </div>
+      </div>
+
+      {/* Reference / Invoice — compact, secondary */}
+      <div className="space-y-1">
+        <label className="text-[10px] tracking-[0.08em] text-neutral-400 font-bold uppercase">REFERENCE / INVOICE <span className="font-normal normal-case opacity-60">(optional)</span></label>
+        <input value={tripForm.reference}
+          onChange={e => setTripForm(s => ({ ...s, reference: e.target.value }))}
+          placeholder="e.g. INV-2026-001"
+          className="w-full h-10 rounded-xl bg-black border border-[#1e1e1e] px-3 text-white text-[13px] font-medium placeholder:text-[#4b5563] focus:outline-none focus:border-[#3a3a3a]" />
       </div>
 
       <div className="grid grid-cols-2 gap-2">
@@ -2197,34 +2203,118 @@ export default function App() {
         </div>
       </div>
 
-      {/* Platform selector */}
-      <div className="space-y-1">
-        <div className="flex items-center gap-2">
+      {/* Platform selector — visual tap grid */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <label className="text-[10px] tracking-[0.08em] text-neutral-200 font-bold uppercase">PLATFORM</label>
           <PlatformAvatar meta={meta} size="sm" />
           <span className="text-[11px] font-semibold text-white truncate">{tripForm.platform}</span>
           {meta.tags.map(tg => (
             <span key={tg} className={`text-[8px] font-bold uppercase tracking-[0.1em] px-1.5 py-0.5 rounded-full border ${getTagStyle(tg)}`}>{tg}</span>
           ))}
+          {meta.note && <span className="text-[9px] text-neutral-400 italic">{meta.note}</span>}
         </div>
-        <div className="relative">
-          <select value={tripForm.platform} onChange={e => setTripForm(s => ({ ...s, platform: e.target.value }))}
-            className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 pr-8 text-white text-[14px] font-bold appearance-none focus:outline-none focus:border-[#3a3a3a]">
-            <option>EcoRide - 10% fee</option>
-            <option>EcoRide</option>
-            <option>Uber</option>
-            <option>Lyft</option>
-            <option>Empower</option>
-            <option>Gallant</option>
-            <option>Aventus Ride</option>
-            <option>Classic Ryde</option>
-            <option>Aki Technology</option>
-            <option>Street Hail</option>
-            <option>Island City Transit</option>
-            <option>Transit Tax</option>
-            <option>Other</option>
-          </select>
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 text-[12px]">▼</span>
+
+        {/* TOP 3 — most common platforms */}
+        <div className="grid grid-cols-3 gap-2">
+          {(["Uber", "Lyft", "Empower"] as const).map(name => {
+            const m = getPlatformMeta(name);
+            const isSel = tripForm.platform === name;
+            return (
+              <button key={name} type="button" onClick={() => setTripForm(s => ({ ...s, platform: name }))}
+                className={`h-16 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all border-2 ${
+                  isSel ? "border-[#facc15] shadow-[0_0_12px_rgba(250,204,21,0.25)]" : "border-[#1e1e1e] hover:border-[#333]"
+                }`}
+                style={{ background: isSel ? "rgba(250,204,21,0.07)" : "#141414" }}>
+                {m.logo
+                  ? <img src={m.logo} alt={name} className={`w-8 h-8 object-contain rounded-lg ${m.logoBg || ""}`} style={{ padding: m.logoBg ? 2 : 0 }} />
+                  : <span className={`w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-black text-white ${m.bg}`}>{m.initial}</span>
+                }
+                <span className={`text-[11px] font-bold leading-none ${isSel ? "text-[#facc15]" : "text-neutral-400"}`}>{name}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* VOUCHER group */}
+        <div>
+          <p className="text-[8px] tracking-[0.18em] text-neutral-500 font-bold uppercase mb-1.5 flex items-center gap-2">
+            <span className="flex-1 h-px bg-[#1e1e1e]" />VOUCHER<span className="flex-1 h-px bg-[#1e1e1e]" />
+          </p>
+          <div className="grid grid-cols-3 gap-1.5">
+            {(["Gallant", "Aventus Ride", "Classic Ryde"] as const).map(name => {
+              const m = getPlatformMeta(name);
+              const isSel = tripForm.platform === name;
+              const short = name === "Aventus Ride" ? "Aventus" : name === "Classic Ryde" ? "Classic" : name;
+              return (
+                <button key={name} type="button" onClick={() => setTripForm(s => ({ ...s, platform: name }))}
+                  className={`h-13 rounded-xl flex flex-col items-center justify-center gap-0.5 py-2 transition-all border ${
+                    isSel ? "border-[#facc15]" : "border-[#1e1e1e] hover:border-[#333]"
+                  }`}
+                  style={{ background: isSel ? "rgba(250,204,21,0.06)" : "#111" }}>
+                  {m.logo
+                    ? <img src={m.logo} alt={name} className={`w-6 h-6 object-contain rounded ${m.logoBg || ""}`} style={{ padding: m.logoBg ? 1 : 0 }} />
+                    : <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-black text-white ${m.bg}`}>{m.initial}</span>
+                  }
+                  <span className={`text-[9px] font-bold leading-none text-center ${isSel ? "text-[#facc15]" : "text-neutral-500"}`}>{short}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ACCESS-A-RIDE group */}
+        <div>
+          <p className="text-[8px] tracking-[0.18em] text-[#60a5fa] font-bold uppercase mb-1.5 flex items-center gap-2">
+            <span className="flex-1 h-px bg-[#1e2a3a]" />ACCESS-A-RIDE<span className="flex-1 h-px bg-[#1e2a3a]" />
+          </p>
+          <div className="grid grid-cols-3 gap-1.5">
+            {(["EcoRide - 10% fee", "EcoRide", "Aki Technology"] as const).map(name => {
+              const m = getPlatformMeta(name);
+              const isSel = tripForm.platform === name;
+              const short = name === "EcoRide - 10% fee" ? "Eco 10%" : name === "Aki Technology" ? "Aki Tech" : name;
+              return (
+                <button key={name} type="button" onClick={() => setTripForm(s => ({ ...s, platform: name }))}
+                  className={`h-13 rounded-xl flex flex-col items-center justify-center gap-0.5 py-2 transition-all border ${
+                    isSel ? "border-[#60a5fa]" : "border-[#1e2a3a] hover:border-[#2a3a5a]"
+                  }`}
+                  style={{ background: isSel ? "rgba(96,165,250,0.08)" : "#0a0f18" }}>
+                  {m.logo
+                    ? <img src={m.logo} alt={name} className={`w-6 h-6 object-contain rounded ${m.logoBg || ""}`} style={{ padding: m.logoBg ? 1 : 0 }} />
+                    : <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-black text-white ${m.bg}`}>{m.initial}</span>
+                  }
+                  <span className={`text-[9px] font-bold leading-none text-center ${isSel ? "text-[#60a5fa]" : "text-[#3a5070]"}`}>{short}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* OTHER group */}
+        <div>
+          <p className="text-[8px] tracking-[0.18em] text-neutral-500 font-bold uppercase mb-1.5 flex items-center gap-2">
+            <span className="flex-1 h-px bg-[#1e1e1e]" />OTHER<span className="flex-1 h-px bg-[#1e1e1e]" />
+          </p>
+          <div className="grid grid-cols-4 gap-1.5">
+            {(["Street Hail", "Island City Transit", "Transit Tax", "Other"] as const).map(name => {
+              const m = getPlatformMeta(name);
+              const isSel = tripForm.platform === name;
+              const short = name === "Island City Transit" ? "IC Transit" : name === "Transit Tax" ? "Tax" : name === "Street Hail" ? "St. Hail" : name;
+              return (
+                <button key={name} type="button" onClick={() => setTripForm(s => ({ ...s, platform: name }))}
+                  className={`h-12 rounded-xl flex flex-col items-center justify-center gap-0.5 py-1.5 transition-all border ${
+                    isSel ? "border-[#facc15]" : "border-[#1e1e1e] hover:border-[#333]"
+                  }`}
+                  style={{ background: isSel ? "rgba(250,204,21,0.05)" : "#0d0d0d" }}>
+                  {m.logo
+                    ? <img src={m.logo} alt={name} className="w-5 h-5 object-contain rounded" />
+                    : <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-black text-white ${m.bg}`}>{m.initial}</span>
+                  }
+                  <span className={`text-[8px] font-bold leading-none text-center ${isSel ? "text-[#facc15]" : "text-neutral-600"}`}>{short}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -2420,18 +2510,24 @@ export default function App() {
   const RegisterContent = (
     <div className="space-y-4 pb-24">
       {/* Page header */}
-      <div className="flex items-start justify-between">
-        <div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
           <h2 className="text-[22px] font-bold text-white tracking-tight">Revenue Queue</h2>
           <p className="text-[10px] tracking-[0.12em] text-neutral-400 mt-0.5 uppercase font-semibold">Review &amp; audit before posting to Ledger</p>
         </div>
-        <div className="flex items-center gap-2 mt-1">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {selectedCount > 0 && (
             <span className="px-2.5 py-1 rounded-full bg-[#facc15]/20 border border-[#facc15]/40 text-[#f6dd8c] text-[10px] font-bold">
               {selectedCount} selected
             </span>
           )}
-          <span className="font-mono-jet text-[12px] text-neutral-400">{pendingTrips.length} pending</span>
+          {/* ── Quick return to Entry ── */}
+          <button
+            onClick={() => setTripsTab("ENTRY")}
+            className="h-9 px-3 rounded-xl bg-[#facc15] active:scale-[0.96] transition-all flex items-center gap-1.5 shadow-[0_0_14px_rgba(250,204,21,0.3)]">
+            <span className="text-black text-[18px] font-black leading-none">＋</span>
+            <span className="text-black text-[11px] font-black tracking-[0.08em] uppercase">New Trip</span>
+          </button>
         </div>
       </div>
 
@@ -2616,16 +2712,39 @@ export default function App() {
         </div>
       )}
 
-      {/* Floating POST TO LEDGER button */}
+      {/* Floating POST TO LEDGER button — when trips selected */}
       {selectedCount > 0 && (
         <div className="fixed bottom-[76px] left-1/2 -translate-x-1/2 z-50 w-full max-w-[440px] px-4 pointer-events-none">
+          <div className="flex items-center gap-2">
+            {/* Quick return pill — always accessible even when posting */}
+            <button
+              onClick={() => setTripsTab("ENTRY")}
+              style={{ pointerEvents: "auto" }}
+              className="h-14 w-14 rounded-2xl bg-black border-2 border-[#facc15]/60 flex flex-col items-center justify-center gap-0.5 flex-shrink-0 shadow-lg transition-all active:scale-95">
+              <span className="text-[#facc15] text-[18px] font-black leading-none">＋</span>
+              <span className="text-[#facc15] text-[7px] font-bold tracking-widest uppercase">ENTRY</span>
+            </button>
+            <button
+              onClick={handlePostToLedger}
+              style={{ pointerEvents: "auto" }}
+              className="flex-1 h-14 rounded-2xl bg-[#facc15] hover:bg-[#fde047] active:scale-[0.98] text-black font-bold text-[14px] tracking-[0.06em] shadow-[0_0_32px_rgba(250,204,21,0.45)] transition-all flex items-center justify-center gap-3">
+              <span>POST {selectedCount} TO LEDGER</span>
+              <span className="font-mono-jet opacity-80">${selectedAmt.toFixed(2)}</span>
+              <span>→</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Floating NEW TRIP button — when nothing selected */}
+      {selectedCount === 0 && (
+        <div className="fixed bottom-[76px] left-1/2 -translate-x-1/2 z-50 w-full max-w-[440px] px-4 pointer-events-none">
           <button
-            onClick={handlePostToLedger}
+            onClick={() => setTripsTab("ENTRY")}
             style={{ pointerEvents: "auto" }}
-            className="w-full h-14 rounded-2xl bg-[#facc15] hover:bg-[#fde047] active:scale-[0.98] text-black font-bold text-[14px] tracking-[0.06em] shadow-[0_0_32px_rgba(250,204,21,0.45)] transition-all flex items-center justify-center gap-3">
-            <span>POST {selectedCount} TO LEDGER</span>
-            <span className="font-mono-jet opacity-80">${selectedAmt.toFixed(2)}</span>
-            <span>→</span>
+            className="w-full h-14 rounded-2xl border-2 border-[#facc15]/50 bg-black active:scale-[0.98] text-[#facc15] font-bold text-[15px] tracking-[0.08em] shadow-[0_0_20px_rgba(250,204,21,0.15)] transition-all flex items-center justify-center gap-2">
+            <span className="text-[22px] font-black leading-none">＋</span>
+            <span>NEW TRIP</span>
           </button>
         </div>
       )}
