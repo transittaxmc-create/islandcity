@@ -743,6 +743,13 @@ export default function App() {
       customExpenseTypes,
       customExpenseCategories,
       customVendors,
+      // Finance settings
+      dailyGoal,
+      workDays,
+      dayTargets,
+      // Bank balance + history
+      bankBalance,
+      bankAdjHistory,
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
     const url  = URL.createObjectURL(blob);
@@ -753,7 +760,7 @@ export default function App() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    showToast("Backup descargado ✓");
+    showToast("Backup downloaded ✓");
   };
 
   const handleClockIn = () => {
@@ -1097,9 +1104,9 @@ export default function App() {
   };
 
   const handleInlineSave = (id: string) => {
-    setTrips(prev => prev.map(t => {
+    const newEarnings = parseFloat(inlineForm.earnings) || 0;
+    syncSaveTrips(trips.map(t => {
       if (t.id !== id) return t;
-      const newEarnings = parseFloat(inlineForm.earnings) || 0;
       return { ...t, pickup: inlineForm.pickup, dropoff: inlineForm.dropoff, earnings: newEarnings, reference: inlineForm.reference, grandTotal: newEarnings + t.tips + t.extra + t.toll - t.fee };
     }));
     setInlineEditId(null);
@@ -1110,11 +1117,12 @@ export default function App() {
     if (selectedForPost.size === 0) return;
     const now = new Date().toISOString();
     const count = selectedForPost.size;
-    setTrips(prev => prev.map(t =>
+    const updated = trips.map(t =>
       selectedForPost.has(t.id)
         ? { ...t, status: "posted" as const, reviewed: true, postedAt: now }
         : t
-    ));
+    );
+    syncSaveTrips(updated);
     setSelectedForPost(new Set());
     showToast(`${count} trip${count !== 1 ? "s" : ""} posted to Ledger ✓`);
     setActiveTab("LEDGER");
@@ -1184,7 +1192,7 @@ export default function App() {
     { name: "Times Square",           lat: 40.7580, lng: -73.9855 },
     { name: "Grand Central",          lat: 40.7527, lng: -73.9772 },
     { name: "Midtown Manhattan",      lat: 40.7549, lng: -73.9840 },
-    { name: "Lower Manhattan / FDI",  lat: 40.7074, lng: -74.0113 },
+    { name: "Lower Manhattan / FiDi", lat: 40.7074, lng: -74.0113 },
     { name: "Brooklyn Downtown",      lat: 40.6928, lng: -73.9903 },
     { name: "Upper East Side",        lat: 40.7739, lng: -73.9575 },
     { name: "Williamsburg",           lat: 40.7081, lng: -73.9571 },
@@ -1405,7 +1413,7 @@ export default function App() {
         {/* Daily goal — slim bar below gauge */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-[10px]">
-            <span className="text-neutral-500 font-mono-jet">DAILY GOAL $500</span>
+            <span className="text-neutral-500 font-mono-jet">DAILY GOAL ${todayGoal}</span>
             <span className={`font-mono-jet font-bold ${goalPct>=100?"text-[#4ade80]":goalPct>=70?"text-[#f6dd8c]":"text-neutral-400"}`}>{goalPct.toFixed(0)}%</span>
           </div>
           <div className="h-2 bg-[#1a1a1a] rounded-full overflow-hidden border border-[#2a2a2a]">
@@ -1469,7 +1477,7 @@ export default function App() {
           </div>
           {perHourGross > 0 && grossToday < todayGoal && (
             <p className="text-[10px] font-mono-jet text-neutral-500 mt-2">
-              At this pace you need {perHourGross > 0 ? `${(remainingToGoal / perHourGross).toFixed(1)}h` : "—"} more to reach $500
+              At this pace you need {perHourGross > 0 ? `${(remainingToGoal / perHourGross).toFixed(1)}h` : "—"} more to reach ${todayGoal}
             </p>
           )}
         </div>
@@ -2447,14 +2455,14 @@ export default function App() {
                     <div className="flex items-center gap-1 mt-2 justify-end">
                       {/* Verify toggle */}
                       <button onClick={() => handleToggleExpenseVerified(ex.id)}
-                        title={ex.verified ? "Marcar como no verificado" : "Marcar como verificado"}
+                        title={ex.verified ? "Mark as unverified" : "Mark as verified"}
                         className={`w-7 h-7 rounded-full border text-[11px] flex items-center justify-center transition-all ${ex.verified ? "bg-[#4ade80]/20 border-[#4ade80]/40 text-[#4ade80]" : "bg-[#1e1e1e] border-[#2a2a2a] text-neutral-500 hover:text-[#4ade80]"}`}>
                         ✓
                       </button>
                       {/* Edit */}
                       <button onClick={() => {
                         setEditingExpenseId(ex.id);
-                        setExpenseForm({ name: ex.vendor, type: ex.type || "Other", category: ex.category, description: ex.note, amount: String(ex.amount), date: ex.date });
+                        setExpenseForm({ name: ex.vendor, type: ex.type || "Other", category: ex.category, description: ex.note, amount: String(ex.amount), date: ex.date, frequency: ex.frequency || "none", dueDate: ex.dueDate || "" });
                         setShowExpenseForm(true);
                         setAddingCustomType(false);
                         setAddingCustomCat(false);
