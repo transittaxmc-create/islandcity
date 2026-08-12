@@ -1,0 +1,126 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+.cf-container {
+  font-family: 'Space Grotesk', sans-serif;
+  background-color: #030305;
+  color: #ffffff;
+  min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* Deep background ambient mesh */
+.cf-bg-glow {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: 
+    radial-gradient(circle at 50% -20%, rgba(59, 130, 246, 0.1), transparent 60%),
+    radial-gradient(circle at 120% 50%, rgba(16, 185, 129, 0.05), transparent 50%),
+    radial-gradient(circle at -20% 80%, rgba(239, 68, 68, 0.05), transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 3D Grid moving backwards */
+.cf-bg-grid {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-image: 
+    linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+  z-index: 0;
+  transform: perspective(1000px) rotateX(70deg) translateY(-100px) translateZ(-300px);
+  transform-origin: top center;
+  mask-image: linear-gradient(to bottom, black 0%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, transparent 100%);
+}
+
+.cf-content {
+  position: relative;
+  z-index: 1;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 40px 24px 160px;
+  display: flex;
+  flex-direction: column;
+}
+
+.cf-perspective-stage {
+  perspective: 1400px;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 0;
+}
+
+.cf-card-wrapper {
+  position: relative;
+  width: 100%;
+  transform-style: preserve-3d;
+  transition: all 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  border-radius: 24px;
+}
+
+.cf-card {
+  background: rgba(18, 18, 22, 0.6);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 24px;
+  padding: 28px;
+  box-shadow: 
+    0 24px 48px -12px rgba(0,0,0,0.8), 
+    inset 0 1px 0 rgba(255,255,255,0.15), 
+    inset 0 -1px 0 rgba(255,255,255,0.03);
+  transition: all 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  position: relative;
+}
+
+.cf-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(145deg, rgba(255,255,255,0.06) 0%, transparent 60%);
+  pointer-events: none;
+  border-radius: 24px;
+}
+
+.cf-card-glow-income {
+  position: absolute;
+  top: -60px; right: -60px;
+  width: 180px; height: 180px;
+  background: rgba(16, 185, 129, 0.25);
+  filter: blur(60px);
+  pointer-events: none;
+  border-radius: 50%;
+  transition: all 0.7s ease;
+}
+
+.cf-card-glow-expense {
+  position: absolute;
+  top: -60px; right: -60px;
+  width: 180px; height: 180px;
+  background: rgba(239, 68, 68, 0.2);
+  filter: blur(60px);
+  pointer-events: none;
+  border-radius: 50%;
+  transition: all 0.7s ease;
+}
+
+.cf-card-wrapper:hover .cf-card-glow-income {
+  background: rgba(16, 185, 129, 0.4);
+  transform: scale(1.2);
+}
+
+.cf-card-wrapper:hover .cf-card-glow-expense {
+  background: rgba(239, 68, 68, 0.35);
+  transform: scale(1.2);
+}
+
+.font-mono-custom {
+  font-family: 'JetBrains Mono', monospace;
+}

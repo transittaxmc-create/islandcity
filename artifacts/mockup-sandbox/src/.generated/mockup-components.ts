@@ -3,7 +3,11 @@ type ModuleMap = Record<string, () => Promise<Record<string, unknown>>>;
 export const modules: ModuleMap = {
   "./components/mockups/islandcity/BankReconcile.tsx": () => import("../components/mockups/islandcity/BankReconcile.tsx"),
   "./components/mockups/islandcity/CashFlow.tsx": () => import("../components/mockups/islandcity/CashFlow.tsx"),
+  "./components/mockups/islandcity/CashFlow3DTimeline.tsx": () => import("../components/mockups/islandcity/CashFlow3DTimeline.tsx"),
   "./components/mockups/islandcity/CashFlowBold.tsx": () => import("../components/mockups/islandcity/CashFlowBold.tsx"),
+  "./components/mockups/islandcity/CashFlowJournal.tsx": () => import("../components/mockups/islandcity/CashFlowJournal.tsx"),
+  "./components/mockups/islandcity/CashFlowRunway.tsx": () => import("../components/mockups/islandcity/CashFlowRunway.tsx"),
+  "./components/mockups/islandcity/CashFlowRunwayAltLayout.tsx": () => import("../components/mockups/islandcity/CashFlowRunwayAltLayout.tsx"),
   "./components/mockups/islandcity/FinancesBold.tsx": () => import("../components/mockups/islandcity/FinancesBold.tsx"),
   "./components/mockups/islandcity/FinancesBoldChat.tsx": () => import("../components/mockups/islandcity/FinancesBoldChat.tsx"),
   "./components/mockups/islandcity/FinancesBoldNetBalance.tsx": () => import("../components/mockups/islandcity/FinancesBoldNetBalance.tsx"),
