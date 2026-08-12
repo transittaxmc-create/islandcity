@@ -342,38 +342,22 @@ export function ExpenseProjection() {
           </div>
         </div>
 
-        {/* ── STEP 2: Category — immediately after amount ── */}
+        {/* ── STEP 2: Category — dropdown with emoji logo + name ── */}
         <div style={{
           background: CARD, border: "1px solid #2a1010",
           borderRadius: 18, padding: "16px",
           boxShadow: `0 0 0 1px ${RED}14`,
         }}>
           <StepBadge n="2" label="Category" />
-
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {cats.map(c => {
-              const on = category === c.name;
-              return (
-                <button key={c.name} onClick={() => setCat(prev => prev===c.name ? "" : c.name)}
-                  style={{
-                    padding: "9px 14px", borderRadius: 999,
-                    border: `2px solid ${on ? RED : "#444"}`,
-                    background: on ? "#2a0808" : "#111",
-                    color: on ? RED : "#aaa",             // inactive = #aaa, clearly readable
-                    fontFamily: SANS, fontSize: 14, fontWeight: on ? 800 : 500,
-                    cursor: "pointer", transition: "all 0.15s",
-                    boxShadow: on ? `0 0 12px ${RED}33` : "none",
-                    display: "flex", alignItems: "center", gap: 6,
-                  }}>
-                  <span style={{ fontSize: 16 }}>{c.icon}</span>
-                  {c.name}
-                </button>
-              );
-            })}
-
-            {/* + New category */}
-            <AddPill label="New category" onAdd={n => { addCat(n); setCat(n); }} accent={RED} />
-          </div>
+          <LogoDropdown
+            label="Expense Category"
+            placeholder="Select a category…"
+            items={cats}
+            value={category}
+            onChange={setCat}
+            onAdd={n => { addCat(n); setCat(n); }}
+            addLabel="New category…"
+          />
         </div>
 
         {/* ── STEP 3: Frequency ── */}
