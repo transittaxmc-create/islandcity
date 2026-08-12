@@ -32,6 +32,17 @@ function Gauge({ value }: { value: number }) {
   const tip = polar(CX, CY, R - 8, needleAngle);
   const b1  = polar(CX, CY, 11, needleAngle + 90);
   const b2  = polar(CX, CY, 11, needleAngle - 90);
+
+  // Zone boundary values to label around the outer edge of the arc
+  const BOUNDARIES = [
+    { v: 0,  label: "$0"  },
+    { v: 45, label: "$45" },
+    { v: 58, label: "$58" },
+    { v: 68, label: "$68" },
+    { v: 80, label: "$80" },
+    { v: 90, label: "$90" },
+  ];
+
   return (
     <svg width="310" height="142" viewBox="0 0 310 142" style={{ overflow: "visible" }}>
       <defs>
@@ -51,10 +62,30 @@ function Gauge({ value }: { value: number }) {
         const i2 = polar(CX, CY, R - SW/2 + 1, a), o2 = polar(CX, CY, R + SW/2 - 3, a);
         return <line key={v} x1={i2.x} y1={i2.y} x2={o2.x} y2={o2.y} stroke="#000" strokeWidth="2.5" opacity="0.55" />;
       })}
-      {/* End labels */}
-      <text x="42" y="140" fill="#3a3a3a" fontSize="10" fontFamily="JetBrains Mono,monospace">$0</text>
-      <text x="252" y="140" fill="#3a3a3a" fontSize="10" fontFamily="JetBrains Mono,monospace">$90</text>
-      {/* Zone name labels on arc */}
+
+      {/* Zone boundary value labels — just outside the outer edge of the arc */}
+      {BOUNDARIES.map(({ v, label }) => {
+        const a   = valToAngle(v);
+        const outerR = R + SW / 2 + 10;          // just beyond the track rim
+        const lp  = polar(CX, CY, outerR, a);
+        // Pick the color of whichever zone this boundary starts or belongs to
+        const zColor = ZONES.find(z => z.min === v)?.color
+                    ?? ZONES.find(z => v > z.min && v <= z.max)?.color
+                    ?? "#555";
+        // Adjust anchor so labels don't overlap the arc ends
+        const anchor = v === 0 ? "end" : v === 90 ? "start" : "middle";
+        return (
+          <text key={v}
+            x={lp.x} y={lp.y + 4}
+            textAnchor={anchor} dominantBaseline="middle"
+            fill={zColor} fontSize="8.5" fontWeight="700"
+            fontFamily="JetBrains Mono,monospace" opacity="0.9">
+            {label}
+          </text>
+        );
+      })}
+
+      {/* Zone name labels inside the arc (mid-zone) */}
       {ZONES.map(z => {
         const mid = valToAngle((z.min + Math.min(z.max, MAX_VAL)) / 2);
         const p = polar(CX, CY, R - SW/2 - 13, mid);
@@ -183,8 +214,30 @@ export function FinancesBold() {
         {/* ── Speedometer card ───────────────────────────────────────────── */}
         <div style={{ margin: "12px 12px 0", background: "#080808",
           border: "1px solid #1e1e1e", borderRadius: 22, paddingTop: 16 }}>
-          <p style={{ margin: "0 0 8px 16px", fontSize: 10, fontWeight: 700, color: "#d9b64f",
-            textTransform: "uppercase", letterSpacing: "0.18em" }}>GANANDO AHORA</p>
+
+          {/* Card header row: label left, current rate pill right */}
+          <div style={{ display: "flex", alignItems: "center",
+            justifyContent: "space-between", padding: "0 16px 8px" }}>
+            <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#d9b64f",
+              textTransform: "uppercase", letterSpacing: "0.18em" }}>GANANDO AHORA</p>
+
+            {/* CURRENT HOURLY RATE pill — shows the same value as the gauge center */}
+            <div style={{
+              background: "#1a1400",
+              border: `1px solid ${ZONES.find(z => perHour >= z.min && perHour < z.max)?.color ?? "#4ade80"}55`,
+              borderRadius: 999,
+              padding: "4px 10px",
+              display: "flex", flexDirection: "column", alignItems: "flex-end",
+            }}>
+              <span style={{ fontSize: 7, color: "#555", textTransform: "uppercase",
+                letterSpacing: "0.18em", lineHeight: 1.2 }}>CURRENT HOURLY RATE</span>
+              <span style={{
+                fontFamily: "JetBrains Mono,monospace", fontSize: 15, fontWeight: 900, lineHeight: 1.2,
+                color: ZONES.find(z => perHour >= z.min && perHour < z.max)?.color ?? "#4ade80",
+              }}>${perHour}/hr</span>
+            </div>
+          </div>
+
           <div style={{ display: "flex", justifyContent: "center" }}>
             <Gauge value={perHour} />
           </div>
