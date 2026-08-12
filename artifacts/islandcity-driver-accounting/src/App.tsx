@@ -2108,7 +2108,8 @@ export default function App() {
       <div className="border-t border-[#1a1a1a] pt-3 pb-1">
         <p className="text-[10px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-2">PLATFORM</p>
 
-        {/* TOP 3 */}
+        {/* helper: logo container — siempre fondo blanco para que se vea claro */}
+        {/* TOP 3 — Uber · Lyft · Empower */}
         <div className="grid grid-cols-3 gap-2 mb-2">
           {(["Uber", "Lyft", "Empower"] as const).map(name => {
             const m = getPlatformMeta(name);
@@ -2121,65 +2122,106 @@ export default function App() {
                   borderColor: isSel ? "#facc15" : "#1e1e1e",
                   boxShadow: isSel ? "0 0 14px rgba(250,204,21,0.2)" : "none",
                 }}>
-                {m.logo
-                  ? <img src={m.logo} alt={name} className={`w-8 h-8 object-contain rounded-lg ${m.logoBg || ""}`} style={{ padding: m.logoBg ? 2 : 0 }} />
-                  : <span className={`w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-black text-white ${m.bg}`}>{m.initial}</span>
-                }
-                <span className="text-[11px] font-bold" style={{ color: isSel ? "#facc15" : "#555" }}>{name}</span>
+                {/* fondo blanco siempre — logo claro y visible */}
+                <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center flex-shrink-0 overflow-hidden">
+                  {m.logo
+                    ? <img src={m.logo} alt={name} className="w-7 h-7 object-contain" />
+                    : <span className="text-[13px] font-black text-black">{m.initial}</span>
+                  }
+                </div>
+                <span className="text-[11px] font-bold leading-none" style={{ color: isSel ? "#facc15" : "#555" }}>{name}</span>
               </button>
             );
           })}
         </div>
 
-        {/* VOUCHER row */}
+        {/* VOUCHER — 3 cols, mismo alto que TOP 3 */}
         <div className="mb-1.5">
           <p className="text-[8px] tracking-[0.2em] text-neutral-600 font-bold uppercase mb-1 flex items-center gap-1.5">
             <span className="flex-1 h-px bg-[#1a1a1a]"/>VOUCHER<span className="flex-1 h-px bg-[#1a1a1a]"/>
           </p>
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-3 gap-2">
             {(["Gallant", "Aventus Ride", "Classic Ryde"] as const).map(name => {
               const m = getPlatformMeta(name);
               const isSel = tripForm.platform === name;
               const short = name === "Aventus Ride" ? "Aventus" : name === "Classic Ryde" ? "Classic" : name;
               return (
                 <button key={name} type="button" onClick={() => setTripForm(s => ({ ...s, platform: name }))}
-                  className="h-11 rounded-xl flex items-center gap-2 px-2.5 transition-all active:scale-95 border"
-                  style={{ background: isSel ? "rgba(250,204,21,0.06)" : "#0d0d0d", borderColor: isSel ? "#facc15" : "#1e1e1e" }}>
-                  {m.logo
-                    ? <img src={m.logo} alt={name} className="w-5 h-5 object-contain rounded flex-shrink-0" />
-                    : <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-black text-white flex-shrink-0 ${m.bg}`}>{m.initial}</span>
-                  }
-                  <span className="text-[10px] font-bold truncate" style={{ color: isSel ? "#facc15" : "#555" }}>{short}</span>
+                  className="h-[62px] rounded-2xl flex flex-col items-center justify-center gap-1 transition-all active:scale-95 border-2"
+                  style={{
+                    background: isSel ? "rgba(250,204,21,0.08)" : "#111",
+                    borderColor: isSel ? "#facc15" : "#1e1e1e",
+                    boxShadow: isSel ? "0 0 14px rgba(250,204,21,0.2)" : "none",
+                  }}>
+                  <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    {m.logo
+                      ? <img src={m.logo} alt={name} className="w-7 h-7 object-contain" />
+                      : <span className="text-[13px] font-black" style={{ color: m.bg.replace("bg-[", "").replace("]", "") }}>{m.initial}</span>
+                    }
+                  </div>
+                  <span className="text-[11px] font-bold leading-none" style={{ color: isSel ? "#facc15" : "#555" }}>{short}</span>
                 </button>
               );
             })}
           </div>
         </div>
 
-        {/* ACCESS-A-RIDE + OTHER combined compact row */}
-        <div>
+        {/* ACCESS-A-RIDE — 2 cols */}
+        <div className="mb-1.5">
           <p className="text-[8px] tracking-[0.2em] text-[#3a5070] font-bold uppercase mb-1 flex items-center gap-1.5">
-            <span className="flex-1 h-px bg-[#0f1a2a]"/>ACCESS-A-RIDE / OTHER<span className="flex-1 h-px bg-[#0f1a2a]"/>
+            <span className="flex-1 h-px bg-[#0f1a2a]"/>ACCESS-A-RIDE<span className="flex-1 h-px bg-[#0f1a2a]"/>
           </p>
-          <div className="grid grid-cols-5 gap-1.5">
-            {(["EcoRide", "Aki Technology", "Island City Transit", "Transit Tax", "Other"] as const).map(name => {
+          <div className="grid grid-cols-2 gap-2">
+            {(["EcoRide", "Aki Technology"] as const).map(name => {
               const m = getPlatformMeta(name);
               const isSel = tripForm.platform === name;
-              const isAAR = m.tags.includes("ACCESS-A-RIDE");
-              const short = name === "Aki Technology" ? "Aki" : name === "Island City Transit" ? "IC Transit" : name === "Transit Tax" ? "Tax" : name;
+              const short = name === "Aki Technology" ? "Aki Technology" : name;
               return (
                 <button key={name} type="button" onClick={() => setTripForm(s => ({ ...s, platform: name }))}
-                  className="h-10 rounded-xl flex flex-col items-center justify-center gap-0.5 py-1 transition-all active:scale-95 border"
+                  className="h-[52px] rounded-2xl flex items-center gap-3 px-3 transition-all active:scale-95 border"
                   style={{
-                    background: isSel ? (isAAR ? "rgba(96,165,250,0.08)" : "rgba(250,204,21,0.05)") : "#0a0a0a",
-                    borderColor: isSel ? (isAAR ? "#60a5fa" : "#facc15") : "#1a1a1a",
+                    background: isSel ? "rgba(96,165,250,0.08)" : "#0a0f18",
+                    borderColor: isSel ? "#60a5fa" : "#1e2a3a",
+                    boxShadow: isSel ? "0 0 10px rgba(96,165,250,0.15)" : "none",
                   }}>
-                  {m.logo
-                    ? <img src={m.logo} alt={name} className={`w-5 h-5 object-contain rounded ${m.logoBg || ""}`} style={{ padding: m.logoBg ? 1 : 0 }} />
-                    : <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-black text-white ${m.bg}`}>{m.initial}</span>
-                  }
-                  <span className="text-[8px] font-bold text-center leading-none"
-                    style={{ color: isSel ? (isAAR ? "#60a5fa" : "#facc15") : "#444" }}>{short}</span>
+                  <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    {m.logo
+                      ? <img src={m.logo} alt={name} className="w-7 h-7 object-contain" />
+                      : <span className="text-[13px] font-black text-sky-600">{m.initial}</span>
+                    }
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[12px] font-bold truncate leading-tight" style={{ color: isSel ? "#60a5fa" : "#888" }}>{short}</p>
+                    <p className="text-[9px] text-[#3a5070] font-semibold leading-none mt-0.5">ACCESS-A-RIDE</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* OTHER — 3 cols */}
+        <div>
+          <p className="text-[8px] tracking-[0.2em] text-neutral-600 font-bold uppercase mb-1 flex items-center gap-1.5">
+            <span className="flex-1 h-px bg-[#1a1a1a]"/>OTHER<span className="flex-1 h-px bg-[#1a1a1a]"/>
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            {(["Island City Transit", "Transit Tax", "Other"] as const).map(name => {
+              const m = getPlatformMeta(name);
+              const isSel = tripForm.platform === name;
+              const short = name === "Island City Transit" ? "IC Transit" : name === "Transit Tax" ? "Transit Tax" : name;
+              const initColor = name === "Island City Transit" ? "#6366f1" : name === "Transit Tax" ? "#14b8a6" : "#9ca3af";
+              return (
+                <button key={name} type="button" onClick={() => setTripForm(s => ({ ...s, platform: name }))}
+                  className="h-[52px] rounded-xl flex flex-col items-center justify-center gap-1 transition-all active:scale-95 border"
+                  style={{
+                    background: isSel ? "rgba(250,204,21,0.06)" : "#0d0d0d",
+                    borderColor: isSel ? "#facc15" : "#1a1a1a",
+                  }}>
+                  <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center flex-shrink-0">
+                    <span className="text-[10px] font-black" style={{ color: initColor }}>{m.initial}</span>
+                  </div>
+                  <span className="text-[9px] font-bold text-center leading-none" style={{ color: isSel ? "#facc15" : "#555" }}>{short}</span>
                 </button>
               );
             })}
