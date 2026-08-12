@@ -1,3 +1,6 @@
 - [Driver ledger posting rule](driver-ledger-posting.md) — Financial statements include only posted (Ledger) trips; pending stays editable in Register.
 - [Completed dashboard features](dashboard-features.md) — All six dashboard/export TODOs resolved; key decisions and UI element IDs to be aware of.
 - [Register-Ledger workflow](register-ledger-workflow.md) — Full audit workflow: Trip.status pending→posted, checkbox selection, day-grouping, floating POST button, sticky totals bar.
+- [Shift state persistence](shift-persistence.md) — Shift clock (shiftActive, clockInTime, totalBreakMs, isOnBreak, breakStart) persisted to ic-shift-* localStorage keys; restored only if ic-shift-date matches today.
+- [IRS Statement implementation](irs-statement.md) — handlePrintIRSStatement uses string concatenation (not template literals) to avoid TSX parser confusion with HTML angle brackets; opens print dialog in new window.
+- [NYC vendors and data flow](data-flow-decisions.md) — NYC_DEFAULT_VENDORS constant at module level; allVendors = defaults + custom (deduped); expPeriodFiltered useMemo computed before ExpensesContent for period-aware header.

@@ -149,6 +149,30 @@ const EXPENSE_TYPES = [
   "Other",
 ];
 
+// ── #11 — Pre-loaded NYC rideshare vendor list ───────────────────
+const NYC_DEFAULT_VENDORS = [
+  // Gas stations
+  "BP","Shell","Sunoco","Exxon","Mobil","Gulf","Hess","Citgo","GetGo",
+  // Car wash
+  "Mister Car Wash","Mike's Car Wash","Delta Sonic","Super Suds",
+  // Auto service
+  "Jiffy Lube","Midas","Firestone","Pep Boys","AutoZone","O'Reilly Auto Parts","Mavis Tires",
+  // Tolls & EZPass
+  "E-ZPass NY","Port Authority Toll","MTA Bridges & Tunnels","NJ Turnpike","Garden State Pkwy",
+  // Platform fees
+  "Uber Service Fee","Lyft Service Fee","Via Fee","Juno Fee",
+  // Insurance
+  "Progressive","Geico","State Farm","Allstate","New York Black Car Fund (NYBCF)",
+  // Phone & data
+  "Verizon Wireless","AT&T","T-Mobile","Metro by T-Mobile",
+  // Parking
+  "NYC Parking Meter","LAZ Parking","SP+ Parking","QuikPark","Icon Parking",
+  // Food & essentials
+  "Dunkin","7-Eleven","Wawa","McDonald's","Starbucks","Costco","BJ's Wholesale",
+  // Supplies
+  "Amazon (vehicle supplies)","Walmart","Target","Dollar Tree",
+];
+
 const STATE_ABBR: Record<string, string> = {
   "New York": "NY", "New Jersey": "NJ", "Connecticut": "CT",
   "Pennsylvania": "PA", "Florida": "FL", "California": "CA",
@@ -419,12 +443,44 @@ export default function App() {
   const [showSettings,     setShowSettings]     = useState(false);
   const [resetStep,        setResetStep]        = useState<0|1|2>(0); // 0=idle 1=confirm 2=done
 
-  // Shift clock
-  const [clockInTime, setClockInTime] = useState<Date | null>(null);
-  const [totalBreakMs, setTotalBreakMs] = useState(0);
-  const [isOnBreak, setIsOnBreak] = useState(false);
-  const [breakStart, setBreakStart] = useState<Date | null>(null);
-  const [shiftActive, setShiftActive] = useState(false);
+  // Shift clock — persisted to localStorage so iOS Safari reloads don't kill the active timer
+  const [clockInTime, setClockInTime] = useState<Date | null>(() => {
+    try {
+      const today = new Date().toISOString().slice(0,10);
+      if (localStorage.getItem("ic-shift-date") !== today) return null;
+      const ci = localStorage.getItem("ic-shift-clock-in");
+      return ci ? new Date(ci) : null;
+    } catch { return null; }
+  });
+  const [totalBreakMs, setTotalBreakMs] = useState<number>(() => {
+    try {
+      const today = new Date().toISOString().slice(0,10);
+      if (localStorage.getItem("ic-shift-date") !== today) return 0;
+      return parseInt(localStorage.getItem("ic-shift-break-ms") || "0") || 0;
+    } catch { return 0; }
+  });
+  const [isOnBreak, setIsOnBreak] = useState<boolean>(() => {
+    try {
+      const today = new Date().toISOString().slice(0,10);
+      if (localStorage.getItem("ic-shift-date") !== today) return false;
+      return localStorage.getItem("ic-shift-on-break") === "true";
+    } catch { return false; }
+  });
+  const [breakStart, setBreakStart] = useState<Date | null>(() => {
+    try {
+      const today = new Date().toISOString().slice(0,10);
+      if (localStorage.getItem("ic-shift-date") !== today) return null;
+      const bs = localStorage.getItem("ic-shift-break-start");
+      return bs ? new Date(bs) : null;
+    } catch { return null; }
+  });
+  const [shiftActive, setShiftActive] = useState<boolean>(() => {
+    try {
+      const today = new Date().toISOString().slice(0,10);
+      if (localStorage.getItem("ic-shift-date") !== today) return false;
+      return localStorage.getItem("ic-shift-active") === "true";
+    } catch { return false; }
+  });
   const [lastShiftDate, setLastShiftDate] = useState<string>(() => {
     try { return localStorage.getItem("ic-last-shift-date") || ""; } catch { return ""; }
   });
@@ -490,6 +546,7 @@ export default function App() {
 
   // Expense form
   const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [expPeriod, setExpPeriod] = useState<'DAY'|'WEEK'|'MONTH'|'YEAR'|'ALL'>('ALL');
   const [expenseForm, setExpenseForm] = useState({
     name: "", type: "Gasoline / Fuel", category: "Vehicle & Fuel",
     description: "", amount: "", date: new Date().toISOString().slice(0, 10),
@@ -575,6 +632,21 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem("ic-last-shift-date", lastShiftDate); } catch {}
   }, [lastShiftDate]);
+
+  // Persist shift state — every state change writes through so a reload restores instantly
+  useEffect(() => {
+    try {
+      const today = new Date().toISOString().slice(0,10);
+      localStorage.setItem("ic-shift-date",     today);
+      localStorage.setItem("ic-shift-active",   String(shiftActive));
+      localStorage.setItem("ic-shift-break-ms", String(totalBreakMs));
+      localStorage.setItem("ic-shift-on-break", String(isOnBreak));
+      if (clockInTime) localStorage.setItem("ic-shift-clock-in", clockInTime.toISOString());
+      else             localStorage.removeItem("ic-shift-clock-in");
+      if (breakStart)  localStorage.setItem("ic-shift-break-start", breakStart.toISOString());
+      else             localStorage.removeItem("ic-shift-break-start");
+    } catch {}
+  }, [shiftActive, clockInTime, totalBreakMs, isOnBreak, breakStart]);
 
   // Persist hours
   useEffect(() => {
@@ -763,6 +835,33 @@ export default function App() {
     showToast("Backup downloaded ✓");
   };
 
+  // ── #8 — Restore backup from file ───────────────────────────────
+  const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target?.result as string);
+        if (!data.trips || !Array.isArray(data.trips)) { showToast("Invalid backup file ✗"); return; }
+        syncSaveTrips(data.trips);
+        if (data.expenses && Array.isArray(data.expenses))   syncSaveExpenses(data.expenses);
+        if (data.hoursLog && Array.isArray(data.hoursLog))   setHoursLog(data.hoursLog);
+        if (data.customExpenseTypes)   setCustomExpenseTypes(data.customExpenseTypes);
+        if (data.customExpenseCategories) setCustomExpenseCategories(data.customExpenseCategories);
+        if (data.customVendors)        setCustomVendors(data.customVendors);
+        if (typeof data.dailyGoal === 'number') setDailyGoal(data.dailyGoal);
+        if (data.workDays)             setWorkDays(data.workDays);
+        if (data.dayTargets)           setDayTargets(data.dayTargets);
+        if (typeof data.bankBalance === 'number') setBankBalance(data.bankBalance);
+        if (data.bankAdjHistory)       setBankAdjHistory(data.bankAdjHistory);
+        showToast(`✓ Restored · ${data.trips.length} trips · ${data.expenses?.length ?? 0} expenses`);
+      } catch { showToast("Could not read backup file ✗"); }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
   const handleClockIn = () => {
     const now = new Date();
     const todayYMD = toYYYYMMDD(now);
@@ -918,10 +1017,26 @@ export default function App() {
   // $/h uses GROSS only — not influenced by expenses
   // Starts as soon as there's any shift time (live) OR logged hours today
   const perHourGross = useMemo(() => {
+    // 1. Use live shift timer (most accurate)
     const h = activeHoursDecimal > 0 ? activeHoursDecimal : (cumulative.hoy ?? 0);
     if (h > 0.002 && grossToday > 0) return grossToday / h;
+    // 2. Fallback: estimate from first→last trip timestamp of today
+    //    (covers the case where iOS reloaded and lost the shift timer)
+    if (grossToday > 0 && todayTrips.length >= 2) {
+      const ts = todayTrips
+        .map(t => { try { return new Date(t.timestamp || t.date+'T12:00:00').getTime(); } catch { return null; } })
+        .filter((n): n is number => n !== null && !isNaN(n));
+      if (ts.length >= 2) {
+        const spanH = (Math.max(...ts) - Math.min(...ts)) / 3600000;
+        if (spanH >= 0.083) return grossToday / spanH; // at least 5 min span
+      }
+    }
+    // 3. Single trip today — show rate based on avg trip being ~15 min
+    if (grossToday > 0 && todayTrips.length === 1) {
+      return grossToday / 0.25; // rough estimate: 15 min active
+    }
     return 0;
-  }, [grossToday, activeHoursDecimal, cumulative.hoy]);
+  }, [grossToday, activeHoursDecimal, cumulative.hoy, todayTrips]);
   const perHourLive = perHourGross; // alias kept for compatibility
 
   // ── Expenses today (from Expenses section) ────────────────────
@@ -2338,7 +2453,22 @@ export default function App() {
   }, [expenses, currentTime]);
   const allExpenseTypes      = useMemo(() => [...EXPENSE_TYPES,      ...customExpenseTypes],      [customExpenseTypes]);
   const allExpenseCategories = useMemo(() => [...EXPENSE_CATEGORIES, ...customExpenseCategories], [customExpenseCategories]);
-  const allVendors           = useMemo(() => [...customVendors], [customVendors]);
+  const allVendors           = useMemo(() => [...NYC_DEFAULT_VENDORS, ...(customVendors.filter(v=>!NYC_DEFAULT_VENDORS.includes(v)))], [customVendors]);
+
+  // Period-filtered expenses (used by header + list inside ExpensesContent)
+  const expPeriodFiltered = useMemo(() => {
+    const today     = toYYYYMMDD(currentTime);
+    const wd        = currentTime.getDay();
+    const monOffset = wd === 0 ? -6 : 1 - wd;
+    const weekStart = toYYYYMMDD(new Date(currentTime.getFullYear(), currentTime.getMonth(), currentTime.getDate() + monOffset));
+    const monthStr  = today.slice(0,7);
+    const yearStr   = today.slice(0,4);
+    if (expPeriod === 'DAY')   return expenses.filter(e => e.date === today);
+    if (expPeriod === 'WEEK')  return expenses.filter(e => e.date >= weekStart && e.date <= today);
+    if (expPeriod === 'MONTH') return expenses.filter(e => e.date.startsWith(monthStr));
+    if (expPeriod === 'YEAR')  return expenses.filter(e => e.date.startsWith(yearStr));
+    return expenses;
+  }, [expenses, expPeriod, currentTime]);
 
   const ExpensesContent = (
     <div className="space-y-4">
@@ -2347,7 +2477,14 @@ export default function App() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-[22px] font-bold text-white">Gastos</h2>
-          <p className="text-[11px] text-neutral-500 mt-0.5 font-mono-jet">{expenses.length} registros · −${totalExpenses.toFixed(2)}</p>
+          {expPeriod === 'ALL'
+            ? <p className="text-[11px] text-neutral-500 mt-0.5 font-mono-jet">{expenses.length} registros · −${totalExpenses.toFixed(2)}</p>
+            : <p className="text-[11px] mt-0.5 font-mono-jet">
+                <span className="text-[#facc15] font-bold">{expPeriodFiltered.length} entries</span>
+                <span className="text-neutral-500"> · −${expPeriodFiltered.reduce((a,e)=>a+e.amount,0).toFixed(2)}</span>
+                <span className="text-neutral-600"> · total {expenses.length} / ${totalExpenses.toFixed(0)}</span>
+              </p>
+          }
         </div>
         <button
           onClick={() => {
@@ -2519,77 +2656,160 @@ export default function App() {
         </div>
       )}
 
-      {/* Register */}
-      <div>
-        <p className="text-[10px] tracking-[0.22em] text-neutral-500 font-semibold mb-2.5">EXPENSE LOG</p>
-        {expenses.length === 0 ? (
-          <div className="bg-[#141414] border border-[#222] rounded-2xl p-10 text-center">
-            <p className="text-[32px] mb-2">🧾</p>
-            <p className="text-[14px] text-neutral-400">No expenses logged</p>
-            <p className="text-[11px] text-neutral-600 mt-1">Tap "+ New Expense" to add one</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {[...expenses].sort((a, b) => b.date.localeCompare(a.date)).map(ex => (
-              <div key={ex.id} className={`bg-[#141414] border rounded-xl p-3.5 transition-colors ${ex.verified ? "border-[#4ade80]/30 bg-[#141414]" : "border-[#222]"}`}>
-                <div className="flex items-start justify-between gap-3">
-                  {/* Left: info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[13px] font-semibold text-white">{ex.vendor}</span>
-                      {ex.verified && (
-                        <span className="text-[9px] bg-[#4ade80]/10 text-[#4ade80] px-2 py-0.5 rounded-full border border-[#4ade80]/20 flex-shrink-0 font-mono-jet">✓ VERIFIED</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className="font-mono-jet text-[10px] text-neutral-500">{ex.date}</span>
-                      {ex.type && <span className="text-[10px] text-neutral-400 bg-[#1e1e1e] px-2 py-0.5 rounded-full">{ex.type}</span>}
-                    </div>
-                    <span className="text-[10px] text-neutral-600 mt-0.5 block">{ex.category}</span>
-                    {ex.note && <p className="text-[11px] text-neutral-500 mt-1 italic">{ex.note}</p>}
-                  </div>
-                  {/* Right: amount + actions */}
-                  <div className="flex-shrink-0 text-right">
-                    <p className="font-mono-jet text-[17px] font-bold text-[#ff6b6b]">−${ex.amount.toFixed(2)}</p>
-                    <div className="flex items-center gap-1 mt-2 justify-end">
-                      {/* Verify toggle */}
-                      <button onClick={() => handleToggleExpenseVerified(ex.id)}
-                        title={ex.verified ? "Mark as unverified" : "Mark as verified"}
-                        className={`w-7 h-7 rounded-full border text-[11px] flex items-center justify-center transition-all ${ex.verified ? "bg-[#4ade80]/20 border-[#4ade80]/40 text-[#4ade80]" : "bg-[#1e1e1e] border-[#2a2a2a] text-neutral-500 hover:text-[#4ade80]"}`}>
-                        ✓
-                      </button>
-                      {/* Edit */}
-                      <button onClick={() => {
-                        setEditingExpenseId(ex.id);
-                        setExpenseForm({ name: ex.vendor, type: ex.type || "Other", category: ex.category, description: ex.note, amount: String(ex.amount), date: ex.date, frequency: ex.frequency || "none", dueDate: ex.dueDate || "" });
-                        setShowExpenseForm(true);
-                        setAddingCustomType(false);
-                        setAddingCustomCat(false);
-                      }}
-                        className="w-7 h-7 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-400 text-[10px] hover:text-white flex items-center justify-center transition-colors">
-                        ✏️
-                      </button>
-                      {/* Delete */}
-                      <button onClick={() => handleDeleteExpense(ex.id)}
-                        className="w-7 h-7 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-[#f87171] text-[10px] hover:bg-[#2a1a1a] flex items-center justify-center transition-colors">
-                        ✕
-                      </button>
-                    </div>
-                  </div>
+      {/* ── #6 Period filter ── */}
+      {(() => {
+        const today = toYYYYMMDD(currentTime);
+        const weekStart = (() => { const d = new Date(currentTime); d.setDate(d.getDate()-(d.getDay()===0?6:d.getDay()-1)); return toYYYYMMDD(d); })();
+        const monthStr  = today.slice(0,7);
+        const yearStr   = today.slice(0,4);
+        const filtered =
+          expPeriod==='DAY'   ? expenses.filter(e=>e.date===today) :
+          expPeriod==='WEEK'  ? expenses.filter(e=>e.date>=weekStart&&e.date<=today) :
+          expPeriod==='MONTH' ? expenses.filter(e=>e.date.startsWith(monthStr)) :
+          expPeriod==='YEAR'  ? expenses.filter(e=>e.date.startsWith(yearStr)) :
+          expenses;
+        const periodTotal = filtered.reduce((a,e)=>a+e.amount,0);
+        const labels:{id:'DAY'|'WEEK'|'MONTH'|'YEAR'|'ALL',label:string}[] = [
+          {id:'DAY',label:'Today'},{id:'WEEK',label:'Week'},{id:'MONTH',label:'Month'},{id:'YEAR',label:'Year'},{id:'ALL',label:'All'}
+        ];
+        return (
+          <div>
+            {/* Period selector */}
+            <div className="flex gap-1.5 mb-3">
+              {labels.map(l=>(
+                <button key={l.id} onClick={()=>setExpPeriod(l.id)}
+                  className={`flex-1 h-8 rounded-xl text-[10px] font-bold transition-colors ${expPeriod===l.id?'bg-[#facc15] text-black':'bg-[#1e1e1e] text-neutral-500 border border-[#262626]'}`}>
+                  {l.label}
+                </button>
+              ))}
+            </div>
+            {/* Period summary */}
+            <div className="flex items-center justify-between mb-3 px-1">
+              <span className="text-[10px] text-neutral-500 tracking-[0.18em] uppercase">{expPeriod==='ALL'?'All expenses':'Expenses this '+labels.find(l=>l.id===expPeriod)?.label.toLowerCase()}</span>
+              <span className="font-mono-jet text-[14px] font-bold text-[#ff6b6b]">−${periodTotal.toFixed(2)}</span>
+            </div>
+            {/* Filtered list */}
+            <div>
+              <p className="text-[10px] tracking-[0.22em] text-neutral-500 font-semibold mb-2.5">EXPENSE LOG · {filtered.length} entries</p>
+              {filtered.length === 0 ? (
+                <div className="bg-[#141414] border border-[#222] rounded-2xl p-10 text-center">
+                  <p className="text-[32px] mb-2">🧾</p>
+                  <p className="text-[14px] text-neutral-400">No expenses for this period</p>
+                  <p className="text-[11px] text-neutral-600 mt-1">Change the filter or add an expense above</p>
                 </div>
-              </div>
-            ))}
+              ) : (
+                <div className="space-y-2">
+                  {[...filtered].sort((a,b)=>b.date.localeCompare(a.date)).map(ex=>(
+                    <div key={ex.id} className={`bg-[#141414] border rounded-xl p-3.5 transition-colors ${ex.verified?"border-[#4ade80]/30":"border-[#222]"}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[13px] font-semibold text-white">{ex.vendor}</span>
+                            {ex.verified&&<span className="text-[9px] bg-[#4ade80]/10 text-[#4ade80] px-2 py-0.5 rounded-full border border-[#4ade80]/20 font-mono-jet">✓ VERIFIED</span>}
+                          </div>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <span className="font-mono-jet text-[10px] text-neutral-500">{ex.date}</span>
+                            {ex.type&&<span className="text-[10px] text-neutral-400 bg-[#1e1e1e] px-2 py-0.5 rounded-full">{ex.type}</span>}
+                          </div>
+                          <span className="text-[10px] text-neutral-600 mt-0.5 block">{ex.category}</span>
+                          {ex.note&&<p className="text-[11px] text-neutral-500 mt-1 italic">{ex.note}</p>}
+                        </div>
+                        <div className="flex-shrink-0 text-right">
+                          <p className="font-mono-jet text-[17px] font-bold text-[#ff6b6b]">−${ex.amount.toFixed(2)}</p>
+                          <div className="flex items-center gap-1 mt-2 justify-end">
+                            <button onClick={()=>handleToggleExpenseVerified(ex.id)}
+                              className={`w-7 h-7 rounded-full border text-[11px] flex items-center justify-center transition-all ${ex.verified?"bg-[#4ade80]/20 border-[#4ade80]/40 text-[#4ade80]":"bg-[#1e1e1e] border-[#2a2a2a] text-neutral-500"}`}>✓</button>
+                            <button onClick={()=>{setEditingExpenseId(ex.id);setExpenseForm({name:ex.vendor,type:ex.type||"Other",category:ex.category,description:ex.note,amount:String(ex.amount),date:ex.date,frequency:ex.frequency||"none",dueDate:ex.dueDate||""});setShowExpenseForm(true);setAddingCustomType(false);setAddingCustomCat(false);}}
+                              className="w-7 h-7 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-400 text-[10px] flex items-center justify-center">✏️</button>
+                            <button onClick={()=>handleDeleteExpense(ex.id)}
+                              className="w-7 h-7 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-[#f87171] text-[10px] flex items-center justify-center">✕</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        )}
-      </div>
+        );
+      })()}
     </div>
   );
 
   // ─── Reports ──────────────────────────────────────────────────
   // Only posted (Ledger) trips count toward the financial statement
   const grossAll    = postedTrips.reduce((a, b) => a + b.grandTotal, 0);
+
   const expensesAll = expenses.reduce((a, b) => a + b.amount, 0);
   const netAll      = grossAll - expensesAll;
+
+  // ── #1 — IRS-ready Financial Statement (string concat avoids nested backtick TSX issue)
+  const handlePrintIRSStatement = () => {
+    const yr = currentTime.getFullYear();
+    const byCat: Record<string,number> = {};
+    expenses.forEach(e => { byCat[e.category] = (byCat[e.category]||0) + e.amount; });
+    const catRows = Object.entries(byCat).sort((a,b)=>b[1]-a[1])
+      .map(([c,a])=>['<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">',c,'</td>',
+        '<td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right;font-family:monospace">$',a.toFixed(2),'</td></tr>'].join('')).join('');
+    const tripRows = [...postedTrips].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,50)
+      .map(t=>['<tr><td style="padding:4px 8px;border-bottom:1px solid #f0f0f0;font-size:11px">',t.date,'</td>',
+        '<td style="padding:4px 8px;font-size:11px">',t.platform||'','</td>',
+        '<td style="padding:4px 8px;font-size:11px">',t.pickup||'',' → ',t.dropoff||'','</td>',
+        '<td style="padding:4px 8px;text-align:right;font-family:monospace;font-size:11px">$',t.grandTotal.toFixed(2),'</td></tr>'].join('')).join('');
+    const hrsTotal = hoursLog.reduce((a,h)=>a+h.hours,0);
+    const gEarn = postedTrips.reduce((a,t)=>a+(t.earnings||0),0);
+    const gTips = postedTrips.reduce((a,t)=>a+(t.tips||0),0);
+    const gExt  = postedTrips.reduce((a,t)=>a+(t.extra||0),0);
+    const gToll = postedTrips.reduce((a,t)=>a+(t.toll||0),0);
+    const netCls = netAll>=0?'net-pos':'net-neg';
+    const tripSection = postedTrips.length>0
+      ? '<h2>Trip Detail (Most Recent 50 of '+postedTrips.length+')</h2>'
+        +'<table><tr><th>Date</th><th>Platform</th><th>Route</th><th style="text-align:right">Total</th></tr>'
+        +tripRows+'</table>'
+      : '';
+    const html = [
+      '<!DOCTYPE html><html><head><meta charset="utf-8">',
+      '<title>IslandCity · IRS Financial Statement '+yr+'</title>',
+      '<style>body{font-family:Georgia,serif;max-width:720px;margin:40px auto;color:#111;font-size:13px;line-height:1.6}',
+      'h1{font-size:22px;margin:0 0 4px}h2{font-size:14px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;margin:28px 0 8px;border-bottom:2px solid #111;padding-bottom:4px}',
+      'table{width:100%;border-collapse:collapse}th{text-align:left;padding:6px 12px;background:#f5f5f5;font-size:11px;text-transform:uppercase;letter-spacing:.06em}',
+      '.total{font-weight:bold;font-size:16px}.net-pos{color:#1a7a4a}.net-neg{color:#c0392b}',
+      '.footer{margin-top:40px;font-size:10px;color:#777;border-top:1px solid #ddd;padding-top:12px}',
+      '@media print{body{margin:20px}}</style></head><body>',
+      '<h1>IslandCity Driver Accounting</h1>',
+      '<p style="color:#555;margin:0 0 20px">Schedule C Financial Statement · Tax Year '+yr+' · Printed '+new Date().toLocaleDateString()+'</p>',
+      '<h2>Income Summary (Posted Trips Only)</h2>',
+      '<table><tr><th>Description</th><th style="text-align:right">Amount</th></tr>',
+      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Gross Rideshare Earnings</td><td style="padding:6px 12px;text-align:right;font-family:monospace">$'+gEarn.toFixed(2)+'</td></tr>',
+      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Tips</td><td style="padding:6px 12px;text-align:right;font-family:monospace">$'+gTips.toFixed(2)+'</td></tr>',
+      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Extras / Bonuses</td><td style="padding:6px 12px;text-align:right;font-family:monospace">$'+gExt.toFixed(2)+'</td></tr>',
+      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Toll Reimbursements</td><td style="padding:6px 12px;text-align:right;font-family:monospace">$'+gToll.toFixed(2)+'</td></tr>',
+      '<tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:bold">TOTAL GROSS INCOME</td><td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:bold" class="total">$'+grossAll.toFixed(2)+'</td></tr></table>',
+      '<h2>Business Expenses (Schedule C)</h2>',
+      '<table><tr><th>Category</th><th style="text-align:right">Total</th></tr>',
+      catRows,
+      '<tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:bold">TOTAL EXPENSES</td><td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:bold">$'+expensesAll.toFixed(2)+'</td></tr></table>',
+      '<h2>Net Earnings</h2>',
+      '<table><tr><th>Description</th><th style="text-align:right">Amount</th></tr>',
+      '<tr><td style="padding:8px 12px">Gross Income</td><td style="padding:8px 12px;text-align:right;font-family:monospace">$'+grossAll.toFixed(2)+'</td></tr>',
+      '<tr><td style="padding:8px 12px">Business Expenses</td><td style="padding:8px 12px;text-align:right;font-family:monospace">−$'+expensesAll.toFixed(2)+'</td></tr>',
+      '<tr style="background:#f0f0f0"><td style="padding:10px 12px;font-weight:bold;font-size:15px">NET PROFIT / LOSS</td>',
+      '<td style="padding:10px 12px;text-align:right;font-family:monospace;font-size:18px;font-weight:bold" class="'+netCls+'">$'+netAll.toFixed(2)+'</td></tr></table>',
+      '<h2>Hours Log Summary</h2>',
+      '<table><tr><th>Metric</th><th style="text-align:right">Value</th></tr>',
+      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Total Driving Hours</td><td style="padding:6px 12px;text-align:right;font-family:monospace">'+hrsTotal.toFixed(1)+' hrs</td></tr>',
+      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Total Shifts Logged</td><td style="padding:6px 12px;text-align:right;font-family:monospace">'+hoursLog.length+'</td></tr>',
+      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Total Trips Posted</td><td style="padding:6px 12px;text-align:right;font-family:monospace">'+postedTrips.length+'</td></tr>',
+      '<tr><td style="padding:6px 12px">Avg Earnings/Hour</td><td style="padding:6px 12px;text-align:right;font-family:monospace">'+(hrsTotal>0?'$'+(grossAll/hrsTotal).toFixed(2):'-')+'/hr</td></tr></table>',
+      tripSection,
+      '<div class="footer"><p><strong>IslandCity Driver Accounting</strong> · Generated '+new Date().toLocaleString()+'</p>',
+      '<p>This statement is based on trips posted to the Ledger. Pending trips in the Register are excluded. Consult a licensed tax professional before filing.</p></div>',
+      '</body></html>',
+    ].join('\n');
+    const win = window.open('','_blank');
+    if (win) { win.document.write(html); win.document.close(); setTimeout(()=>win.print(),400); }
+  };
 
   const ReportsContent = (
     <div className="space-y-4">
@@ -2656,6 +2876,12 @@ export default function App() {
             ))}
           </div>
         )}
+
+        {/* IRS Print Button — #1 */}
+        <button onClick={handlePrintIRSStatement}
+          className="w-full h-12 rounded-full bg-[#1e1e1e] border border-[#facc15]/30 text-[#facc15] text-[12px] font-bold tracking-[0.1em] hover:bg-[#facc15]/10 transition-colors flex items-center justify-center gap-2">
+          🖨 Print IRS Financial Statement
+        </button>
 
         {/* Toll deduction note */}
         <div className="rounded-xl bg-[#1a1625] border-l-[3px] border-l-[#8b5cf6] border border-[#2a2340] p-3.5">
@@ -2928,10 +3154,12 @@ export default function App() {
               <div>
                 <p className="text-[9px] text-neutral-500">Earned so far</p>
                 <p className="text-[15px] font-bold text-[#f6dd8c] font-mono-jet">${_earnWeek.toFixed(2)}</p>
+                <p className="text-[8px] text-neutral-600 mt-0.5">{cumulative.semana.toFixed(1)}h logged · {(() => { const wh = hoursLog.filter(h => h.date >= _finWeekStart); return wh.length; })()} shifts</p>
               </div>
               <div className="text-right">
                 <p className="text-[9px] text-neutral-500">Week plan total</p>
                 <p className="text-[15px] font-bold text-white font-mono-jet">${_projWeek.toFixed(2)}</p>
+                <p className="text-[8px] text-neutral-600 mt-0.5">pending + posted trips</p>
               </div>
             </div>
           </div>
@@ -3065,6 +3293,20 @@ export default function App() {
               </>
             )}
           </div>
+
+          {/* 1b · Daily recurring drain */}
+          {_cfDailyRecur > 0 && (
+            <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl px-4 py-3 flex items-center justify-between">
+              <div>
+                <p className="text-[9px] tracking-[0.18em] text-neutral-500 font-bold uppercase">RECURRING DRAIN</p>
+                <p className="text-[10px] text-neutral-600 mt-0.5">Daily / weekly / monthly expenses combined</p>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <p className="font-mono-jet text-[15px] font-bold text-orange-400">−${_cfDailyRecur.toFixed(2)}/day</p>
+                <p className="font-mono-jet text-[10px] text-neutral-600">−${(_cfDailyRecur*30).toFixed(0)}/month</p>
+              </div>
+            </div>
+          )}
 
           {/* 2 · Upcoming payments (next 14 days) */}
           {_cfPayments14.length > 0 && (
@@ -3235,6 +3477,7 @@ export default function App() {
 
         {/* ── PAGE 3 · Financial Health ── */}
         <div className="flex-shrink-0 w-full px-4 space-y-4 pb-6" style={{scrollSnapAlign:'start'}}>
+          {/* Monthly summary */}
           <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
             <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">
               FINANCIAL HEALTH · {currentTime.toLocaleDateString('en-US',{month:'long'}).toUpperCase()}
@@ -3261,6 +3504,72 @@ export default function App() {
               </div>
             </div>
           </div>
+
+          {/* Recurring expenses breakdown — all frequencies */}
+          {expenses.some(e => e.frequency && e.frequency !== 'none') && (
+            <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">RECURRING EXPENSES</p>
+                <span className="font-mono-jet text-[11px] text-orange-400 font-bold">
+                  −${_monthFixed.toFixed(0)}/mo
+                </span>
+              </div>
+              <div className="space-y-2">
+                {expenses.filter(e => e.frequency && e.frequency !== 'none').map(e => {
+                  const monthlyEq =
+                    e.frequency === 'daily'   ? e.amount * 30 :
+                    e.frequency === 'weekly'  ? e.amount * 4.33 :
+                    e.amount;
+                  const freqLabel =
+                    e.frequency === 'daily'   ? 'daily' :
+                    e.frequency === 'weekly'  ? 'weekly' :
+                    'monthly';
+                  return (
+                    <div key={e.id} className="flex items-center justify-between gap-2 py-1.5 border-b border-[#1a1a1a] last:border-0">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12px] font-semibold text-white truncate">{e.vendor}</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[9px] bg-orange-400/10 text-orange-400 px-1.5 py-0.5 rounded-full border border-orange-400/20 font-bold">{freqLabel}</span>
+                          {e.dueDate && <span className="text-[9px] text-neutral-600 font-mono-jet">due {e.dueDate.slice(5)}</span>}
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="font-mono-jet text-[13px] font-bold text-red-400">−${e.amount.toFixed(2)}</p>
+                        {e.frequency !== 'monthly' && (
+                          <p className="font-mono-jet text-[9px] text-neutral-600">≈${monthlyEq.toFixed(0)}/mo</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-3 pt-2 border-t border-[#1a1a1a] flex justify-between text-[10px]">
+                <span className="text-neutral-500">Monthly total</span>
+                <span className="font-mono-jet font-bold text-orange-400">−${_monthFixed.toFixed(2)}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Bank balance history */}
+          {bankAdjHistory.length > 0 && (
+            <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">BALANCE ADJUSTMENT HISTORY</p>
+              <div className="space-y-2">
+                {bankAdjHistory.slice(0,6).map(adj => (
+                  <div key={adj.id} className="flex items-start justify-between gap-2 py-1.5 border-b border-[#1a1a1a] last:border-0">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-mono-jet text-[10px] text-neutral-500">{adj.date} · {adj.time}</p>
+                      {adj.note && <p className="text-[11px] text-neutral-400 mt-0.5 truncate">{adj.note}</p>}
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="font-mono-jet text-[11px] text-neutral-500">${adj.prevBalance.toFixed(0)} → <span className="text-[#f6dd8c] font-bold">${adj.newBalance.toFixed(0)}</span></p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
         </div>{/* end page 3 */}
 
       </div>{/* end horizontal scroll */}
@@ -3442,7 +3751,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Backup */}
+              {/* Backup — #8 */}
               <div className="bg-[#141414] border border-[#222] rounded-2xl p-4 space-y-3">
                 <p className="text-[9px] tracking-[0.16em] text-neutral-500 font-semibold uppercase">📦 Backup de datos</p>
                 <p className="text-[11px] text-neutral-400 leading-relaxed">
@@ -3452,6 +3761,14 @@ export default function App() {
                   className="w-full h-11 rounded-full bg-[#facc15] text-black text-[12px] font-bold tracking-[0.1em] hover:bg-[#fde047] transition-colors">
                   ⬇ Descargar backup completo
                 </button>
+                {/* Restore from backup */}
+                <div className="border-t border-[#2a2a2a] pt-3">
+                  <p className="text-[10px] text-neutral-500 mb-2">¿Tienes un backup guardado? Restáuralo aquí:</p>
+                  <label className="block w-full h-11 rounded-full border border-[#3a3a3a] text-neutral-400 text-[12px] font-bold tracking-[0.1em] hover:border-[#facc15]/40 hover:text-[#facc15] transition-colors cursor-pointer flex items-center justify-center gap-2">
+                    <span>📂 Restaurar desde archivo .json</span>
+                    <input type="file" accept=".json" className="hidden" onChange={handleImportBackup} />
+                  </label>
+                </div>
               </div>
 
               {/* Danger zone */}
