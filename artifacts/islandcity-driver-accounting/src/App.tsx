@@ -66,6 +66,7 @@ type Expense = {
   verified?: boolean;   // audit flag
   frequency?: "none" | "daily" | "weekly" | "monthly"; // recurrence
   dueDate?: string;     // next due date for recurring expenses
+  endDate?: string;     // stop projecting after this date (set by "Repeat until" feature)
 };
 type BankAdjEntry = { id: string; date: string; time: string; prevBalance: number; newBalance: number; note: string; };
 // ── Toll plaza list — update rates each January ───────────────────────────
@@ -585,6 +586,29 @@ export default function App() {
   const [bankEditVal, setBankEditVal] = useState("");
   const [bankEditNote, setBankEditNote] = useState("");
 
+  // Recurring income plan: snapshot of workDays + dayTargets spread to future weeks until untilDate
+  const [recurringPlan, setRecurringPlan] = useState<{enabled:boolean; workDays:number[]; dayTargets:Record<number,number>; untilDate:string}>(() => {
+    try {
+      const raw = localStorage.getItem("ic-recurring-plan");
+      return raw ? JSON.parse(raw) : {enabled:false, workDays:[], dayTargets:{}, untilDate:""};
+    } catch { return {enabled:false, workDays:[], dayTargets:{}, untilDate:""}; }
+  });
+  // UI: whether the date picker for the repeat checkbox is open
+  const [showRepeatIncomePicker, setShowRepeatIncomePicker] = useState(false);
+  const [repeatIncomeUntil, setRepeatIncomeUntil] = useState("");
+
+  // Week-level income overrides for individual week exceptions (key = Monday YYYY-MM-DD)
+  const [weekOverrides, setWeekOverrides] = useState<Record<string, {workDays: number[], dayTargets: Record<number, number>}>>(() => {
+    try { return JSON.parse(localStorage.getItem("ic-week-overrides") || "{}"); } catch { return {}; }
+  });
+
+  // Projected expense quick-add form (Finances → Projections page)
+  const [showProjExpForm, setShowProjExpForm] = useState(false);
+  const [projExpForm, setProjExpForm] = useState({
+    name: "", amount: "", frequency: "monthly" as "daily" | "weekly" | "monthly",
+    category: "Vehicle & Fuel", dueDate: "", repeatEnabled: false, repeatUntil: "",
+  });
+
   // Live clock
   useEffect(() => {
     const id = window.setInterval(() => setCurrentTime(new Date()), 1000);
@@ -651,6 +675,8 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("ic-bank-balance", String(bankBalance)); } catch {} }, [bankBalance]);
   useEffect(() => { try { localStorage.setItem("ic-bank-adj-history", JSON.stringify(bankAdjHistory)); } catch {} }, [bankAdjHistory]);
   useEffect(() => { try { localStorage.setItem("ic-hourly-goal", String(goal)); } catch {} }, [goal]);
+  useEffect(() => { try { localStorage.setItem("ic-week-overrides", JSON.stringify(weekOverrides)); } catch {} }, [weekOverrides]);
+  useEffect(() => { try { localStorage.setItem("ic-recurring-plan", JSON.stringify(recurringPlan)); } catch {} }, [recurringPlan]);
 
   // Keep refs in sync so the pagehide listener always has the latest state
   useEffect(() => { tripsRef.current    = trips;    }, [trips]);
@@ -1263,7 +1289,7 @@ export default function App() {
 
   const handleSaveExpense = () => {
     if (!expenseForm.name.trim() || !expenseForm.amount) {
-      showToast("Ingresa nombre y cantidad"); return;
+      showToast("Enter a name and amount"); return;
     }
     const newExpense: Expense = {
       id: editingExpenseId || Date.now().toString(),
@@ -1287,7 +1313,7 @@ export default function App() {
     resetExpenseForm();
     setEditingExpenseId(null);
     setShowExpenseForm(false);
-    showToast(`Gasto guardado ✓ $${newExpense.amount.toFixed(2)}`);
+    showToast(`Expense saved ✓ $${newExpense.amount.toFixed(2)}`);
   };
 
   // Receipt scan via Gemini Vision — sends image to API server, auto-fills expense form
@@ -1380,7 +1406,7 @@ export default function App() {
   const handleDeleteExpense = (id: string) => {
     if (!window.confirm("¿Eliminar este gasto?")) return;
     syncSaveExpenses(expenses.filter(e => e.id !== id));
-    showToast("Gasto eliminado");
+    showToast("Expense deleted");
   };
 
   const handleToggleExpenseVerified = (id: string) => {
@@ -1443,7 +1469,7 @@ export default function App() {
         <p className="font-mono-jet text-[11px] tracking-[0.18em] mt-1.5 uppercase" style={goldGradientStyle}>
           {currentTime.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).toUpperCase()}
         </p>
-        <p className="font-mono-jet text-[10px] text-neutral-600 mt-1">
+        <p className="font-mono-jet text-[10px] text-neutral-400 mt-1">
           {currentTime.toLocaleTimeString()} · Live · LocalStorage stamped
         </p>
       </div>
@@ -1479,14 +1505,14 @@ export default function App() {
           </span>
         </div>
         <div className="mt-2">
-          <p className="font-mono-jet text-[11px] text-neutral-500">
+          <p className="font-mono-jet text-[11px] text-neutral-400">
             {gps.lat && gps.lng ? `${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)}` : "GPS inactive"}{gps.acc ? ` · ±${Math.round(gps.acc)}m` : ""}
           </p>
           {gpsAddress && <p className="text-[11px] text-neutral-300 mt-0.5 truncate">{gpsAddress}</p>}
           {gpsAirport && <p className="font-mono-jet text-[10px] text-[#f6dd8c] mt-0.5">✈ {gpsAirport}</p>}
         </div>
         <p className="font-mono-jet text-[32px] font-black mt-2 tracking-tight" style={goldGradientStyle}>${grossToday.toFixed(2)}</p>
-        <p className="font-mono-jet text-[10px] text-neutral-500 mt-0.5">{todayTrips.length} {todayTrips.length === 1 ? "trip" : "trips"} · fare + tips + tolls</p>
+        <p className="font-mono-jet text-[10px] text-neutral-400 mt-0.5">{todayTrips.length} {todayTrips.length === 1 ? "trip" : "trips"} · fare + tips + tolls</p>
         <div className="mt-3 h-px" style={{ background: "linear-gradient(90deg, #1e1400, #1e1e1e)" }} />
         <div className="mt-2.5 flex items-center gap-1.5">
           <span className={`w-1.5 h-1.5 rounded-full ${
@@ -1497,11 +1523,11 @@ export default function App() {
           <span className={`text-[10px] font-mono-jet ${
             shiftActive && !isOnBreak ? "text-[#4ade80]"
             : shiftActive && isOnBreak  ? "text-[#f97316]"
-            : "text-neutral-500"
+            : "text-neutral-400"
           }`}>
             {shiftActive ? (isOnBreak ? "On break" : "On duty") : "Shift ended"}
           </span>
-          <span className="ml-auto text-[9px] text-neutral-600 font-mono-jet flex items-center gap-1">
+          <span className="ml-auto text-[9px] text-neutral-400 font-mono-jet flex items-center gap-1">
             <span className={`w-1 h-1 rounded-full ${gps.status === "active" ? "bg-[#4ade80]" : gps.status === "searching" ? "bg-yellow-400 animate-pulse" : "bg-neutral-600"}`} />
             GPS {gpsStatusLabel}
           </span>
@@ -1610,16 +1636,16 @@ export default function App() {
                 </text>
               </svg>
               <div className="flex-1 min-w-0">
-                <p className="text-[8px] text-neutral-600 uppercase tracking-widest">EARNED TODAY</p>
+                <p className="text-[8px] text-neutral-400 uppercase tracking-widest">EARNED TODAY</p>
                 <p className="font-mono-jet text-[24px] font-black leading-none mt-0.5" style={{color:rc}}>${grossToday.toFixed(2)}</p>
                 <div className="grid grid-cols-2 gap-x-3 mt-2">
                   <div>
-                    <p className="text-[8px] text-neutral-600 uppercase">Remaining</p>
+                    <p className="text-[8px] text-neutral-400 uppercase">Remaining</p>
                     <p className="font-mono-jet text-[14px] font-bold text-neutral-300">${remainingToGoal.toFixed(0)}</p>
                   </div>
                   <div>
-                    <p className="text-[8px] text-neutral-600 uppercase">$/Hour</p>
-                    <p className={`font-mono-jet text-[14px] font-bold ${perHourGross>=80?"text-[#4ade80]":perHourGross>=60?"text-[#f6dd8c]":"text-neutral-500"}`}>
+                    <p className="text-[8px] text-neutral-400 uppercase">$/Hour</p>
+                    <p className={`font-mono-jet text-[14px] font-bold ${perHourGross>=80?"text-[#4ade80]":perHourGross>=60?"text-[#f6dd8c]":"text-neutral-400"}`}>
                       {perHourGross>0?`$${perHourGross.toFixed(2)}`:"—"}
                     </p>
                   </div>
@@ -1644,8 +1670,8 @@ export default function App() {
           <input type="range" min={50} max={100} step={1} value={goal}
             onChange={e => setGoal(parseInt(e.target.value))} className="w-full mt-3" />
           <div className="flex justify-between mt-1">
-            <span className="text-[10px] font-mono-jet text-neutral-600">$50</span>
-            <span className="text-[10px] font-mono-jet text-neutral-600">$100</span>
+            <span className="text-[10px] font-mono-jet text-neutral-400">$50</span>
+            <span className="text-[10px] font-mono-jet text-neutral-400">$100</span>
           </div>
         </div>
 
@@ -1660,7 +1686,7 @@ export default function App() {
               goalPct>=100?"#4ade80":goalPct>=70?"#f6dd8c":"#9ca3af"],
           ] as [string,string,string][]).map(([label, val, col]) => (
             <div key={label} className="rounded-xl p-3" style={{ background: "#080808", border: `1px solid ${col}22` }}>
-              <p className="text-[9px] tracking-[0.14em] text-neutral-500">{label}</p>
+              <p className="text-[9px] tracking-[0.14em] text-neutral-400">{label}</p>
               <p className="font-mono-jet text-[15px] font-black mt-1" style={{ color: col }}>{val}</p>
             </div>
           ))}
@@ -1669,19 +1695,19 @@ export default function App() {
         {/* ODOMETER · MILES + IRS DEDUCTION */}
         <div className="flex items-center justify-between rounded-xl px-4 py-3" style={{ background: "#080808", border: "1px solid #1a1e1a" }}>
           <div>
-            <p className="text-[9px] tracking-[0.18em] text-neutral-500 font-bold uppercase">Odometer · This Shift</p>
+            <p className="text-[9px] tracking-[0.18em] text-neutral-300 font-bold uppercase">Odometer · This Shift</p>
             <div className="flex items-baseline gap-1.5 mt-1">
               <span className="font-mono-jet text-[26px] font-black text-[#f6dd8c]">{shiftMiles.toFixed(1)}</span>
-              <span className="text-[11px] text-neutral-500 font-semibold">mi</span>
+              <span className="text-[11px] text-neutral-400 font-semibold">mi</span>
             </div>
-            <p className="text-[9px] text-neutral-700 mt-0.5">{gps.status==="active"?"● GPS tracking":"○ GPS inactive"}</p>
+            <p className="text-[9px] text-neutral-400 mt-0.5">{gps.status==="active"?"● GPS tracking":"○ GPS inactive"}</p>
           </div>
           <div className="text-right">
-            <p className="text-[9px] tracking-[0.18em] text-neutral-500 font-bold uppercase">IRS Deduction</p>
+            <p className="text-[9px] tracking-[0.18em] text-neutral-300 font-bold uppercase">IRS Deduction</p>
             <p className="font-mono-jet text-[20px] font-black text-[#4ade80] mt-1">
               ${(shiftMiles * IRS_RATE_PER_MILE).toFixed(2)}
             </p>
-            <p className="text-[9px] text-neutral-600 mt-0.5">${IRS_RATE_PER_MILE.toFixed(2)}/mi · 2025 rate</p>
+            <p className="text-[9px] text-neutral-400 mt-0.5">${IRS_RATE_PER_MILE.toFixed(2)}/mi · 2025 rate</p>
           </div>
         </div>
 
@@ -1701,7 +1727,7 @@ export default function App() {
             <p className="text-[11px] leading-[1.5] text-neutral-200">{smartSuggestion.text}</p>
           </div>
           {perHourGross > 0 && grossToday < todayGoal && (
-            <p className="text-[10px] font-mono-jet text-neutral-500 mt-2">
+            <p className="text-[10px] font-mono-jet text-neutral-400 mt-2">
               At this pace you need {perHourGross > 0 ? `${(remainingToGoal / perHourGross).toFixed(1)}h` : "—"} more to reach ${todayGoal}
             </p>
           )}
@@ -1726,12 +1752,12 @@ export default function App() {
                   <span className="text-[14px]">{zoneUrgent ? "🚨" : "📍"}</span>
                   <span className="text-[9px] tracking-[0.18em] font-bold" style={{ color: zoneAccent }}>{zoneLabel}</span>
                 </div>
-                <span className="text-[8px] font-mono-jet text-neutral-600">static reference</span>
+                <span className="text-[8px] font-mono-jet text-neutral-400">static reference</span>
               </div>
 
               {gps.lat && gps.lng ? (
                 <>
-                  <p className="text-[10px] text-neutral-500 mb-2">
+                  <p className="text-[10px] text-neutral-400 mb-2">
                     {zoneUrgent
                       ? "Rate is low — closest known NYC zones:"
                       : "Closest known NYC zones to your position:"}
@@ -1743,22 +1769,22 @@ export default function App() {
                           <span className="text-[10px]">{i === 0 ? (zoneUrgent ? "🎯" : "📍") : "→"}</span>
                           <span className="text-[11px] font-semibold" style={{ color: i === 0 ? zoneAccent : "#737373" }}>{z.name}</span>
                         </div>
-                        <span className="font-mono-jet text-[10px] text-neutral-600">{z.km.toFixed(1)} km</span>
+                        <span className="font-mono-jet text-[10px] text-neutral-400">{z.km.toFixed(1)} km</span>
                       </div>
                     ))}
                   </div>
                   <div className="mt-3 pt-2.5" style={{ borderTop: `1px solid ${zoneBorder}` }}>
-                    <p className="text-[9px] text-neutral-600">
+                    <p className="text-[9px] text-neutral-400">
                       Live demand data not connected · Task #7 pending
                     </p>
                   </div>
                 </>
               ) : (
                 <div>
-                  <p className="text-[11px] text-neutral-500">
+                  <p className="text-[11px] text-neutral-400">
                     Enable GPS to see nearby zones.
                   </p>
-                  <p className="text-[9px] text-neutral-700 mt-1.5">
+                  <p className="text-[9px] text-neutral-400 mt-1.5">
                     Live demand data: API connection pending · Task #7
                   </p>
                 </div>
@@ -1770,17 +1796,17 @@ export default function App() {
         {/* Trip stats strip */}
         <div className="grid grid-cols-3 gap-0 bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl overflow-hidden">
           <div className="p-3 border-r border-[#1f1f1f] text-center">
-            <p className="text-[9px] text-neutral-500 tracking-widest">TRIPS TODAY</p>
+            <p className="text-[9px] text-neutral-400 tracking-widest">TRIPS TODAY</p>
             <p className="font-mono-jet text-[13px] font-semibold mt-1 text-white">{todayTrips.length}</p>
           </div>
           <div className="p-3 border-r border-[#1f1f1f] text-center">
-            <p className="text-[9px] text-neutral-500 tracking-widest">AVG/TRIP</p>
+            <p className="text-[9px] text-neutral-400 tracking-widest">AVG/TRIP</p>
             <p className="font-mono-jet text-[13px] font-semibold mt-1 text-[#f6dd8c]">
               ${todayTrips.length ? (grossToday / todayTrips.length).toFixed(2) : "0.00"}
             </p>
           </div>
           <div className="p-3 text-center">
-            <p className="text-[9px] text-neutral-500 tracking-widest">WEEK TOTAL</p>
+            <p className="text-[9px] text-neutral-400 tracking-widest">WEEK TOTAL</p>
             <p className="font-mono-jet text-[13px] font-semibold mt-1 text-[#f5c518]">${weeklyTotal.toFixed(2)}</p>
           </div>
         </div>
@@ -1812,7 +1838,7 @@ export default function App() {
       <div className="rounded-[20px] p-4" style={{ background: "#0d0d0d", border: "1px solid #1e1e1e" }}>
         <div className="flex items-center justify-between mb-3">
           <div>
-            <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">Financial Intelligence</p>
+            <p className="text-[9px] tracking-[0.22em] text-neutral-300 font-bold uppercase">Financial Intelligence</p>
             <p className="text-[11px] font-semibold text-neutral-300 mt-0.5">
               {currentTime.toLocaleDateString('en-US',{month:'long',year:'numeric'})}
             </p>
@@ -1826,25 +1852,25 @@ export default function App() {
           </span>
         </div>
         <div className="mb-3">
-          <p className="text-[8px] text-neutral-600 uppercase tracking-widest">Net balance</p>
+          <p className="text-[8px] text-neutral-400 uppercase tracking-widest">Net balance</p>
           <p className={`font-mono-jet text-[30px] font-black leading-none tracking-tight mt-0.5 ${_dbNetMonth>=0?'text-[#f6dd8c]':'text-red-400'}`}>
             {_dbNetMonth>=0?'+':''}{_dbNetMonth.toLocaleString('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0})}
           </p>
         </div>
         <div className="flex gap-4 mb-3">
           <div>
-            <p className="text-[8px] text-neutral-600 uppercase tracking-widest">INCOME</p>
+            <p className="text-[8px] text-neutral-400 uppercase tracking-widest">INCOME</p>
             <p className="font-mono-jet text-[16px] font-bold text-[#4ade80] mt-0.5">${_dbEarnMonth.toLocaleString('en-US',{maximumFractionDigits:0})}</p>
           </div>
           <div>
-            <p className="text-[8px] text-neutral-600 uppercase tracking-widest">EXPENSES</p>
+            <p className="text-[8px] text-neutral-400 uppercase tracking-widest">EXPENSES</p>
             <p className="font-mono-jet text-[16px] font-bold text-red-400 mt-0.5">-${_dbExpMonth.toLocaleString('en-US',{maximumFractionDigits:0})}</p>
           </div>
         </div>
         {_dbMonthGoal>0 && (
           <div>
             <div className="flex justify-between text-[9px] mb-1.5">
-              <span className="font-mono-jet text-neutral-500">${_dbEarnMonth.toFixed(0)} earned</span>
+              <span className="font-mono-jet text-neutral-400">${_dbEarnMonth.toFixed(0)} earned</span>
               <span className="font-mono-jet text-[#f6dd8c]">Goal ${_dbMonthGoal.toLocaleString('en-US',{maximumFractionDigits:0})}</span>
             </div>
             <div className="h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden">
@@ -1870,16 +1896,16 @@ export default function App() {
                   ["Tolls", totalTollsToday],
                 ] as [string,number][]).map(([label, val]) => (
                   <div key={label} className="flex items-center gap-4">
-                    <span className="text-[10px] text-neutral-500 font-mono-jet w-14">{label}</span>
+                    <span className="text-[10px] text-neutral-400 font-mono-jet w-14">{label}</span>
                     <span className="font-mono-jet text-[12px] font-semibold text-neutral-100">${val.toFixed(2)}</span>
                   </div>
                 ))}
               </div>
             </div>
             <div className="text-right flex-shrink-0">
-              <p className="text-[8px] text-neutral-600 tracking-widest uppercase mb-1">GROSS TODAY</p>
+              <p className="text-[8px] text-neutral-400 tracking-widest uppercase mb-1">GROSS TODAY</p>
               <p className="font-mono-jet text-[22px] font-black text-[#f6dd8c] leading-none">${grossToday.toFixed(2)}</p>
-              <p className="text-[9px] text-neutral-600 mt-0.5">{todayTrips.length} trip{todayTrips.length !== 1 ? "s" : ""}</p>
+              <p className="text-[9px] text-neutral-400 mt-0.5">{todayTrips.length} trip{todayTrips.length !== 1 ? "s" : ""}</p>
             </div>
           </div>
           <div className="rounded-xl p-3.5" style={{ background: "#0d0d0d", border: "1px solid #1e0a0a" }}>
@@ -1887,7 +1913,7 @@ export default function App() {
             <p className="font-mono-jet text-[22px] font-black text-[#ef4444] mt-2">
               {expensesToday > 0 ? `−$${expensesToday.toFixed(2)}` : "$0.00"}
             </p>
-            <p className="text-[10px] text-neutral-600 mt-1 font-mono-jet">
+            <p className="text-[10px] text-neutral-400 mt-1 font-mono-jet">
               {expenses.filter(e => e.date === toYYYYMMDD(currentTime)).length} entries today
             </p>
           </div>
@@ -1896,7 +1922,7 @@ export default function App() {
             <p className={`font-mono-jet text-[22px] font-black mt-2 ${netToday >= 0 ? "text-[#4ade80]" : "text-[#ef4444]"}`}>
               ${netToday.toFixed(2)}
             </p>
-            <p className="text-[10px] text-neutral-600 mt-1 font-mono-jet">income − expenses · weekly ref. ${weeklyTotal.toFixed(0)}</p>
+            <p className="text-[10px] text-neutral-400 mt-1 font-mono-jet">income − expenses · weekly ref. ${weeklyTotal.toFixed(0)}</p>
           </div>
         </div>
       </div>
@@ -1968,11 +1994,11 @@ export default function App() {
                 </span>
               )
             ) : (
-              <span className="px-2 py-0.5 rounded-full bg-[#1a1a1a] border border-[#2a2a2a] text-neutral-500 text-[10px] font-bold tracking-widest">GPS AUTO</span>
+              <span className="px-2 py-0.5 rounded-full bg-[#1a1a1a] border border-[#2a2a2a] text-neutral-400 text-[10px] font-bold tracking-widest">GPS AUTO</span>
             )}
           </div>
           {detectedToll && (
-            <p className="text-[10px] text-neutral-500 font-mono-jet">
+            <p className="text-[10px] text-neutral-400 font-mono-jet">
               {detectedToll.plaza} · ${detectedToll.rate.toFixed(2)} · {detectedToll.at}
               {detectedToll.rate === 16.79 || detectedToll.rate === 14.79
                 ? detectedToll.rate === 16.79 ? " · Peak" : " · Off-peak"
@@ -2030,7 +2056,7 @@ export default function App() {
             <option>Transit Tax</option>
             <option>Other</option>
           </select>
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 text-[12px]">▼</span>
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 text-[12px]">▼</span>
         </div>
       </div>
 
@@ -2113,7 +2139,7 @@ export default function App() {
 
       {showPickupMenu && (
         <div className="bg-[#141414] border border-[#222] rounded-2xl p-3">
-          <p className="text-[11px] tracking-[0.12em] text-neutral-500 font-bold uppercase mb-2">PICKUP CATEGORY</p>
+          <p className="text-[11px] tracking-[0.12em] text-neutral-300 font-bold uppercase mb-2">PICKUP CATEGORY</p>
           {gps.lat && (
             <div className="w-full rounded-xl bg-black border border-[#262626] px-3 py-2 text-[12px] text-neutral-300 mb-3 flex flex-col">
               <span className="font-mono-jet truncate">📍 {gps.lat.toFixed(5)},{gps.lng?.toFixed(5)}{gps.acc ? ` · ±${Math.round(gps.acc)}m` : ""}</span>
@@ -2138,7 +2164,7 @@ export default function App() {
 
       {showDropoffMenu && (
         <div className="bg-[#141414] border border-[#222] rounded-2xl p-3">
-          <p className="text-[11px] tracking-[0.12em] text-neutral-500 font-bold uppercase mb-2">DROP OFF CATEGORY</p>
+          <p className="text-[11px] tracking-[0.12em] text-neutral-300 font-bold uppercase mb-2">DROP OFF CATEGORY</p>
           <div className="grid grid-cols-2 gap-2.5">
             {LOCATION_CATEGORIES.map(cat => (
               <button key={`d-${cat}`} type="button" onClick={() => {
@@ -2185,7 +2211,7 @@ export default function App() {
           <span className={`text-[9px] font-bold tracking-widest ${storageVerified ? "text-[#4ade80]" : "text-red-400"}`}>
             {storageVerified ? "STORAGE ACTIVE" : "STORAGE ERROR"}
           </span>
-          <span className="text-[9px] text-neutral-600 font-mono-jet">· {trips.length} trips · {(storageBytes / 1024).toFixed(1)}KB</span>
+          <span className="text-[9px] text-neutral-400 font-mono-jet">· {trips.length} trips · {(storageBytes / 1024).toFixed(1)}KB</span>
         </div>
         <div className="flex gap-1.5">
           <button onClick={() => {
@@ -2200,7 +2226,7 @@ export default function App() {
           <button onClick={() => {
             navigator.clipboard?.writeText(localStorage.getItem("island-city-trips") || "");
             showToast("JSON copied — backup ready");
-          }} className="px-2 h-6 rounded-full bg-[#0a0a0a] border border-[#222] text-[8px] font-bold tracking-widest text-neutral-500 hover:text-white">
+          }} className="px-2 h-6 rounded-full bg-[#0a0a0a] border border-[#222] text-[8px] font-bold tracking-widest text-neutral-400 hover:text-white">
             BACKUP
           </button>
         </div>
@@ -2229,7 +2255,7 @@ export default function App() {
       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-[22px] font-bold text-white tracking-tight">Revenue Queue</h2>
-          <p className="text-[10px] tracking-[0.12em] text-neutral-500 mt-0.5 uppercase font-semibold">Review &amp; audit before posting to Ledger</p>
+          <p className="text-[10px] tracking-[0.12em] text-neutral-400 mt-0.5 uppercase font-semibold">Review &amp; audit before posting to Ledger</p>
         </div>
         <div className="flex items-center gap-2 mt-1">
           {selectedCount > 0 && (
@@ -2237,7 +2263,7 @@ export default function App() {
               {selectedCount} selected
             </span>
           )}
-          <span className="font-mono-jet text-[12px] text-neutral-500">{pendingTrips.length} pending</span>
+          <span className="font-mono-jet text-[12px] text-neutral-400">{pendingTrips.length} pending</span>
         </div>
       </div>
 
@@ -2250,7 +2276,7 @@ export default function App() {
             ["TOTAL",   "$" + pendingTotal.toFixed(2)],
           ] as [string, string][]).map(([lbl, val]) => (
             <div key={lbl} className="bg-[#0d0d0d] border border-[#1e1e1e] rounded-xl p-2 text-center">
-              <p className="text-[8px] tracking-[0.15em] text-neutral-600 font-bold uppercase">{lbl}</p>
+              <p className="text-[8px] tracking-[0.15em] text-neutral-400 font-bold uppercase">{lbl}</p>
               <p className="font-mono-jet text-[14px] font-bold text-[#f6dd8c] mt-0.5">{val}</p>
             </div>
           ))}
@@ -2261,7 +2287,7 @@ export default function App() {
       <div className={`rounded-xl border px-3 py-2 flex items-center justify-between ${storageVerified ? "bg-[#052e16]/20 border-[#166534]/30" : "bg-[#1a0a0a] border-[#7f1d1d]/30"}`}>
         <div className="flex items-center gap-2">
           <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${storageVerified ? "bg-[#22c55e] animate-pulse" : "bg-red-500"}`} />
-          <p className="font-mono-jet text-[10px] text-neutral-500">{trips.length} total · {(storageBytes / 1024).toFixed(2)}KB · {lastSavedAt !== "—" ? new Date(lastSavedAt).toLocaleTimeString() : "—"}</p>
+          <p className="font-mono-jet text-[10px] text-neutral-400">{trips.length} total · {(storageBytes / 1024).toFixed(2)}KB · {lastSavedAt !== "—" ? new Date(lastSavedAt).toLocaleTimeString() : "—"}</p>
         </div>
         <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold flex-shrink-0 ${storageVerified ? "bg-[#22c55e]/20 text-[#4ade80] border border-[#166534]" : "bg-red-900/30 text-red-400"}`}>
           {storageVerified ? "✓ SAVED" : "✗ ERR"}
@@ -2272,7 +2298,7 @@ export default function App() {
       {pendingTrips.length === 0 ? (
         <div className="bg-[#141414] border border-[#222] rounded-2xl p-10 text-center space-y-2">
           <p className="text-[15px] font-semibold text-white">All trips posted ✓</p>
-          <p className="text-[12px] text-neutral-500">Queue is clear — all revenue is in the Ledger</p>
+          <p className="text-[12px] text-neutral-400">Queue is clear — all revenue is in the Ledger</p>
           <button onClick={() => setActiveTab("ENTRY")}
             className="mt-3 h-10 px-6 rounded-full border border-[#d9b64f]/50 text-[#f6dd8c] text-[12px] font-semibold hover:bg-[#f6dd8c]/10 transition-colors">
             + Log a trip
@@ -2309,7 +2335,7 @@ export default function App() {
                   </button>
                   <div className="flex-1 flex items-center justify-between">
                     <span className="text-[11px] font-bold tracking-[0.12em] text-neutral-400 uppercase">{dayLabel}</span>
-                    <span className="font-mono-jet text-[11px] text-neutral-500">{dayTrips.length} trip{dayTrips.length !== 1 ? "s" : ""} · ${dayTotal.toFixed(2)}</span>
+                    <span className="font-mono-jet text-[11px] text-neutral-400">{dayTrips.length} trip{dayTrips.length !== 1 ? "s" : ""} · ${dayTotal.toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -2341,7 +2367,7 @@ export default function App() {
                           {/* Time + platform + amount row */}
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-center gap-2 flex-wrap min-w-0">
-                              <span className="font-mono-jet text-[11px] text-neutral-500">{t.time}</span>
+                              <span className="font-mono-jet text-[11px] text-neutral-400">{t.time}</span>
                               <PlatformAvatar meta={pm} size="sm" />
                               <span className="px-2 py-0.5 rounded-full bg-[#1e1e1e] border border-[#333] text-[#e8c766] text-[9px] font-bold tracking-[0.12em]">{t.platform.toUpperCase()}</span>
                               {pm.tags.map(tg => (
@@ -2351,13 +2377,13 @@ export default function App() {
                             <span className="font-mono-jet text-[17px] font-bold text-[#facc15] flex-shrink-0">${t.grandTotal.toFixed(2)}</span>
                           </div>
 
-                          {t.reference && <p className="font-mono-jet text-[10px] text-neutral-600 mt-1">REF: {t.reference}</p>}
+                          {t.reference && <p className="font-mono-jet text-[10px] text-neutral-400 mt-1">REF: {t.reference}</p>}
 
                           <p className="text-[13px] text-white/80 font-medium mt-1.5 leading-[1.3] break-words">
-                            {t.pickup || "—"} <span className="text-neutral-600 mx-1">→</span> {t.dropoff || "—"}
+                            {t.pickup || "—"} <span className="text-neutral-400 mx-1">→</span> {t.dropoff || "—"}
                           </p>
 
-                          <div className="flex gap-2 font-mono-jet text-[9px] text-neutral-600 flex-wrap mt-1">
+                          <div className="flex gap-2 font-mono-jet text-[9px] text-neutral-400 flex-wrap mt-1">
                             <span>Fare ${t.earnings.toFixed(2)}</span>
                             {t.tips > 0  && <span>Tips ${t.tips.toFixed(2)}</span>}
                             {t.extra > 0 && <span>Extra ${t.extra.toFixed(2)}</span>}
@@ -2365,7 +2391,7 @@ export default function App() {
                             {t.fee > 0   && <span>Fee −${t.fee.toFixed(2)}</span>}
                             {t.gps       && <span>📍 {t.gps.lat.toFixed(4)},{t.gps.lng.toFixed(4)}</span>}
                           </div>
-                          {t.notes && <p className="text-[11px] text-neutral-500 mt-1 leading-[1.4] break-words">{t.notes}</p>}
+                          {t.notes && <p className="text-[11px] text-neutral-400 mt-1 leading-[1.4] break-words">{t.notes}</p>}
                         </div>
                       </div>
 
@@ -2385,7 +2411,7 @@ export default function App() {
                             className="w-full h-10 rounded-lg bg-black border border-[#262626] px-3 text-[13px] text-white font-mono-jet placeholder:text-[#6b7280] focus:outline-none" />
                           {/* Live total preview */}
                           <div className="flex items-center justify-between bg-black rounded-lg px-3 py-2 border border-[#1e1e1e]">
-                            <span className="font-mono-jet text-[9px] text-neutral-600 truncate pr-2">
+                            <span className="font-mono-jet text-[9px] text-neutral-400 truncate pr-2">
                               ${liveFare.toFixed(2)} fare + ${t.tips.toFixed(2)} tips + ${t.extra.toFixed(2)} extra + ${t.toll.toFixed(2)} toll − ${t.fee.toFixed(2)} fee
                             </span>
                             <span className="font-mono-jet text-[15px] font-bold text-[#facc15] flex-shrink-0">
@@ -2462,7 +2488,7 @@ export default function App() {
             ["LEDGER TOTAL", "$" + postedTotal.toFixed(2)],
           ] as [string, string][]).map(([lbl, val]) => (
             <div key={lbl} className="bg-[#0d140d] border border-[#1a3a1a] rounded-xl p-2.5 text-center">
-              <p className="text-[8px] tracking-[0.15em] text-[#4ade80]/50 font-bold uppercase">{lbl}</p>
+              <p className="text-[8px] tracking-[0.15em] text-[#4ade80]/80 font-bold uppercase">{lbl}</p>
               <p className="font-mono-jet text-[15px] font-bold text-[#4ade80] mt-0.5">{val}</p>
             </div>
           ))}
@@ -2472,7 +2498,7 @@ export default function App() {
       {postedTrips.length === 0 ? (
         <div className="bg-[#141414] border border-[#222] rounded-2xl p-10 text-center space-y-2">
           <p className="text-[15px] font-semibold text-white">Ledger is empty</p>
-          <p className="text-[12px] text-neutral-500">Review and approve trips in the Revenue Queue first</p>
+          <p className="text-[12px] text-neutral-400">Review and approve trips in the Revenue Queue first</p>
           <button onClick={() => setActiveTab("REGISTER")}
             className="mt-3 h-10 px-6 rounded-full border border-[#166534]/60 text-[#4ade80] text-[12px] font-semibold hover:bg-[#4ade80]/10 transition-colors">
             Go to Revenue Queue →
@@ -2490,9 +2516,9 @@ export default function App() {
                 <div className="flex items-center justify-between px-1">
                   <div className="flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#4ade80]" />
-                    <span className="text-[11px] font-bold tracking-[0.12em] text-[#4ade80]/70 uppercase">{dayLabel}</span>
+                    <span className="text-[11px] font-bold tracking-[0.12em] text-[#4ade80]/90 uppercase">{dayLabel}</span>
                   </div>
-                  <span className="font-mono-jet text-[11px] text-[#4ade80]/60">{dayTrips.length} trip{dayTrips.length !== 1 ? "s" : ""} · ${dayTotal.toFixed(2)}</span>
+                  <span className="font-mono-jet text-[11px] text-[#4ade80]/85">{dayTrips.length} trip{dayTrips.length !== 1 ? "s" : ""} · ${dayTotal.toFixed(2)}</span>
                 </div>
 
                 {/* Posted trip cards — read-only */}
@@ -2502,18 +2528,18 @@ export default function App() {
                     <div key={t.id} className="bg-[#0c140c] border border-[#1a2e1a] rounded-2xl p-4 space-y-2">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2 flex-wrap min-w-0">
-                          <span className="font-mono-jet text-[11px] text-neutral-500">{t.time}</span>
+                          <span className="font-mono-jet text-[11px] text-neutral-400">{t.time}</span>
                           <PlatformAvatar meta={pm} size="sm" />
                           <span className="px-2 py-0.5 rounded-full bg-[#0d1f0d] border border-[#1a3a1a] text-[#4ade80] text-[9px] font-bold tracking-[0.12em]">{t.platform.toUpperCase()}</span>
                           <span className="px-2 py-0.5 rounded-full bg-[#052e16] border border-[#166534] text-[#4ade80] text-[8px] font-bold tracking-widest">✓ POSTED</span>
                         </div>
                         <span className="font-mono-jet text-[17px] font-bold text-[#4ade80] flex-shrink-0">${t.grandTotal.toFixed(2)}</span>
                       </div>
-                      {t.reference && <p className="font-mono-jet text-[10px] text-neutral-600">REF: {t.reference}</p>}
+                      {t.reference && <p className="font-mono-jet text-[10px] text-neutral-400">REF: {t.reference}</p>}
                       <p className="text-[13px] text-white/70 font-medium leading-[1.3] break-words">
-                        {t.pickup || "—"} <span className="text-neutral-600 mx-1">→</span> {t.dropoff || "—"}
+                        {t.pickup || "—"} <span className="text-neutral-400 mx-1">→</span> {t.dropoff || "—"}
                       </p>
-                      <div className="flex gap-2 font-mono-jet text-[9px] text-neutral-600 flex-wrap">
+                      <div className="flex gap-2 font-mono-jet text-[9px] text-neutral-400 flex-wrap">
                         <span>Fare ${t.earnings.toFixed(2)}</span>
                         {t.tips > 0  && <span>Tips ${t.tips.toFixed(2)}</span>}
                         {t.extra > 0 && <span>Extra ${t.extra.toFixed(2)}</span>}
@@ -2521,7 +2547,7 @@ export default function App() {
                         {t.fee > 0   && <span>Fee −${t.fee.toFixed(2)}</span>}
                         {t.postedAt  && <span>📋 Posted {new Date(t.postedAt).toLocaleDateString()}</span>}
                       </div>
-                      {t.notes && <p className="text-[11px] text-neutral-600 leading-[1.4] break-words">{t.notes}</p>}
+                      {t.notes && <p className="text-[11px] text-neutral-400 leading-[1.4] break-words">{t.notes}</p>}
                       {/* Ledger actions */}
                       <div className="flex gap-2 pt-1">
                         <button onClick={() => handleUnpostTrip(t.id)}
@@ -2581,13 +2607,13 @@ export default function App() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-[22px] font-bold text-white">Gastos</h2>
+          <h2 className="text-[22px] font-bold text-white">Expenses</h2>
           {expPeriod === 'ALL'
-            ? <p className="text-[11px] text-neutral-500 mt-0.5 font-mono-jet">{expenses.length} registros · −${totalExpenses.toFixed(2)}</p>
+            ? <p className="text-[11px] text-neutral-400 mt-0.5 font-mono-jet">{expenses.length} registros · −${totalExpenses.toFixed(2)}</p>
             : <p className="text-[11px] mt-0.5 font-mono-jet">
                 <span className="text-[#facc15] font-bold">{expPeriodFiltered.length} entries</span>
-                <span className="text-neutral-500"> · −${expPeriodFiltered.reduce((a,e)=>a+e.amount,0).toFixed(2)}</span>
-                <span className="text-neutral-600"> · total {expenses.length} / ${totalExpenses.toFixed(0)}</span>
+                <span className="text-neutral-400"> · −${expPeriodFiltered.reduce((a,e)=>a+e.amount,0).toFixed(2)}</span>
+                <span className="text-neutral-400"> · total {expenses.length} / ${totalExpenses.toFixed(0)}</span>
               </p>
           }
         </div>
@@ -2633,33 +2659,33 @@ export default function App() {
               </button>
               {editingExpenseId && (
                 <button onClick={() => { setEditingExpenseId(null); resetExpenseForm(); setShowExpenseForm(false); }}
-                  className="text-[10px] text-neutral-500 hover:text-white transition-colors">← Cancel</button>
+                  className="text-[10px] text-neutral-400 hover:text-white transition-colors">← Cancel</button>
               )}
             </div>{/* end flex items-center gap-2 */}
           </div>{/* end flex items-center justify-between */}
 
           {/* Vendor / Name dropdown */}
           <div>
-            <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest mb-1 block">Vendor / Nombre del gasto</label>
+            <label className="text-[9px] text-neutral-300 font-bold uppercase tracking-widest mb-1 block">Vendor / Expense Name</label>
             <div className="relative">
               <select value={expenseForm.name}
                 onChange={e => { if (e.target.value === "__add__") { setAddingCustomVendor(true); } else { setExpenseForm(s => ({ ...s, name: e.target.value })); } }}
                 className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 pr-8 text-white text-[13px] appearance-none focus:outline-none">
-                <option value="" disabled>Selecciona un vendor...</option>
+                <option value="" disabled>Select a vendor...</option>
                 {allVendors.map(v => <option key={v} value={v}>{v}</option>)}
                 {allVendors.length > 0 && <option disabled>──────────</option>}
-                <option value="__add__">➕ Añadir vendor...</option>
+                <option value="__add__">➕ Add vendor...</option>
               </select>
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 text-[10px]">▼</span>
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 text-[10px]">▼</span>
             </div>
             {addingCustomVendor && (
               <div className="flex gap-2 mt-2">
                 <input value={newCustomVendor} onChange={e => setNewCustomVendor(e.target.value)}
-                  placeholder="Ej: BP Queens Blvd, Jiffy Lube..."
+                  placeholder="e.g. BP Queens Blvd, Jiffy Lube..."
                   onKeyDown={e => { if (e.key === "Enter" && newCustomVendor.trim()) { const v = newCustomVendor.trim(); setCustomVendors(p => [...p, v]); setExpenseForm(s => ({ ...s, name: v })); setNewCustomVendor(""); setAddingCustomVendor(false); } }}
                   className="flex-1 h-10 rounded-xl bg-black border border-[#facc15]/40 px-3 text-white text-[13px] focus:outline-none" autoFocus />
                 <button onClick={() => { if (newCustomVendor.trim()) { const v = newCustomVendor.trim(); setCustomVendors(p => [...p, v]); setExpenseForm(s => ({ ...s, name: v })); setNewCustomVendor(""); setAddingCustomVendor(false); } }}
-                  className="h-10 px-3 rounded-xl bg-[#facc15] text-black text-[12px] font-bold">Añadir</button>
+                  className="h-10 px-3 rounded-xl bg-[#facc15] text-black text-[12px] font-bold">Add</button>
                 <button onClick={() => { setAddingCustomVendor(false); setNewCustomVendor(""); }}
                   className="h-10 px-3 rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-400 text-[12px]">✕</button>
               </div>
@@ -2668,25 +2694,25 @@ export default function App() {
 
           {/* Type dropdown */}
           <div>
-            <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest mb-1 block">Tipo de gasto</label>
+            <label className="text-[9px] text-neutral-300 font-bold uppercase tracking-widest mb-1 block">Expense Type</label>
             <div className="relative">
               <select value={expenseForm.type}
                 onChange={e => { if (e.target.value === "__add__") { setAddingCustomType(true); } else { setExpenseForm(s => ({ ...s, type: e.target.value })); } }}
                 className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 pr-8 text-white text-[13px] appearance-none focus:outline-none">
                 {allExpenseTypes.map(t => <option key={t} value={t}>{t}</option>)}
                 <option disabled>──────────</option>
-                <option value="__add__">➕ Añadir nuevo tipo...</option>
+                <option value="__add__">➕ Add new type...</option>
               </select>
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 text-[10px]">▼</span>
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 text-[10px]">▼</span>
             </div>
             {addingCustomType && (
               <div className="flex gap-2 mt-2">
                 <input value={newCustomType} onChange={e => setNewCustomType(e.target.value)}
-                  placeholder="Nombre del nuevo tipo..."
+                  placeholder="New type name..."
                   onKeyDown={e => { if (e.key === "Enter" && newCustomType.trim()) { const t = newCustomType.trim(); setCustomExpenseTypes(p => [...p, t]); setExpenseForm(s => ({ ...s, type: t })); setNewCustomType(""); setAddingCustomType(false); } }}
                   className="flex-1 h-10 rounded-xl bg-black border border-[#facc15]/40 px-3 text-white text-[13px] focus:outline-none" autoFocus />
                 <button onClick={() => { if (newCustomType.trim()) { const t = newCustomType.trim(); setCustomExpenseTypes(p => [...p, t]); setExpenseForm(s => ({ ...s, type: t })); setNewCustomType(""); setAddingCustomType(false); } }}
-                  className="h-10 px-3 rounded-xl bg-[#facc15] text-black text-[12px] font-bold">Añadir</button>
+                  className="h-10 px-3 rounded-xl bg-[#facc15] text-black text-[12px] font-bold">Add</button>
                 <button onClick={() => { setAddingCustomType(false); setNewCustomType(""); }}
                   className="h-10 px-3 rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-400 text-[12px]">✕</button>
               </div>
@@ -2695,25 +2721,25 @@ export default function App() {
 
           {/* Category dropdown */}
           <div>
-            <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest mb-1 block">Categoría (IRS Schedule C)</label>
+            <label className="text-[9px] text-neutral-300 font-bold uppercase tracking-widest mb-1 block">Category (IRS Schedule C)</label>
             <div className="relative">
               <select value={expenseForm.category}
                 onChange={e => { if (e.target.value === "__add__") { setAddingCustomCat(true); } else { setExpenseForm(s => ({ ...s, category: e.target.value })); } }}
                 className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 pr-8 text-white text-[13px] appearance-none focus:outline-none">
                 {allExpenseCategories.map(c => <option key={c} value={c}>{c}</option>)}
                 <option disabled>──────────</option>
-                <option value="__add__">➕ Añadir categoría...</option>
+                <option value="__add__">➕ Add category...</option>
               </select>
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 text-[10px]">▼</span>
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 text-[10px]">▼</span>
             </div>
             {addingCustomCat && (
               <div className="flex gap-2 mt-2">
                 <input value={newCustomCat} onChange={e => setNewCustomCat(e.target.value)}
-                  placeholder="Nueva categoría..."
+                  placeholder="New category..."
                   onKeyDown={e => { if (e.key === "Enter" && newCustomCat.trim()) { const c = newCustomCat.trim(); setCustomExpenseCategories(p => [...p, c]); setExpenseForm(s => ({ ...s, category: c })); setNewCustomCat(""); setAddingCustomCat(false); } }}
                   className="flex-1 h-10 rounded-xl bg-black border border-[#facc15]/40 px-3 text-white text-[13px] focus:outline-none" autoFocus />
                 <button onClick={() => { if (newCustomCat.trim()) { const c = newCustomCat.trim(); setCustomExpenseCategories(p => [...p, c]); setExpenseForm(s => ({ ...s, category: c })); setNewCustomCat(""); setAddingCustomCat(false); } }}
-                  className="h-10 px-3 rounded-xl bg-[#facc15] text-black text-[12px] font-bold">Añadir</button>
+                  className="h-10 px-3 rounded-xl bg-[#facc15] text-black text-[12px] font-bold">Add</button>
                 <button onClick={() => { setAddingCustomCat(false); setNewCustomCat(""); }}
                   className="h-10 px-3 rounded-xl bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-400 text-[12px]">✕</button>
               </div>
@@ -2722,23 +2748,23 @@ export default function App() {
 
           {/* Description */}
           <div>
-            <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest mb-1 block">Descripción (opcional)</label>
+            <label className="text-[9px] text-neutral-300 font-bold uppercase tracking-widest mb-1 block">Description (optional)</label>
             <input value={expenseForm.description} onChange={e => setExpenseForm(s => ({ ...s, description: e.target.value }))}
-              placeholder="Notas adicionales sobre este gasto..."
-              className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[14px] placeholder:text-neutral-600 focus:outline-none" />
+              placeholder="Additional notes about this expense..."
+              className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[14px] placeholder:text-neutral-400 focus:outline-none" />
           </div>
 
           {/* Amount + Date */}
           <div className="flex gap-3">
             <div className="flex-1">
-              <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest mb-1 block">Cantidad ($)</label>
+              <label className="text-[9px] text-neutral-300 font-bold uppercase tracking-widest mb-1 block">Amount ($)</label>
               <input inputMode="decimal" value={expenseForm.amount}
                 onChange={e => { if (numericFilter(e.target.value)) setExpenseForm(s => ({ ...s, amount: e.target.value })); }}
                 placeholder="0.00"
-                className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[18px] font-bold font-mono-jet placeholder:text-neutral-600 focus:outline-none" />
+                className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[18px] font-bold font-mono-jet placeholder:text-neutral-400 focus:outline-none" />
             </div>
             <div className="w-[130px] flex-shrink-0">
-              <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest mb-1 block">Fecha</label>
+              <label className="text-[9px] text-neutral-300 font-bold uppercase tracking-widest mb-1 block">Date</label>
               <input type="date" value={expenseForm.date} onChange={e => setExpenseForm(s => ({ ...s, date: e.target.value }))}
                 className="w-full h-11 rounded-xl bg-black border border-[#262626] px-2 text-white text-[11px] focus:outline-none" />
             </div>
@@ -2746,14 +2772,14 @@ export default function App() {
 
           {/* Frequency (recurring) */}
           <div>
-            <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest mb-1.5 block">Frecuencia (gasto recurrente)</label>
+            <label className="text-[9px] text-neutral-300 font-bold uppercase tracking-widest mb-1.5 block">Frequency (recurring expense)</label>
             <div className="flex gap-1.5">
               {(["none","daily","weekly","monthly"] as const).map(f => (
                 <button key={f} onClick={() => setExpenseForm(s => ({ ...s, frequency: f }))}
                   className={`flex-1 h-9 rounded-xl text-[10px] font-bold transition-colors ${
                     expenseForm.frequency === f
                       ? "bg-[#facc15] text-black"
-                      : "bg-[#1e1e1e] text-neutral-500 border border-[#262626] hover:text-white"
+                      : "bg-[#1e1e1e] text-neutral-400 border border-[#262626] hover:text-white"
                   }`}>
                   {f === "none" ? "One-time" : f === "daily" ? "Daily" : f === "weekly" ? "Weekly" : "Monthly"}
                 </button>
@@ -2764,7 +2790,7 @@ export default function App() {
           {/* Due date — only if recurring */}
           {expenseForm.frequency !== "none" && (
             <div>
-              <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest mb-1 block">Next due date</label>
+              <label className="text-[9px] text-neutral-300 font-bold uppercase tracking-widest mb-1 block">Next due date</label>
               <input type="date" value={expenseForm.dueDate}
                 onChange={e => setExpenseForm(s => ({ ...s, dueDate: e.target.value }))}
                 className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[13px] focus:outline-none" />
@@ -2807,24 +2833,24 @@ export default function App() {
             <div className="flex gap-1.5 mb-3">
               {labels.map(l=>(
                 <button key={l.id} onClick={()=>setExpPeriod(l.id)}
-                  className={`flex-1 h-8 rounded-xl text-[10px] font-bold transition-colors ${expPeriod===l.id?'bg-[#facc15] text-black':'bg-[#1e1e1e] text-neutral-500 border border-[#262626]'}`}>
+                  className={`flex-1 h-8 rounded-xl text-[10px] font-bold transition-colors ${expPeriod===l.id?'bg-[#facc15] text-black':'bg-[#1e1e1e] text-neutral-400 border border-[#262626]'}`}>
                   {l.label}
                 </button>
               ))}
             </div>
             {/* Period summary */}
             <div className="flex items-center justify-between mb-3 px-1">
-              <span className="text-[10px] text-neutral-500 tracking-[0.18em] uppercase">{expPeriod==='ALL'?'All expenses':'Expenses this '+labels.find(l=>l.id===expPeriod)?.label.toLowerCase()}</span>
+              <span className="text-[10px] text-neutral-400 tracking-[0.18em] uppercase">{expPeriod==='ALL'?'All expenses':'Expenses this '+labels.find(l=>l.id===expPeriod)?.label.toLowerCase()}</span>
               <span className="font-mono-jet text-[14px] font-bold text-[#ff6b6b]">−${periodTotal.toFixed(2)}</span>
             </div>
             {/* Filtered list */}
             <div>
-              <p className="text-[10px] tracking-[0.22em] text-neutral-500 font-semibold mb-2.5">EXPENSE LOG · {filtered.length} entries</p>
+              <p className="text-[10px] tracking-[0.22em] text-neutral-400 font-semibold mb-2.5">EXPENSE LOG · {filtered.length} entries</p>
               {filtered.length === 0 ? (
                 <div className="bg-[#141414] border border-[#222] rounded-2xl p-10 text-center">
                   <p className="text-[32px] mb-2">🧾</p>
                   <p className="text-[14px] text-neutral-400">No expenses for this period</p>
-                  <p className="text-[11px] text-neutral-600 mt-1">Change the filter or add an expense above</p>
+                  <p className="text-[11px] text-neutral-400 mt-1">Change the filter or add an expense above</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -2837,17 +2863,17 @@ export default function App() {
                             {ex.verified&&<span className="text-[9px] bg-[#4ade80]/10 text-[#4ade80] px-2 py-0.5 rounded-full border border-[#4ade80]/20 font-mono-jet">✓ VERIFIED</span>}
                           </div>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
-                            <span className="font-mono-jet text-[10px] text-neutral-500">{ex.date}</span>
+                            <span className="font-mono-jet text-[10px] text-neutral-400">{ex.date}</span>
                             {ex.type&&<span className="text-[10px] text-neutral-400 bg-[#1e1e1e] px-2 py-0.5 rounded-full">{ex.type}</span>}
                           </div>
-                          <span className="text-[10px] text-neutral-600 mt-0.5 block">{ex.category}</span>
-                          {ex.note&&<p className="text-[11px] text-neutral-500 mt-1 italic">{ex.note}</p>}
+                          <span className="text-[10px] text-neutral-400 mt-0.5 block">{ex.category}</span>
+                          {ex.note&&<p className="text-[11px] text-neutral-400 mt-1 italic">{ex.note}</p>}
                         </div>
                         <div className="flex-shrink-0 text-right">
                           <p className="font-mono-jet text-[17px] font-bold text-[#ff6b6b]">−${ex.amount.toFixed(2)}</p>
                           <div className="flex items-center gap-1 mt-2 justify-end">
                             <button onClick={()=>handleToggleExpenseVerified(ex.id)}
-                              className={`w-7 h-7 rounded-full border text-[11px] flex items-center justify-center transition-all ${ex.verified?"bg-[#4ade80]/20 border-[#4ade80]/40 text-[#4ade80]":"bg-[#1e1e1e] border-[#2a2a2a] text-neutral-500"}`}>✓</button>
+                              className={`w-7 h-7 rounded-full border text-[11px] flex items-center justify-center transition-all ${ex.verified?"bg-[#4ade80]/20 border-[#4ade80]/40 text-[#4ade80]":"bg-[#1e1e1e] border-[#2a2a2a] text-neutral-400"}`}>✓</button>
                             <button onClick={()=>{setEditingExpenseId(ex.id);setExpenseForm({name:ex.vendor,type:ex.type||"Other",category:ex.category,description:ex.note,amount:String(ex.amount),date:ex.date,frequency:ex.frequency||"none",dueDate:ex.dueDate||""});setShowExpenseForm(true);setAddingCustomType(false);setAddingCustomCat(false);}}
                               className="w-7 h-7 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-400 text-[10px] flex items-center justify-center">✏️</button>
                             <button onClick={()=>handleDeleteExpense(ex.id)}
@@ -2946,7 +2972,7 @@ export default function App() {
 
       <div className="bg-[#141414] border border-[#222] rounded-[20px] p-5 space-y-4">
         <div className="flex justify-between items-center">
-          <p className="text-[11px] tracking-[0.18em] text-neutral-500 font-semibold">FINANCIAL SUMMARY</p>
+          <p className="text-[11px] tracking-[0.18em] text-neutral-400 font-semibold">FINANCIAL SUMMARY</p>
           <span className="text-[10px] font-mono-jet px-2 py-1 rounded-full bg-[#1a1a1a] border border-[#2a2a2a] text-neutral-400">
             {currentTime.toLocaleDateString()} · {hoursLog.length} shifts
           </span>
@@ -2954,7 +2980,7 @@ export default function App() {
         {/* Source note */}
         <div className="flex items-center gap-2 -mt-1">
           <span className="w-1.5 h-1.5 rounded-full bg-[#4ade80]" />
-          <p className="text-[10px] text-[#4ade80]/70 font-mono-jet">
+          <p className="text-[10px] text-[#4ade80]/90 font-mono-jet">
             {postedTrips.length} posted (Ledger) · {pendingTrips.length} pending (Register, excluded)
           </p>
         </div>
@@ -2974,11 +3000,11 @@ export default function App() {
 
         {/* Hours breakdown */}
         <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-3.5">
-          <p className="text-[10px] tracking-[0.18em] text-neutral-500 font-semibold mb-2">HOURS LOG</p>
+          <p className="text-[10px] tracking-[0.18em] text-neutral-400 font-semibold mb-2">HOURS LOG</p>
           <div className="grid grid-cols-4 gap-2">
             {[["Today", cumulative.hoy], ["Week", cumulative.semana], ["Month", cumulative.mes], ["Year", cumulative.año]].map(([label, val]) => (
               <div key={String(label)} className="text-center">
-                <p className="text-[9px] text-neutral-600 tracking-widest">{label}</p>
+                <p className="text-[9px] text-neutral-400 tracking-widest">{label}</p>
                 <p className="font-mono-jet text-[13px] font-semibold text-white mt-1">{Number(val).toFixed(1)}h</p>
               </div>
             ))}
@@ -2988,13 +3014,13 @@ export default function App() {
         {/* Shift history */}
         {hoursLog.length > 0 && (
           <div className="space-y-2">
-            <p className="text-[10px] tracking-[0.18em] text-neutral-500 font-semibold">RECENT SHIFTS</p>
+            <p className="text-[10px] tracking-[0.18em] text-neutral-400 font-semibold">RECENT SHIFTS</p>
             {hoursLog.slice(0, 5).map((h, i) => (
               <div key={i} className="flex items-center justify-between py-1.5 border-b border-[#1a1a1a] last:border-0">
                 <div>
                   <p className="text-[12px] font-semibold text-white">{h.date}</p>
                   {h.clockIn && h.clockOut && (
-                    <p className="font-mono-jet text-[10px] text-neutral-500">
+                    <p className="font-mono-jet text-[10px] text-neutral-400">
                       {new Date(h.clockIn).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} – {new Date(h.clockOut).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                       {h.breakMs > 0 ? ` · ${(h.breakMs / 3600000).toFixed(1)}h break` : ""}
                     </p>
@@ -3102,12 +3128,24 @@ export default function App() {
 
   // ── Monthly cash flow (Proyecciones) ──────────────────────────
   // Weekly recurring expense amount (templates, not one-time entries)
+  // Excludes expenses whose endDate (repeat-until) has already passed
   const _recurWk = expenses.reduce((s,e)=>{
+    if(!e.frequency||e.frequency==='none') return s;
+    if(e.endDate && e.endDate < _mwTodayStr) return s; // expired
     if(e.frequency==='monthly') return s+e.amount/4.33;
     if(e.frequency==='weekly')  return s+e.amount;
     if(e.frequency==='daily')   return s+e.amount*7;
     return s;
   },0);
+  // Per-day recurring helper — accounts for expenses that may expire mid-projection
+  const _recurPerDay = (dateStr: string) => expenses.reduce((s,e) => {
+    if(!e.frequency||e.frequency==='none') return s;
+    if(e.endDate && e.endDate < dateStr) return s;
+    if(e.frequency==='monthly') return s+e.amount/(4.33*7);
+    if(e.frequency==='weekly')  return s+e.amount/7;
+    if(e.frequency==='daily')   return s+e.amount;
+    return s;
+  }, 0);
 
   const _mwYear=currentTime.getFullYear(), _mwMo=currentTime.getMonth();
   const _mwFirst=new Date(_mwYear,_mwMo,1);
@@ -3126,6 +3164,12 @@ export default function App() {
     while(ws<=_mwLast){
       const we=new Date(ws); we.setDate(we.getDate()+6);
       const wStr=toYYYYMMDD(ws), eStr=toYYYYMMDD(we);
+      // Priority: weekOverrides > recurringPlan (for future weeks) > base workDays/dayTargets
+      const _wkOv=weekOverrides[wStr];
+      const _isFutureWk=wStr>_finWeekStart;
+      const _inRecurPlan=_isFutureWk&&recurringPlan.enabled&&recurringPlan.untilDate>=wStr;
+      const _effWD=_wkOv?.workDays??(_inRecurPlan?recurringPlan.workDays:workDays);
+      const _effDT=_wkOv?.dayTargets??(_inRecurPlan?recurringPlan.dayTargets:dayTargets);
       // Projected income: work days in this week that fall in the current month
       let projIncome=0, daysInMo=0;
       for(let di=0;di<7;di++){
@@ -3133,7 +3177,7 @@ export default function App() {
         if(dd.getMonth()!==_mwMo){ws=new Date(ws);ws.setDate(ws.getDate()-di+di);continue;}
         daysInMo++;
         const iso=dd.getDay()===0?7:dd.getDay();
-        if(workDays.includes(iso))projIncome+=(dayTargets[iso]??dailyGoal);
+        if(_effWD.includes(iso))projIncome+=(_effDT[iso]??dailyGoal);
       }
       const projExp=_recurWk*(daysInMo/7);
       const actualIncome=trips.filter(t=>t.date>=wStr&&t.date<=eStr).reduce((a,t)=>a+_tripNet(t),0);
@@ -3189,6 +3233,7 @@ export default function App() {
     .sort((a,b)=>a.daysUntil-b.daysUntil);
 
   // ─── 14-day cash flow projection ──────────────────────────────
+  // _cfDailyRecur = today's flat daily rate (for the Recurring Drain display card)
   const _cfDailyRecur = _recurWk / 7;
   const _cfDays = (() => {
     const days: {
@@ -3206,9 +3251,14 @@ export default function App() {
       const isWorkDay = workDays.includes(iso);
       const isToday = i === 0;
       const income = isToday ? 0 : (isWorkDay ? (dayTargets[iso] ?? dailyGoal) : 0);
-      const payments = expenses.filter(e => e.dueDate === dateStr && e.frequency === 'monthly');
+      // Only include active payments on this specific date (skip if expense endDate has passed)
+      const payments = expenses.filter(e =>
+        e.dueDate === dateStr && e.frequency === 'monthly' &&
+        (!e.endDate || e.endDate >= dateStr)
+      );
       const paymentTotal = payments.reduce((s,e) => s + e.amount, 0);
-      if (!isToday) bal = bal + income - _cfDailyRecur - paymentTotal;
+      // Use per-day recurring so expired expenses don't drain future balance
+      if (!isToday) bal = bal + income - _recurPerDay(dateStr) - paymentTotal;
       const shortLabel = isToday ? 'NOW'
         : d.toLocaleDateString('en-US',{weekday:'short'}).slice(0,2).toUpperCase();
       const fullLabel = isToday ? 'Today'
@@ -3220,7 +3270,7 @@ export default function App() {
   const _cfMin = Math.min(..._cfDays.map(d => d.balance));
   const _cfMax = Math.max(..._cfDays.map(d => d.balance));
   const _cfPayments14 = expenses
-    .filter(e => e.dueDate && e.frequency === 'monthly')
+    .filter(e => e.dueDate && e.frequency === 'monthly' && (!e.endDate || e.endDate >= e.dueDate!))
     .map(e => {
       const daysUntil = Math.round((new Date(e.dueDate!+'T12:00:00').getTime()-currentTime.getTime())/86400000);
       const dayEntry = _cfDays.find(d => d.dateStr === e.dueDate);
@@ -3240,7 +3290,7 @@ export default function App() {
       {/* ── Header: page title + dot indicators ── */}
       <div className="flex items-start justify-between px-4 pt-4 pb-3">
         <div>
-          <p className="text-[10px] tracking-[0.22em] text-neutral-500 font-semibold uppercase">Financial Intelligence</p>
+          <p className="text-[10px] tracking-[0.22em] text-neutral-400 font-semibold uppercase">Financial Intelligence</p>
           <p className="text-[12px] font-semibold text-neutral-200 mt-0.5">{_finPageNames[finPage]}</p>
         </div>
         <div className="flex items-center gap-1.5 mt-1">
@@ -3266,8 +3316,8 @@ export default function App() {
           {/* ESTA SEMANA chart */}
           <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">THIS WEEK</p>
-              <div className="flex gap-3 text-[8px] text-neutral-600">
+              <p className="text-[9px] tracking-[0.22em] text-neutral-300 font-bold uppercase">THIS WEEK</p>
+              <div className="flex gap-3 text-[8px] text-neutral-400">
                 <span className="flex items-center gap-1"><span className="inline-block w-2 h-1.5 rounded bg-[#d9b64f]/30"/>Planned</span>
                 <span className="flex items-center gap-1"><span className="inline-block w-2 h-1.5 rounded bg-[#f6dd8c]"/>Actual</span>
               </div>
@@ -3284,14 +3334,14 @@ export default function App() {
             </ResponsiveContainer>
             <div className="flex justify-between mt-2 pt-2 border-t border-[#1e1e1e]">
               <div>
-                <p className="text-[9px] text-neutral-500">Earned so far</p>
+                <p className="text-[9px] text-neutral-400">Earned so far</p>
                 <p className="text-[15px] font-bold text-[#f6dd8c] font-mono-jet">${_earnWeek.toFixed(2)}</p>
-                <p className="text-[8px] text-neutral-600 mt-0.5">{cumulative.semana.toFixed(1)}h logged · {(() => { const wh = hoursLog.filter(h => h.date >= _finWeekStart); return wh.length; })()} shifts</p>
+                <p className="text-[8px] text-neutral-400 mt-0.5">{cumulative.semana.toFixed(1)}h logged · {(() => { const wh = hoursLog.filter(h => h.date >= _finWeekStart); return wh.length; })()} shifts</p>
               </div>
               <div className="text-right">
-                <p className="text-[9px] text-neutral-500">Week plan total</p>
+                <p className="text-[9px] text-neutral-400">Week plan total</p>
                 <p className="text-[15px] font-bold text-white font-mono-jet">${_projWeek.toFixed(2)}</p>
-                <p className="text-[8px] text-neutral-600 mt-0.5">pending + posted trips</p>
+                <p className="text-[8px] text-neutral-400 mt-0.5">pending + posted trips</p>
               </div>
             </div>
           </div>
@@ -3299,8 +3349,8 @@ export default function App() {
           {/* PLAN SEMANAL DE INGRESOS */}
           <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">WEEKLY INCOME PLAN</p>
-              <span className="text-[9px] text-neutral-600">{workDays.length} active day{workDays.length!==1?'s':''}</span>
+              <p className="text-[9px] tracking-[0.22em] text-neutral-300 font-bold uppercase">WEEKLY INCOME PLAN</p>
+              <span className="text-[9px] text-neutral-400">{workDays.length} active day{workDays.length!==1?'s':''}</span>
             </div>
             <div className="grid grid-cols-7 gap-1 mb-1.5">
               {([1,2,3,4,5,6,7] as const).map((iso,i)=>{
@@ -3309,7 +3359,7 @@ export default function App() {
                   <button key={iso}
                     onClick={()=>setWorkDays(prev=>on?prev.filter(x=>x!==iso):[...prev,iso].sort())}
                     className={`flex flex-col items-center py-2 rounded-lg border transition-all active:scale-95 ${on?'bg-black border-[#f6dd8c]/50':'bg-[#0a0a0a] border-[#1a1a1a]'}`}>
-                    <span className={`text-[9px] font-bold leading-none mb-1.5 ${on?'text-[#f6dd8c]':'text-neutral-600'}`}>{['M','Tu','W','Th','F','Sa','Su'][i]}</span>
+                    <span className={`text-[9px] font-bold leading-none mb-1.5 ${on?'text-[#f6dd8c]':'text-neutral-400'}`}>{['M','Tu','W','Th','F','Sa','Su'][i]}</span>
                     <span className={`w-3 h-3 rounded-full transition-colors ${on?'bg-[#f6dd8c]':'bg-[#252525]'}`}/>
                   </button>
                 );
@@ -3331,27 +3381,119 @@ export default function App() {
             </div>
             <div className="pt-3 border-t border-[#1e1e1e]">
               <div className="flex items-baseline justify-between mb-0.5">
-                <p className="text-[9px] text-neutral-500 uppercase tracking-[0.15em]">Weekly total</p>
+                <p className="text-[9px] text-neutral-400 uppercase tracking-[0.15em]">Weekly total</p>
                 <p className="text-[22px] font-bold text-[#f6dd8c] font-mono-jet leading-none">
                   ${_weekPlanTotal.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})}
                 </p>
               </div>
-              <p className="text-[8px] text-neutral-600 mb-3">avg ${_avgDayTarget.toFixed(0)}/day</p>
+              <p className="text-[8px] text-neutral-400 mb-3">avg ${_avgDayTarget.toFixed(0)}/day</p>
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <div className="bg-black border border-[#1e1e1e] rounded-xl p-2.5 text-center">
-                  <p className="text-[8px] text-neutral-600 uppercase tracking-widest mb-0.5">Est. monthly</p>
+                  <p className="text-[8px] text-neutral-400 uppercase tracking-widest mb-0.5">Est. monthly</p>
                   <p className="text-[13px] font-bold text-white font-mono-jet">${(_weekPlanTotal*4.33/1000).toFixed(1)}k</p>
                 </div>
                 <div className="bg-black border border-[#1e1e1e] rounded-xl p-2.5 text-center">
-                  <p className="text-[8px] text-neutral-600 uppercase tracking-widest mb-0.5">Est. yearly</p>
+                  <p className="text-[8px] text-neutral-400 uppercase tracking-widest mb-0.5">Est. yearly</p>
                   <p className="text-[13px] font-bold text-white font-mono-jet">${(_annTarget/1000).toFixed(0)}k</p>
                 </div>
               </div>
               <div className="bg-[#0f0a00] border border-[#d9b64f]/20 rounded-xl p-2.5 flex items-center gap-2">
                 <span className="text-[#d9b64f] text-[12px]">💡</span>
-                <p className="text-[9px] text-[#a07820]">Days without a custom target use <strong className="text-[#d9b64f]">${dailyGoal}/day</strong> as the default.</p>
+                <p className="text-[9px] text-[#d9b64f]">Days without a custom target use <strong className="text-[#d9b64f]">${dailyGoal}/day</strong> as the default.</p>
               </div>
             </div>
+          </div>
+
+          {/* ── 🔁 Repeat this weekly pattern until a date ── */}
+          <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4 space-y-3">
+
+            {/* Active plan summary */}
+            {recurringPlan.enabled && !showRepeatIncomePicker && (
+              <div className="bg-[#0c140c] border border-[#4ade80]/25 rounded-xl p-3 flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-[9px] font-bold text-[#4ade80] mb-0.5">🔁 Repeating weekly pattern</p>
+                  <p className="text-[11px] text-white font-semibold">
+                    Until {new Date(recurringPlan.untilDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+                  </p>
+                  <p className="text-[9px] text-neutral-400 mt-0.5">
+                    {recurringPlan.workDays.length} day{recurringPlan.workDays.length!==1?'s':''}/week · 
+                    ${recurringPlan.workDays.reduce((s,iso)=>s+(recurringPlan.dayTargets[iso]??dailyGoal),0).toLocaleString('en-US',{maximumFractionDigits:0})}/wk projected
+                  </p>
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                  <button onClick={()=>{setRepeatIncomeUntil(recurringPlan.untilDate);setShowRepeatIncomePicker(true);}}
+                    className="text-[9px] text-[#f6dd8c] border border-[#f6dd8c]/30 px-2 py-1 rounded-full">
+                    Edit
+                  </button>
+                  <button onClick={()=>{setRecurringPlan({enabled:false,workDays:[],dayTargets:{},untilDate:""});showToast("Recurring pattern cleared ✓");}}
+                    className="text-[9px] text-neutral-400 border border-[#2a2a2a] px-2 py-1 rounded-full hover:text-[#ff6b6b] hover:border-[#ff6b6b]/30 transition-colors">
+                    Clear
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Checkbox toggle row */}
+            <button
+              onClick={()=>{
+                if(recurringPlan.enabled&&!showRepeatIncomePicker){
+                  // Clicking while active + picker closed → clear the plan
+                  setRecurringPlan({enabled:false,workDays:[],dayTargets:{},untilDate:""});
+                  showToast("Recurring pattern cleared ✓");
+                } else {
+                  setRepeatIncomeUntil(recurringPlan.untilDate||"");
+                  setShowRepeatIncomePicker(p=>!p);
+                }
+              }}
+              className="w-full flex items-center gap-3 text-left">
+              <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors ${recurringPlan.enabled||showRepeatIncomePicker?'bg-[#f6dd8c] border-[#f6dd8c]':'bg-transparent border-[#3a3a3a]'}`}>
+                {(recurringPlan.enabled||showRepeatIncomePicker) && <span className="text-black text-[11px] font-black leading-none">✓</span>}
+              </div>
+              <div className="flex-1">
+                <p className="text-[12px] text-white font-semibold leading-snug">🔁 Repeat this weekly pattern until a date</p>
+                <p className="text-[9px] text-neutral-400 mt-0.5">Spreads this exact schedule to every future week automatically</p>
+              </div>
+            </button>
+
+            {/* Date picker (opens when checkbox is toggled) */}
+            {showRepeatIncomePicker && (
+              <div className="pt-1 space-y-3">
+                <div>
+                  <label className="text-[9px] text-neutral-300 font-bold uppercase tracking-widest mb-1.5 block">Repeat until</label>
+                  <input type="date" value={repeatIncomeUntil}
+                    min={_finWeekStart}
+                    onChange={e=>setRepeatIncomeUntil(e.target.value)}
+                    className="w-full h-11 rounded-xl bg-black border border-[#f6dd8c]/30 px-3 text-white text-[14px] font-semibold focus:outline-none focus:border-[#f6dd8c] transition-colors"/>
+                </div>
+                {repeatIncomeUntil && (()=>{
+                  const nWeeks=Math.max(0,Math.ceil(
+                    (new Date(repeatIncomeUntil+'T12:00:00').getTime()-new Date(_finWeekStart+'T12:00:00').getTime())
+                    /(7*86400000)
+                  ));
+                  return (
+                    <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-xl px-3 py-2 flex items-center justify-between">
+                      <p className="text-[9px] text-neutral-400">{nWeeks} week{nWeeks!==1?'s':''} · {workDays.length} day{workDays.length!==1?'s':''}/wk</p>
+                      <p className="font-mono-jet text-[11px] font-bold text-[#f6dd8c]">${_weekPlanTotal.toLocaleString('en-US',{maximumFractionDigits:0})}/wk</p>
+                    </div>
+                  );
+                })()}
+                <div className="flex gap-2">
+                  <button onClick={()=>{
+                    if(!repeatIncomeUntil){showToast("Pick an end date first");return;}
+                    setRecurringPlan({enabled:true,workDays:[...workDays],dayTargets:{...dayTargets},untilDate:repeatIncomeUntil});
+                    setShowRepeatIncomePicker(false);
+                    showToast("Recurring pattern saved ✓");
+                  }} className="flex-1 h-11 rounded-full bg-[#f6dd8c] text-black text-[13px] font-bold active:scale-95 transition-transform">
+                    Save recurring pattern
+                  </button>
+                  <button onClick={()=>setShowRepeatIncomePicker(false)}
+                    className="h-11 px-4 rounded-full border border-[#2a2a2a] text-neutral-400 text-[12px] hover:text-white transition-colors">
+                    Cancel
+                  </button>
+                </div>
+                <p className="text-[9px] text-neutral-400 text-center">Each individual week can still be adjusted when it arrives — just edit the plan above and it only affects that week.</p>
+              </div>
+            )}
           </div>
 
         </div>{/* end page 0 */}
@@ -3361,14 +3503,16 @@ export default function App() {
 
           {/* Header */}
           <div className="flex items-center gap-3 pt-1">
-            <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">CASH FLOW</p>
+            <p className="text-[9px] tracking-[0.22em] text-neutral-300 font-bold uppercase">CASH FLOW</p>
             <span className="px-2.5 py-0.5 rounded-full bg-[#f6dd8c]/20 border border-[#f6dd8c]/30 text-[#f6dd8c] text-[8px] font-bold tracking-[0.12em]">14-DAY PROJECTION</span>
           </div>
 
           {/* 1 · Bank Balance */}
-          <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+          <div className="bg-[#101010] border border-[#d9b64f]/25 rounded-2xl overflow-hidden" style={{position:'relative'}}>
+            <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:'linear-gradient(90deg,#d9b64f,#f6dd8c44,transparent)'}}/>
+            <div className="p-4">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">BANK BALANCE TODAY</p>
+              <p className="text-[9px] tracking-[0.22em] text-[#f6dd8c]/90 font-bold uppercase">BANK BALANCE TODAY</p>
               {!bankEditing && (
                 <button onClick={()=>{setBankEditVal(bankBalance.toFixed(2));setBankEditing(true);}}
                   className="flex items-center gap-1 text-[9px] text-[#f6dd8c] border border-[#f6dd8c]/30 px-2.5 py-1 rounded-full active:scale-95 transition-transform">
@@ -3418,24 +3562,146 @@ export default function App() {
                   ${bankBalance.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
                 </p>
                 {bankAdjHistory.length>0 && (
-                  <p className="text-[9px] text-neutral-600 mt-1">
+                  <p className="text-[9px] text-neutral-400 mt-1">
                     Updated manually · {new Date(bankAdjHistory[0].date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}
                   </p>
                 )}
               </>
             )}
+            </div>{/* close p-4 */}
+          </div>{/* close bank balance card */}
+
+          {/* ── Quick-Add Projected Expense (Part 3) ── */}
+          <div className="bg-[#101010] border border-[#d9b64f]/25 rounded-2xl overflow-hidden" style={{position:'relative'}}>
+            <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:'linear-gradient(90deg,#4ade8088,#4ade8022,transparent)'}}/>
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <p className="text-[9px] tracking-[0.22em] text-[#4ade80]/90 font-bold uppercase">PROJECTED EXPENSES</p>
+                  <p className="text-[9px] text-neutral-400 mt-0.5">Add recurring costs to your cash flow</p>
+                </div>
+                <button onClick={()=>setShowProjExpForm(p=>!p)}
+                  className="flex items-center gap-1.5 h-7 px-3 rounded-full border text-[10px] font-bold transition-colors"
+                  style={{background:showProjExpForm?'#1a0a0a':'#0d1f0d',borderColor:showProjExpForm?'#ff6b6b33':'#4ade8033',color:showProjExpForm?'#ff6b6b':'#4ade80'}}>
+                  {showProjExpForm ? '✕ Cancel' : '+ Add expense'}
+                </button>
+              </div>
+              {!showProjExpForm && expenses.some(e=>e.frequency&&e.frequency!=='none') && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9px] text-neutral-400">{expenses.filter(e=>e.frequency&&e.frequency!=='none').length} recurring · </span>
+                  <span className="font-mono-jet text-[9px] font-bold text-orange-400">−${_monthFixed.toFixed(0)}/mo</span>
+                </div>
+              )}
+              {showProjExpForm && (
+                <div className="space-y-3 mt-3">
+                  <div>
+                    <label className="text-[9px] text-neutral-300 font-bold uppercase tracking-widest mb-1 block">Vendor / Expense Name</label>
+                    <div className="relative">
+                      <select value={projExpForm.name} onChange={e=>setProjExpForm(s=>({...s,name:e.target.value}))}
+                        className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 pr-8 text-white text-[13px] appearance-none focus:outline-none">
+                        <option value="">Select a vendor...</option>
+                        {allVendors.map(v=><option key={v} value={v}>{v}</option>)}
+                      </select>
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 text-[10px]">▼</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="w-[110px] flex-shrink-0">
+                      <label className="text-[9px] text-neutral-300 font-bold uppercase tracking-widest mb-1 block">Amount ($)</label>
+                      <input inputMode="decimal" value={projExpForm.amount} onChange={e=>setProjExpForm(s=>({...s,amount:e.target.value}))}
+                        placeholder="0.00"
+                        className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[16px] font-bold font-mono-jet placeholder:text-neutral-400 focus:outline-none"/>
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-[9px] text-neutral-300 font-bold uppercase tracking-widest mb-1 block">Frequency</label>
+                      <div className="flex gap-1">
+                        {(['daily','weekly','monthly'] as const).map(f=>(
+                          <button key={f} onClick={()=>setProjExpForm(s=>({...s,frequency:f}))}
+                            className={`flex-1 h-11 rounded-xl text-[9px] font-bold transition-colors capitalize ${projExpForm.frequency===f?'bg-[#facc15] text-black':'bg-[#1e1e1e] text-neutral-400 border border-[#262626] hover:text-white'}`}>
+                            {f}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-neutral-300 font-bold uppercase tracking-widest mb-1 block">Category (IRS Schedule C)</label>
+                    <div className="relative">
+                      <select value={projExpForm.category} onChange={e=>setProjExpForm(s=>({...s,category:e.target.value}))}
+                        className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 pr-8 text-white text-[13px] appearance-none focus:outline-none">
+                        {allExpenseCategories.map(c=><option key={c} value={c}>{c}</option>)}
+                      </select>
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 text-[10px]">▼</span>
+                    </div>
+                  </div>
+                  {projExpForm.frequency==='monthly' && (
+                    <div>
+                      <label className="text-[9px] text-neutral-300 font-bold uppercase tracking-widest mb-1 block">Next due date (optional)</label>
+                      <input type="date" value={projExpForm.dueDate} onChange={e=>setProjExpForm(s=>({...s,dueDate:e.target.value}))}
+                        className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[13px] focus:outline-none"/>
+                    </div>
+                  )}
+
+                  {/* 🔁 Repeat until date toggle */}
+                  <div className="border border-[#1e1e1e] rounded-xl p-3 space-y-2">
+                    <button onClick={()=>setProjExpForm(s=>({...s,repeatEnabled:!s.repeatEnabled,repeatUntil:''}))}
+                      className="w-full flex items-center gap-2.5 text-left">
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${projExpForm.repeatEnabled?'bg-[#f6dd8c] border-[#f6dd8c]':'bg-transparent border-[#3a3a3a]'}`}>
+                        {projExpForm.repeatEnabled && <span className="text-black text-[10px] font-black leading-none">✓</span>}
+                      </div>
+                      <div>
+                        <p className="text-[11px] text-white font-semibold leading-none">🔁 Repeat until a date</p>
+                        <p className="text-[9px] text-neutral-400 mt-0.5">Stop projecting this expense after a specific date</p>
+                      </div>
+                    </button>
+                    {projExpForm.repeatEnabled && (
+                      <div>
+                        <label className="text-[9px] text-neutral-300 font-bold uppercase tracking-widest mb-1 block">Stop repeating after</label>
+                        <input type="date" value={projExpForm.repeatUntil}
+                          min={toYYYYMMDD(currentTime)}
+                          onChange={e=>setProjExpForm(s=>({...s,repeatUntil:e.target.value}))}
+                          className="w-full h-10 rounded-xl bg-black border border-[#f6dd8c]/30 px-3 text-white text-[13px] focus:outline-none focus:border-[#f6dd8c]"/>
+                      </div>
+                    )}
+                  </div>
+
+                  <button onClick={()=>{
+                    const amt=parseFloat(projExpForm.amount);
+                    if(!projExpForm.name.trim()||!amt||amt<=0){showToast("Enter a name and amount");return;}
+                    if(projExpForm.repeatEnabled&&!projExpForm.repeatUntil){showToast("Pick an end date or uncheck Repeat");return;}
+                    const newExp:Expense={
+                      id:Date.now().toString(),
+                      date:toYYYYMMDD(currentTime),
+                      category:projExpForm.category,
+                      vendor:projExpForm.name.trim(),
+                      amount:amt, note:'', type:'Other', verified:false,
+                      frequency:projExpForm.frequency,
+                      dueDate:projExpForm.dueDate||undefined,
+                      endDate:projExpForm.repeatEnabled?projExpForm.repeatUntil:undefined,
+                    };
+                    syncSaveExpenses([newExp,...expenses]);
+                    setProjExpForm({name:'',amount:'',frequency:'monthly',category:'Vehicle & Fuel',dueDate:'',repeatEnabled:false,repeatUntil:''});
+                    setShowProjExpForm(false);
+                    const untilLabel=projExpForm.repeatEnabled?` · until ${new Date(projExpForm.repeatUntil+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}`:'';
+                    showToast(`Expense saved ✓ $${amt.toFixed(2)}/${projExpForm.frequency}${untilLabel}`);
+                  }} className="w-full h-12 rounded-full bg-[#facc15] text-black text-[13px] font-bold tracking-wide hover:bg-[#fde047] transition-colors">
+                    Save Projected Expense
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* 1b · Daily recurring drain */}
           {_cfDailyRecur > 0 && (
             <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl px-4 py-3 flex items-center justify-between">
               <div>
-                <p className="text-[9px] tracking-[0.18em] text-neutral-500 font-bold uppercase">RECURRING DRAIN</p>
-                <p className="text-[10px] text-neutral-600 mt-0.5">Daily / weekly / monthly expenses combined</p>
+                <p className="text-[9px] tracking-[0.18em] text-orange-400 font-bold uppercase">RECURRING DRAIN</p>
+                <p className="text-[10px] text-neutral-400 mt-0.5">Daily / weekly / monthly expenses combined</p>
               </div>
               <div className="text-right flex-shrink-0">
                 <p className="font-mono-jet text-[15px] font-bold text-orange-400">−${_cfDailyRecur.toFixed(2)}/day</p>
-                <p className="font-mono-jet text-[10px] text-neutral-600">−${(_cfDailyRecur*30).toFixed(0)}/month</p>
+                <p className="font-mono-jet text-[10px] text-neutral-400">−${(_cfDailyRecur*30).toFixed(0)}/month</p>
               </div>
             </div>
           )}
@@ -3443,7 +3709,7 @@ export default function App() {
           {/* 2 · Upcoming payments (next 14 days) */}
           {_cfPayments14.length > 0 && (
             <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
-              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">⚡ UPCOMING PAYMENTS</p>
+              <p className="text-[9px] tracking-[0.22em] text-[#f6dd8c]/90 font-bold uppercase mb-3">⚡ UPCOMING PAYMENTS</p>
               <div className="space-y-2">
                 {_cfPayments14.map(p=>(
                   <div key={p.dueStr} className={`flex items-center gap-3 rounded-xl px-3 py-3 border ${
@@ -3456,7 +3722,7 @@ export default function App() {
                     }`}/>
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-semibold text-white truncate">{p.name}</p>
-                      <p className="text-[10px] text-neutral-500 mt-0.5">
+                      <p className="text-[10px] text-neutral-400 mt-0.5">
                         {p.daysUntil===0?'Due today':p.daysUntil===1?'Tomorrow':`In ${p.daysUntil} days`}
                         {' · '}balance after: <span className="font-mono-jet">${p.balAfter.toLocaleString('en-US',{maximumFractionDigits:0})}</span>
                       </p>
@@ -3470,7 +3736,7 @@ export default function App() {
 
           {/* 3 · Daily balance bar chart */}
           <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
-            <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">DAILY BALANCE</p>
+            <p className="text-[9px] tracking-[0.22em] text-[#f6dd8c]/90 font-bold uppercase mb-3">DAILY BALANCE</p>
             <ResponsiveContainer width="100%" height={110}>
               <BarChart data={_cfDays.map(d=>({label:d.shortLabel,balance:d.balance,isToday:d.isToday,neg:d.balance<0}))}
                 barSize={16} margin={{top:4,right:0,left:0,bottom:0}}>
@@ -3486,14 +3752,14 @@ export default function App() {
               </BarChart>
             </ResponsiveContainer>
             <div className="flex justify-between text-[10px] font-mono-jet mt-1 px-1">
-              <span className="text-neutral-500">Min: <span className={_cfMin<0?'text-red-400':'text-neutral-300'}>${_cfMin.toLocaleString('en-US',{maximumFractionDigits:0})}</span></span>
-              <span className="text-neutral-500">Max: <span className="text-[#4ade80]">${_cfMax.toLocaleString('en-US',{maximumFractionDigits:0})}</span></span>
+              <span className="text-neutral-400">Min: <span className={_cfMin<0?'text-red-400':'text-neutral-300'}>${_cfMin.toLocaleString('en-US',{maximumFractionDigits:0})}</span></span>
+              <span className="text-neutral-400">Max: <span className="text-[#4ade80]">${_cfMax.toLocaleString('en-US',{maximumFractionDigits:0})}</span></span>
             </div>
           </div>
 
           {/* 4 · Detailed timeline */}
           <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
-            <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-1">DETAILED TIMELINE</p>
+            <p className="text-[9px] tracking-[0.22em] text-[#f6dd8c]/90 font-bold uppercase mb-1">DETAILED TIMELINE</p>
             <div>
               {_cfDays.map((d,i)=>(
                 <div key={d.dateStr} className={`flex items-start gap-3 py-2.5 ${i<_cfDays.length-1?'border-b border-[#141414]':''}`}>
@@ -3502,7 +3768,7 @@ export default function App() {
                     {d.isToday ? (
                       <span className="inline-block px-1.5 py-0.5 rounded bg-[#f6dd8c]/20 text-[#f6dd8c] text-[7px] font-black tracking-widest">TODAY</span>
                     ) : (
-                      <span className="text-[10px] text-neutral-600 font-semibold">{d.shortLabel}</span>
+                      <span className="text-[10px] text-neutral-400 font-semibold">{d.shortLabel}</span>
                     )}
                   </div>
                   {/* Description */}
@@ -3515,7 +3781,7 @@ export default function App() {
                           <p className="text-[12px] text-[#4ade80] font-semibold">+${d.income.toLocaleString('en-US',{maximumFractionDigits:0})} income</p>
                         )}
                         {!d.isWorkDay && d.income===0 && d.paymentTotal===0 && (
-                          <p className="text-[12px] text-neutral-600">Rest</p>
+                          <p className="text-[12px] text-neutral-400">Rest</p>
                         )}
                         {d.payments.map(p=>(
                           <p key={p.id} className="text-[11px] text-red-400 font-semibold">-${p.amount.toFixed(0)} {p.vendor||p.category}</p>
@@ -3536,7 +3802,7 @@ export default function App() {
 
           {/* 5 · Annual outlook (preserved) */}
           <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
-            <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">ANNUAL OUTLOOK</p>
+            <p className="text-[9px] tracking-[0.22em] text-[#f6dd8c]/90 font-bold uppercase mb-3">ANNUAL OUTLOOK</p>
             <div className="grid grid-cols-3 gap-2 mb-3">
               {([
                 {label:'End of Week', val:_projWeek},
@@ -3544,21 +3810,21 @@ export default function App() {
                 {label:'End of Year', val:_projYear},
               ] as {label:string,val:number}[]).map(({label,val})=>(
                 <div key={label} className="bg-black border border-[#1e1e1e] rounded-xl p-2.5 text-center">
-                  <p className="text-[8px] text-neutral-500 uppercase tracking-widest leading-tight mb-1">{label}</p>
+                  <p className="text-[8px] text-neutral-400 uppercase tracking-widest leading-tight mb-1">{label}</p>
                   <p className="text-[14px] font-bold text-[#f6dd8c] font-mono-jet">${(val/1000).toFixed(1)}k</p>
                 </div>
               ))}
             </div>
             <div className="bg-black border border-[#1e1e1e] rounded-xl p-3">
               <div className="flex justify-between items-center mb-1.5">
-                <p className="text-[9px] text-neutral-500">Annual goal · Super Plus</p>
+                <p className="text-[9px] text-neutral-400">Annual goal · Super Plus</p>
                 <p className="text-[9px] text-[#f6dd8c]">${(_annTarget/1000).toFixed(0)}k · {Math.round(_yearPct*100)}%</p>
               </div>
               <div className="h-2 bg-[#1e1e1e] rounded-full overflow-hidden">
                 <div className="h-full rounded-full transition-all duration-700"
                   style={{width:`${_yearPct*100}%`,background:'linear-gradient(to right,#d9b64f,#f6dd8c)'}}/>
               </div>
-              <p className="text-[8px] text-neutral-600 mt-1.5">Based on weekly plan · {workDays.length} day{workDays.length!==1?'s':''}/week</p>
+              <p className="text-[8px] text-neutral-400 mt-1.5">Based on weekly plan · {workDays.length} day{workDays.length!==1?'s':''}/week</p>
             </div>
           </div>
 
@@ -3568,10 +3834,10 @@ export default function App() {
         <div className="flex-shrink-0 w-full px-4 pb-6" style={{scrollSnapAlign:'start'}}>
           {_platRows.length>0 ? (
             <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
-              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">INCOME BY PLATFORM</p>
+              <p className="text-[9px] tracking-[0.22em] text-neutral-300 font-bold uppercase mb-3">INCOME BY PLATFORM</p>
               <table className="w-full text-[11px]">
                 <thead>
-                  <tr className="text-[8px] text-neutral-600 uppercase tracking-widest border-b border-[#1e1e1e]">
+                  <tr className="text-[8px] text-neutral-400 uppercase tracking-widest border-b border-[#1e1e1e]">
                     <th className="text-left pb-2 font-semibold">Platform</th>
                     <th className="text-right pb-2 font-semibold">Today</th>
                     <th className="text-right pb-2 font-semibold">Week</th>
@@ -3589,7 +3855,7 @@ export default function App() {
                             <span className="text-neutral-300 text-[10px] truncate max-w-[70px]">{platform}</span>
                           </div>
                         </td>
-                        <td className="py-2 text-right font-mono-jet text-neutral-500 text-[10px]">{d.today>0?`$${d.today.toFixed(0)}`:'—'}</td>
+                        <td className="py-2 text-right font-mono-jet text-neutral-400 text-[10px]">{d.today>0?`$${d.today.toFixed(0)}`:'—'}</td>
                         <td className="py-2 text-right font-mono-jet text-[#f6dd8c] font-semibold text-[10px]">${d.week.toFixed(0)}</td>
                         <td className="py-2 text-right font-mono-jet text-white text-[10px]">${d.month.toFixed(0)}</td>
                       </tr>
@@ -3602,7 +3868,7 @@ export default function App() {
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <span className="text-[44px] mb-3">🚕</span>
               <p className="text-[13px] font-semibold text-neutral-400 mb-1">No trips recorded yet</p>
-              <p className="text-[11px] text-neutral-600 leading-relaxed">Log your first trip to see<br/>your breakdown by platform here</p>
+              <p className="text-[11px] text-neutral-400 leading-relaxed">Log your first trip to see<br/>your breakdown by platform here</p>
             </div>
           )}
         </div>{/* end page 2 */}
@@ -3611,7 +3877,7 @@ export default function App() {
         <div className="flex-shrink-0 w-full px-4 space-y-4 pb-6" style={{scrollSnapAlign:'start'}}>
           {/* Monthly summary */}
           <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
-            <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">
+            <p className="text-[9px] tracking-[0.22em] text-neutral-300 font-bold uppercase mb-3">
               FINANCIAL HEALTH · {currentTime.toLocaleDateString('en-US',{month:'long'}).toUpperCase()}
             </p>
             <div className="space-y-2.5">
@@ -3641,7 +3907,7 @@ export default function App() {
           {expenses.some(e => e.frequency && e.frequency !== 'none') && (
             <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
               <div className="flex items-center justify-between mb-3">
-                <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">RECURRING EXPENSES</p>
+                <p className="text-[9px] tracking-[0.22em] text-neutral-300 font-bold uppercase">RECURRING EXPENSES</p>
                 <span className="font-mono-jet text-[11px] text-orange-400 font-bold">
                   −${_monthFixed.toFixed(0)}/mo
                 </span>
@@ -3662,13 +3928,13 @@ export default function App() {
                         <p className="text-[12px] font-semibold text-white truncate">{e.vendor}</p>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span className="text-[9px] bg-orange-400/10 text-orange-400 px-1.5 py-0.5 rounded-full border border-orange-400/20 font-bold">{freqLabel}</span>
-                          {e.dueDate && <span className="text-[9px] text-neutral-600 font-mono-jet">due {e.dueDate.slice(5)}</span>}
+                          {e.dueDate && <span className="text-[9px] text-neutral-400 font-mono-jet">due {e.dueDate.slice(5)}</span>}
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0">
                         <p className="font-mono-jet text-[13px] font-bold text-red-400">−${e.amount.toFixed(2)}</p>
                         {e.frequency !== 'monthly' && (
-                          <p className="font-mono-jet text-[9px] text-neutral-600">≈${monthlyEq.toFixed(0)}/mo</p>
+                          <p className="font-mono-jet text-[9px] text-neutral-400">≈${monthlyEq.toFixed(0)}/mo</p>
                         )}
                       </div>
                     </div>
@@ -3676,7 +3942,7 @@ export default function App() {
                 })}
               </div>
               <div className="mt-3 pt-2 border-t border-[#1a1a1a] flex justify-between text-[10px]">
-                <span className="text-neutral-500">Monthly total</span>
+                <span className="text-neutral-400">Monthly total</span>
                 <span className="font-mono-jet font-bold text-orange-400">−${_monthFixed.toFixed(2)}</span>
               </div>
             </div>
@@ -3685,16 +3951,16 @@ export default function App() {
           {/* Bank balance history */}
           {bankAdjHistory.length > 0 && (
             <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
-              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">BALANCE ADJUSTMENT HISTORY</p>
+              <p className="text-[9px] tracking-[0.22em] text-neutral-300 font-bold uppercase mb-3">BALANCE ADJUSTMENT HISTORY</p>
               <div className="space-y-2">
                 {bankAdjHistory.slice(0,6).map(adj => (
                   <div key={adj.id} className="flex items-start justify-between gap-2 py-1.5 border-b border-[#1a1a1a] last:border-0">
                     <div className="flex-1 min-w-0">
-                      <p className="font-mono-jet text-[10px] text-neutral-500">{adj.date} · {adj.time}</p>
+                      <p className="font-mono-jet text-[10px] text-neutral-400">{adj.date} · {adj.time}</p>
                       {adj.note && <p className="text-[11px] text-neutral-400 mt-0.5 truncate">{adj.note}</p>}
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="font-mono-jet text-[11px] text-neutral-500">${adj.prevBalance.toFixed(0)} → <span className="text-[#f6dd8c] font-bold">${adj.newBalance.toFixed(0)}</span></p>
+                      <p className="font-mono-jet text-[11px] text-neutral-400">${adj.prevBalance.toFixed(0)} → <span className="text-[#f6dd8c] font-bold">${adj.newBalance.toFixed(0)}</span></p>
                     </div>
                   </div>
                 ))}
@@ -3728,13 +3994,13 @@ export default function App() {
               <span className="font-cinzel text-[22px] tracking-[0.04em] font-bold" style={goldGradientStyle}>
                 ISLANDCITY
               </span>
-              <span className="text-[7.5px] tracking-[0.38em] text-[#a07820] font-semibold mt-[3px] pl-[1px]">
+              <span className="text-[7.5px] tracking-[0.38em] text-[#d9b64f] font-semibold mt-[3px] pl-[1px]">
                 TRANSIT SERVICES
               </span>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="font-mono-jet text-[10px] text-neutral-500 hidden sm:block">{currentTime.toLocaleTimeString()}</span>
+            <span className="font-mono-jet text-[10px] text-neutral-400 hidden sm:block">{currentTime.toLocaleTimeString()}</span>
             <button onClick={() => { setShowSettings(true); setResetStep(0); }}
               className="w-8 h-8 rounded-full bg-[#141414] border border-[#222] flex items-center justify-center text-[12px] font-semibold text-[#f6dd8c] hover:border-[#d9b64f]/50 transition-colors">M</button>
           </div>
@@ -3791,7 +4057,7 @@ export default function App() {
               return (
                 <button key={tab} onClick={() => setActiveTab(tab)}
                   className={`px-6 h-[26px] flex items-center text-[8.5px] tracking-[0.14em] font-semibold relative transition-colors ${
-                    active ? "text-[#f6dd8c]" : "text-neutral-600 hover:text-neutral-400"
+                    active ? "text-[#f6dd8c]" : "text-neutral-400 hover:text-neutral-400"
                   }`}>
                   {tab}
                   {active && (
@@ -3840,9 +4106,9 @@ export default function App() {
 
               {/* Title */}
               <div className="flex items-center justify-between">
-                <h2 className="text-[14px] font-bold tracking-[0.1em]">Ajustes</h2>
+                <h2 className="text-[14px] font-bold tracking-[0.1em]">Settings</h2>
                 <button onClick={() => { setShowSettings(false); setResetStep(0); }}
-                  className="text-neutral-500 text-[13px] hover:text-white transition-colors">✕ Cerrar</button>
+                  className="text-neutral-400 text-[13px] hover:text-white transition-colors">✕ Close</button>
               </div>
 
               {/* Profile row */}
@@ -3850,19 +4116,19 @@ export default function App() {
                 <div className="w-10 h-10 rounded-full bg-[#1a1a1a] border border-[#2a2a2a] flex items-center justify-center text-[15px] font-bold text-[#f6dd8c]">M</div>
                 <div>
                   <p className="text-[13px] font-semibold">Miguel</p>
-                  <p className="text-[10px] text-neutral-500 font-mono-jet">NYC TLC Driver · IslandCity</p>
+                  <p className="text-[10px] text-neutral-400 font-mono-jet">NYC TLC Driver · IslandCity</p>
                 </div>
                 <div className="ml-auto text-right">
-                  <p className="text-[10px] text-neutral-600 font-mono-jet">{trips.length} trips saved</p>
-                  <p className="text-[10px] text-neutral-600 font-mono-jet">{expenses.length} expenses</p>
+                  <p className="text-[10px] text-neutral-400 font-mono-jet">{trips.length} trips saved</p>
+                  <p className="text-[10px] text-neutral-400 font-mono-jet">{expenses.length} expenses</p>
                 </div>
               </div>
 
               {/* Storage info */}
               <div className="bg-[#141414] border border-[#222] rounded-2xl p-3.5 space-y-1.5">
-                <p className="text-[9px] tracking-[0.16em] text-neutral-500 font-semibold uppercase">Almacenamiento</p>
+                <p className="text-[9px] tracking-[0.16em] text-neutral-400 font-semibold uppercase">Storage</p>
                 <div className="flex items-center justify-between">
-                  <span className="text-[12px] text-neutral-300">Trips guardados</span>
+                  <span className="text-[12px] text-neutral-300">Trips saved</span>
                   <span className="font-mono-jet text-[12px] text-[#f6dd8c]">{trips.length}</span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -3878,26 +4144,26 @@ export default function App() {
                   <span className="font-mono-jet text-[12px] text-neutral-400">{(storageBytes / 1024).toFixed(1)} KB</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[12px] text-neutral-300">Último guardado</span>
-                  <span className="font-mono-jet text-[10px] text-neutral-500 text-right max-w-[180px] truncate">{lastSavedAt === "—" ? "—" : new Date(lastSavedAt).toLocaleString()}</span>
+                  <span className="text-[12px] text-neutral-300">Last saved</span>
+                  <span className="font-mono-jet text-[10px] text-neutral-400 text-right max-w-[180px] truncate">{lastSavedAt === "—" ? "—" : new Date(lastSavedAt).toLocaleString()}</span>
                 </div>
               </div>
 
               {/* Backup — #8 */}
               <div className="bg-[#141414] border border-[#222] rounded-2xl p-4 space-y-3">
-                <p className="text-[9px] tracking-[0.16em] text-neutral-500 font-semibold uppercase">📦 Backup de datos</p>
+                <p className="text-[9px] tracking-[0.16em] text-neutral-400 font-semibold uppercase">📦 Data Backup</p>
                 <p className="text-[11px] text-neutral-400 leading-relaxed">
-                  Descarga un archivo <span className="font-mono-jet text-white">.json</span> con todos tus trips, gastos y horas. Guárdalo en tu teléfono, Google Drive o iCloud como respaldo.
+                  Download a <span className="font-mono-jet text-white">.json</span> file with all your trips, expenses, and hours. Save it to your phone, Google Drive, or iCloud as a backup.
                 </p>
                 <button onClick={handleExportBackup}
                   className="w-full h-11 rounded-full bg-[#facc15] text-black text-[12px] font-bold tracking-[0.1em] hover:bg-[#fde047] transition-colors">
-                  ⬇ Descargar backup completo
+                  ⬇ Download full backup
                 </button>
                 {/* Restore from backup */}
                 <div className="border-t border-[#2a2a2a] pt-3">
-                  <p className="text-[10px] text-neutral-500 mb-2">¿Tienes un backup guardado? Restáuralo aquí:</p>
+                  <p className="text-[10px] text-neutral-400 mb-2">Have a saved backup? Restore it here:</p>
                   <label className="block w-full h-11 rounded-full border border-[#3a3a3a] text-neutral-400 text-[12px] font-bold tracking-[0.1em] hover:border-[#facc15]/40 hover:text-[#facc15] transition-colors cursor-pointer flex items-center justify-center gap-2">
-                    <span>📂 Restaurar desde archivo .json</span>
+                    <span>📂 Restore from .json file</span>
                     <input type="file" accept=".json" className="hidden" onChange={handleImportBackup} />
                   </label>
                 </div>
@@ -3905,15 +4171,15 @@ export default function App() {
 
               {/* Danger zone */}
               <div className="bg-[#120808] border border-[#3a1010] rounded-2xl p-4 space-y-3">
-                <p className="text-[9px] tracking-[0.16em] text-[#ff6b6b]/70 font-semibold uppercase">⚠️ Zona de Peligro</p>
+                <p className="text-[9px] tracking-[0.16em] text-[#ff6b6b]/70 font-semibold uppercase">⚠️ Danger Zone</p>
                 <p className="text-[11px] text-neutral-400 leading-relaxed">
-                  Borra <span className="text-white font-semibold">todos los trips, gastos y horas</span> guardados. Esta acción no se puede deshacer. El historial se perderá permanentemente.
+                  Erases <span className="text-white font-semibold">all trips, expenses, and hours</span> saved. This action cannot be undone. Your history will be permanently lost.
                 </p>
 
                 {resetStep === 0 && (
                   <button onClick={() => setResetStep(1)}
                     className="w-full h-11 rounded-full border border-[#ff6b6b]/40 text-[#ff6b6b] text-[12px] font-bold tracking-[0.1em] hover:bg-[#ff6b6b]/10 transition-colors">
-                    🗑 Resetear todos los datos
+                    🗑 Reset all data
                   </button>
                 )}
 
