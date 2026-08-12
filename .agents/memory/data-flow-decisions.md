@@ -5,6 +5,10 @@ description: Key architectural decisions for the expense system and Finance data
 
 **NYC_DEFAULT_VENDORS constant:** Defined at module level (outside App component) — a curated list of ~40 common NYC rideshare driver vendors. `allVendors = [...NYC_DEFAULT_VENDORS, ...customVendors.filter(v=>!NYC_DEFAULT_VENDORS.includes(v))]` — custom vendors deduplicated against defaults.
 
+**Odometer (shiftMiles):** Accumulated from GPS watchPosition deltas. Uses `prevGpsRef` (useRef) to track last coordinate — avoids stale closure issue. Noise filters: accuracy < 80m AND 10m < jump < 1.5km. Persisted to `ic-shift-miles` in localStorage alongside other `ic-shift-*` keys. Reset to 0 on clock-in. IRS rate constant `IRS_RATE_PER_MILE = 0.70` (2025). Display card in Dashboard shows mi + IRS deduction. The module-level `haversineKm` at line ~248 is used; the local duplicate inside DashboardContent was removed.
+
+**goal ($/hr slider):** Now persisted to `ic-hourly-goal` via lazy useState initializer + useEffect. Default 60.
+
 **Finance vs Reports data source discrepancy (intentional):**
 - Finance page uses `trips` (all — pending + posted) for weekly bar chart, platform breakdown, and projections
 - Reports/Ledger uses `postedTrips` only for the financial summary and IRS statement

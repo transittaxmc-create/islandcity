@@ -67,7 +67,6 @@ type Expense = {
   frequency?: "none" | "daily" | "weekly" | "monthly"; // recurrence
   dueDate?: string;     // next due date for recurring expenses
 };
-type ProjectionEntry = { date: string; projectedRevenue: number; projectedSavings: number; }; type FinancialSummary = { totalRevenue: number; totalExpenses: number; netIncome: number; projections: ProjectionEntry[]; };
 type BankAdjEntry = { id: string; date: string; time: string; prevBalance: number; newBalance: number; note: string; };
 // ── Toll plaza list — update rates each January ───────────────────────────
 // Last updated: 2026 · E-ZPass · passenger car · per crossing
@@ -400,7 +399,9 @@ const CLEAN_SLATE_VERSION = "2026-08-11-v6";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("DASHBOARD");
-  const [goal, setGoal] = useState(60);
+  const [goal, setGoal] = useState<number>(() => {
+    try { return parseInt(localStorage.getItem("ic-hourly-goal") || "60") || 60; } catch { return 60; }
+  });
   const [finPage, setFinPage] = useState(0);
   const finScrollRef = useRef<HTMLDivElement>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -484,7 +485,16 @@ export default function App() {
   const [lastShiftDate, setLastShiftDate] = useState<string>(() => {
     try { return localStorage.getItem("ic-last-shift-date") || ""; } catch { return ""; }
   });
-  const watchIdRef = useRef<number | null>(null);
+  const watchIdRef  = useRef<number | null>(null);
+  const prevGpsRef  = useRef<{ lat: number; lng: number } | null>(null);
+  // Miles accumulated from GPS during the active shift — date-guarded, persisted alongside other shift keys
+  const [shiftMiles, setShiftMiles] = useState<number>(() => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      if (localStorage.getItem("ic-shift-date") !== today) return 0;
+      return parseFloat(localStorage.getItem("ic-shift-miles") || "0") || 0;
+    } catch { return 0; }
+  });
   const [gps, setGps] = useState<GpsState>({ lat: null, lng: null, acc: null, status: "inactive" });
   const [gpsAddress, setGpsAddress] = useState("");
   const [gpsAirport, setGpsAirport] = useState("");
@@ -512,29 +522,6 @@ export default function App() {
   const [storageVerified, setStorageVerified] = useState(false);
   const [storageBytes, setStorageBytes] = useState(0);
 
-  const financialSummary = useMemo(() => {
-    const totalRevenue = trips.reduce((sum, trip) => {
-      const earnings = typeof trip.earnings === 'number' ? trip.earnings : 0;
-      const tips = typeof trip.tips === 'number' ? trip.tips : 0;
-      const extra = typeof trip.extra === 'number' ? trip.extra : 0;
-      const toll = typeof trip.toll === 'number' ? trip.toll : 0;
-      return sum + earnings + tips + extra + toll;
-    }, 0);
-
-    const totalExpenses = expenses.reduce((sum, expense) => {
-      const amount = typeof expense.amount === 'number' ? expense.amount : 0;
-      return sum + amount;
-    }, 0);
-
-    const netIncome = totalRevenue - totalExpenses;
-
-    return {
-      totalRevenue,
-      totalExpenses,
-      netIncome,
-      projections: [] 
-    };
-  }, [trips, expenses]);
 
   const [tripForm, setTripForm] = useState<TripForm>({
     reference: "", earnings: "", tips: "", extraCash: "", toll: "",
@@ -641,12 +628,13 @@ export default function App() {
       localStorage.setItem("ic-shift-active",   String(shiftActive));
       localStorage.setItem("ic-shift-break-ms", String(totalBreakMs));
       localStorage.setItem("ic-shift-on-break", String(isOnBreak));
+      localStorage.setItem("ic-shift-miles",    String(shiftMiles.toFixed(4)));
       if (clockInTime) localStorage.setItem("ic-shift-clock-in", clockInTime.toISOString());
       else             localStorage.removeItem("ic-shift-clock-in");
       if (breakStart)  localStorage.setItem("ic-shift-break-start", breakStart.toISOString());
       else             localStorage.removeItem("ic-shift-break-start");
     } catch {}
-  }, [shiftActive, clockInTime, totalBreakMs, isOnBreak, breakStart]);
+  }, [shiftActive, clockInTime, totalBreakMs, isOnBreak, breakStart, shiftMiles]);
 
   // Persist hours
   useEffect(() => {
@@ -659,6 +647,7 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("ic-day-targets", JSON.stringify(dayTargets)); } catch {} }, [dayTargets]);
   useEffect(() => { try { localStorage.setItem("ic-bank-balance", String(bankBalance)); } catch {} }, [bankBalance]);
   useEffect(() => { try { localStorage.setItem("ic-bank-adj-history", JSON.stringify(bankAdjHistory)); } catch {} }, [bankAdjHistory]);
+  useEffect(() => { try { localStorage.setItem("ic-hourly-goal", String(goal)); } catch {} }, [goal]);
 
   // Keep refs in sync so the pagehide listener always has the latest state
   useEffect(() => { tripsRef.current    = trips;    }, [trips]);
@@ -757,14 +746,34 @@ export default function App() {
     return () => controller.abort();
   }, [gps.lat, gps.lng]);
 
+  const IRS_RATE_PER_MILE = 0.70; // 2025 IRS standard mileage rate
+
   const startGPS = () => {
     if (!navigator.geolocation) { setGps(s => ({ ...s, status: "error" })); return; }
     setGps(s => ({ ...s, status: "searching" }));
+    prevGpsRef.current = null; // reset accumulator anchor when GPS (re)starts
     if (watchIdRef.current !== null) {
       try { navigator.geolocation.clearWatch(watchIdRef.current); } catch {}
     }
     const id = navigator.geolocation.watchPosition(
-      pos => setGps({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy, status: "active" }),
+      pos => {
+        const newLat = pos.coords.latitude;
+        const newLng = pos.coords.longitude;
+        const newAcc = pos.coords.accuracy ?? 999;
+        // Accumulate miles — only when accuracy is good (<80 m) and movement is plausible
+        if (prevGpsRef.current && newAcc < 80) {
+          const km = haversineKm(prevGpsRef.current.lat, prevGpsRef.current.lng, newLat, newLng);
+          if (km >= 0.01 && km < 1.5) { // >10 m motion, <1.5 km single jump (noise/teleport filter)
+            setShiftMiles(prev => {
+              const next = +(prev + km * 0.621371).toFixed(4);
+              try { localStorage.setItem("ic-shift-miles", String(next)); } catch {}
+              return next;
+            });
+          }
+        }
+        prevGpsRef.current = { lat: newLat, lng: newLng };
+        setGps({ lat: newLat, lng: newLng, acc: newAcc, status: "active" });
+      },
       () => setGps(s => ({ ...s, status: "error" })),
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
     );
@@ -883,6 +892,9 @@ export default function App() {
     setIsOnBreak(false);
     setBreakStart(null);
     setShiftActive(true);
+    setShiftMiles(0);
+    prevGpsRef.current = null;
+    try { localStorage.setItem("ic-shift-miles", "0"); } catch {}
     startGPS();
     if (!isNewDay) showToast(`Clock In ${now.toLocaleTimeString()} · GPS started`);
   };
@@ -1314,14 +1326,6 @@ export default function App() {
     { name: "Astoria / Queens",       lat: 40.7721, lng: -73.9302 },
     { name: "Newark Airport (EWR)",   lat: 40.6895, lng: -74.1745 },
   ] as const;
-  const haversineKm = (lat1: number, lng1: number, lat2: number, lng2: number) => {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  };
   const nearbyZones: { name: string; km: number }[] =
     gps.lat && gps.lng
       ? [...NYC_ZONES]
@@ -1672,6 +1676,25 @@ export default function App() {
               <p className="font-mono-jet text-[15px] font-black mt-1" style={{ color: col }}>{val}</p>
             </div>
           ))}
+        </div>
+
+        {/* ODOMETER · MILES + IRS DEDUCTION */}
+        <div className="flex items-center justify-between rounded-xl px-4 py-3" style={{ background: "#080808", border: "1px solid #1a1e1a" }}>
+          <div>
+            <p className="text-[9px] tracking-[0.18em] text-neutral-500 font-bold uppercase">Odometer · This Shift</p>
+            <div className="flex items-baseline gap-1.5 mt-1">
+              <span className="font-mono-jet text-[26px] font-black text-[#f6dd8c]">{shiftMiles.toFixed(1)}</span>
+              <span className="text-[11px] text-neutral-500 font-semibold">mi</span>
+            </div>
+            <p className="text-[9px] text-neutral-700 mt-0.5">{gps.status==="active"?"● GPS tracking":"○ GPS inactive"}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-[9px] tracking-[0.18em] text-neutral-500 font-bold uppercase">IRS Deduction</p>
+            <p className="font-mono-jet text-[20px] font-black text-[#4ade80] mt-1">
+              ${(shiftMiles * IRS_RATE_PER_MILE).toFixed(2)}
+            </p>
+            <p className="text-[9px] text-neutral-600 mt-0.5">${IRS_RATE_PER_MILE.toFixed(2)}/mi · 2025 rate</p>
+          </div>
         </div>
 
         {/* Smart suggestion */}
@@ -3096,7 +3119,10 @@ export default function App() {
       const daysUntil = Math.round((new Date(e.dueDate!+'T12:00:00').getTime()-currentTime.getTime())/86400000);
       const dayEntry = _cfDays.find(d => d.dateStr === e.dueDate);
       const balAfter = dayEntry?.balance ?? bankBalance;
-      return {name:e.vendor||e.category, amount:e.amount, dueStr:e.dueDate!, daysUntil, balAfter, covered:balAfter>=0};
+      // Pre-payment balance: dayEntry.balance already has paymentTotal subtracted, add it back to get pre-pay balance
+      const prePayBal = dayEntry ? (dayEntry.balance + dayEntry.paymentTotal) : bankBalance;
+      const covered   = prePayBal >= e.amount;
+      return {name:e.vendor||e.category, amount:e.amount, dueStr:e.dueDate!, daysUntil, balAfter, covered};
     })
     .filter(p => p.daysUntil >= 0 && p.daysUntil <= 13)
     .sort((a,b) => a.daysUntil - b.daysUntil);
