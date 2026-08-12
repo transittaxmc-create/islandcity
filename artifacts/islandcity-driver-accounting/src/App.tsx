@@ -2673,7 +2673,7 @@ export default function App() {
       const actualIncome=trips.filter(t=>t.date>=wStr&&t.date<=eStr).reduce((a,t)=>a+_tripNet(t),0);
       const actualExp=expenses.filter(e=>(!e.frequency||e.frequency==='none')&&e.date>=wStr&&e.date<=eStr).reduce((a,e)=>a+e.amount,0);
       const isPast=eStr<_mwTodayStr, isCurrent=wStr<=_mwTodayStr&&eStr>=_mwTodayStr;
-      const m1=ws.toLocaleDateString('es',{month:'short'}), m2=we.toLocaleDateString('es',{month:'short'});
+      const m1=ws.toLocaleDateString('en-US',{month:'short'}), m2=we.toLocaleDateString('en-US',{month:'short'});
       const label=m1===m2?`${ws.getDate()}–${we.getDate()} ${m1}`:`${ws.getDate()} ${m1}–${we.getDate()} ${m2}`;
       wks.push({start:new Date(ws),end:new Date(we),wStr,eStr,label,projIncome,projExp,actualIncome,actualExp,isPast,isCurrent});
       ws=new Date(ws); ws.setDate(ws.getDate()+7);
@@ -2726,7 +2726,7 @@ export default function App() {
       {/* ── Header: page title + dot indicators ── */}
       <div className="flex items-start justify-between px-4 pt-4 pb-3">
         <div>
-          <p className="text-[10px] tracking-[0.22em] text-neutral-500 font-semibold uppercase">Inteligencia Financiera</p>
+          <p className="text-[10px] tracking-[0.22em] text-neutral-500 font-semibold uppercase">Financial Intelligence</p>
           <p className="text-[12px] font-semibold text-neutral-200 mt-0.5">{_finPageNames[finPage]}</p>
         </div>
         <div className="flex items-center gap-1.5 mt-1">
@@ -3187,15 +3187,16 @@ export default function App() {
         <div className="sticky z-30 bg-black border-b border-[#1a1a1a]"
           style={{ top: 'calc(68px + env(safe-area-inset-top))' }}>
           <div className="flex overflow-x-auto gold-scroll px-2 gap-1">
-            {(["DASHBOARD", "FINANCES", "ENTRY", "REGISTER", "LEDGER", "EXPENSES", "REPORTS"] as Tab[]).map(tab => {
+            {(["DASHBOARD", "ENTRY", "FINANCES", "REGISTER", "LEDGER", "EXPENSES", "REPORTS"] as Tab[]).map(tab => {
               const active = activeTab === tab;
               const badge = tab === "REGISTER" ? pendingTrips.length
                           : tab === "LEDGER"   ? postedTrips.length
                           : 0;
+              const label: Record<string,string> = { ENTRY: "REVENUE" };
               return (
                 <button key={tab} onClick={() => setActiveTab(tab)}
                   className={`whitespace-nowrap px-4 py-3.5 text-[11px] tracking-[0.14em] font-semibold transition-colors relative flex items-center gap-1.5 ${active ? "text-[#f6dd8c]" : "text-neutral-500 hover:text-neutral-300"}`}>
-                  {tab}
+                  {label[tab] ?? tab}
                   {badge > 0 && (
                     <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold leading-none ${
                       tab === "LEDGER"
