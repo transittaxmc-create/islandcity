@@ -1,9 +1,9 @@
 import "./_group.css";
 
-// ── FINANCES BOLD — Velocímetro dinámico + Meta diaria ─────────────────────
-// Diseño: números gigantes, colores en bloque, mucho aire, legible a un vistazo
+// ── FINANCES BOLD v2 — Matching IMG_1495 reference layout ──────────────────
+// Layout: IC brand header → Hourly Earnings Advisor (speedometer) →
+//         Target vs Actual → Performance History → Advisor Panel → Daily Goal Ring
 
-// $/hr zones — same as reference photos
 const ZONES = [
   { min: 0,  max: 45, color: "#ef4444", label: "Bajo"   },
   { min: 45, max: 58, color: "#f97316", label: "OK"     },
@@ -11,330 +11,306 @@ const ZONES = [
   { min: 68, max: 80, color: "#4ade80", label: "Gran"   },
   { min: 80, max: 90, color: "#3b82f6", label: "Óptimo" },
 ];
-const MAX = 90;
+const MAX_VAL = 90;
 
 function valToAngle(v: number) {
-  return 180 + Math.min(v / MAX, 1) * 180;
+  return 180 + Math.min(v / MAX_VAL, 1) * 180;
 }
-
 function polar(cx: number, cy: number, r: number, deg: number) {
   const rad = (deg * Math.PI) / 180;
   return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
 }
-
 function arc(cx: number, cy: number, r: number, a1: number, a2: number) {
   const s = polar(cx, cy, r, a1);
   const e = polar(cx, cy, r, a2);
   return `M ${s.x} ${s.y} A ${r} ${r} 0 ${a2 - a1 > 180 ? 1 : 0} 1 ${e.x} ${e.y}`;
 }
 
-function Speedometer({ value }: { value: number }) {
-  const CX = 160, CY = 130, R = 110, SW = 28;
-
+function Gauge({ value }: { value: number }) {
+  const CX = 155, CY = 128, R = 108, SW = 26;
   const zone = ZONES.find(z => value >= z.min && value < z.max) ?? ZONES[ZONES.length - 1];
-  const needleAngle = valToAngle(Math.min(value, MAX));
-  const tip  = polar(CX, CY, R - 6, needleAngle);
-  const b1   = polar(CX, CY, 12, needleAngle + 90);
-  const b2   = polar(CX, CY, 12, needleAngle - 90);
-
+  const needleAngle = valToAngle(Math.min(value, MAX_VAL));
+  const tip = polar(CX, CY, R - 8, needleAngle);
+  const b1  = polar(CX, CY, 11, needleAngle + 90);
+  const b2  = polar(CX, CY, 11, needleAngle - 90);
   return (
-    <svg width="320" height="155" viewBox="0 0 320 155">
+    <svg width="310" height="148" viewBox="0 0 310 148">
       {/* Track */}
       <path d={arc(CX, CY, R, 180, 360)} fill="none" stroke="#161616" strokeWidth={SW} />
-      {/* Color zones */}
+      {/* Zone arcs */}
       {ZONES.map(z => (
         <path key={z.label}
-          d={arc(CX, CY, R, valToAngle(z.min), valToAngle(Math.min(z.max, MAX)))}
-          fill="none" stroke={z.color} strokeWidth={SW - 4} strokeLinecap="butt" opacity="0.9" />
+          d={arc(CX, CY, R, valToAngle(z.min), valToAngle(Math.min(z.max, MAX_VAL)))}
+          fill="none" stroke={z.color} strokeWidth={SW - 4} strokeLinecap="butt" opacity={0.88} />
       ))}
-      {/* Tick marks every 15 */}
-      {[0, 15, 30, 45, 58, 68, 80, 90].map(v => {
+      {/* Zone dividers */}
+      {[45, 58, 68, 80].map(v => {
         const a = valToAngle(v);
-        const inner = polar(CX, CY, R - SW / 2 - 2, a);
-        const outer = polar(CX, CY, R + SW / 2 - 2, a);
+        const i2 = polar(CX, CY, R - SW / 2 + 1, a);
+        const o2 = polar(CX, CY, R + SW / 2 - 3, a);
+        return <line key={v} x1={i2.x} y1={i2.y} x2={o2.x} y2={o2.y} stroke="#000" strokeWidth="2.5" opacity="0.6" />;
+      })}
+      {/* $0 / $90 labels */}
+      <text x="44" y="146" fill="#3a3a3a" fontSize="10" fontFamily="JetBrains Mono,monospace">$0</text>
+      <text x="252" y="146" fill="#3a3a3a" fontSize="10" fontFamily="JetBrains Mono,monospace">$90</text>
+      {/* Zone labels on arc */}
+      {ZONES.map(z => {
+        const midAngle = valToAngle((z.min + Math.min(z.max, MAX_VAL)) / 2);
+        const p = polar(CX, CY, R - SW / 2 - 14, midAngle);
         return (
-          <line key={v} x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y}
-            stroke="#000" strokeWidth="2" opacity="0.5" />
+          <text key={z.label} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle"
+            fill={z.color} fontSize="8" fontWeight="700" fontFamily="JetBrains Mono,monospace" opacity="0.7">
+            {z.label}
+          </text>
         );
       })}
-      {/* Min/max labels */}
-      <text x="52" y="148" fill="#555" fontSize="11" fontFamily="JetBrains Mono,monospace">$0</text>
-      <text x="252" y="148" fill="#555" fontSize="11" fontFamily="JetBrains Mono,monospace">$90</text>
       {/* Needle */}
-      <polygon points={`${tip.x},${tip.y} ${b1.x},${b1.y} ${b2.x},${b2.y}`}
-        fill={zone.color} filter="url(#glow)" />
-      {/* Glow filter */}
       <defs>
-        <filter id="glow"><feGaussianBlur stdDeviation="3" result="blur" /><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <filter id="needleGlow"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
       </defs>
-      {/* Center hub */}
-      <circle cx={CX} cy={CY} r="10" fill="#111" stroke={zone.color} strokeWidth="2.5" />
-      {/* Value — big */}
-      <text x={CX} y={CY - 44} textAnchor="middle" fill={zone.color} fontSize="38" fontWeight="900"
-        fontFamily="JetBrains Mono,monospace">${value}</text>
-      <text x={CX} y={CY - 22} textAnchor="middle" fill="#555" fontSize="11"
-        fontFamily="JetBrains Mono,monospace">/hr AHORA</text>
-      {/* Zone badge */}
-      <rect x={CX - 28} y={CY + 14} width={56} height={18} rx="9"
-        fill={zone.color} opacity="0.15" />
-      <text x={CX} y={CY + 27} textAnchor="middle" fill={zone.color} fontSize="10" fontWeight="bold"
-        fontFamily="JetBrains Mono,monospace" letterSpacing="2">{zone.label.toUpperCase()}</text>
+      <polygon points={`${tip.x},${tip.y} ${b1.x},${b1.y} ${b2.x},${b2.y}`}
+        fill={zone.color} filter="url(#needleGlow)" />
+      {/* Hub */}
+      <circle cx={CX} cy={CY} r="11" fill="#0e0e0e" stroke={zone.color} strokeWidth="2.5" />
+      {/* Current rate — big label inside arc */}
+      <text x={CX} y={CY - 50} textAnchor="middle" fill={zone.color}
+        fontSize="36" fontWeight="900" fontFamily="JetBrains Mono,monospace">${value}.40</text>
+      <text x={CX} y={CY - 30} textAnchor="middle" fill="#555"
+        fontSize="10" fontFamily="JetBrains Mono,monospace">/hr AHORA</text>
     </svg>
   );
 }
 
-// ── Stat tile ──────────────────────────────────────────────────────────────
-function Tile({
-  label, value, sub, accent, wide
-}: { label: string; value: string; sub?: string; accent: string; wide?: boolean }) {
+// Stat chip row (Target vs Actual)
+function StatChip({ label, val, sub, color }: { label: string; val: string; sub?: string; color: string }) {
   return (
-    <div style={{
-      flex: wide ? "2" : "1",
-      background: "#0e0e0e",
-      border: `1.5px solid ${accent}22`,
-      borderRadius: "18px",
-      padding: "14px 12px",
-      display: "flex",
-      flexDirection: "column",
-      gap: "2px",
-    }}>
-      <p style={{ fontSize: "9px", color: "#555", textTransform: "uppercase", letterSpacing: "0.18em", margin: 0 }}>{label}</p>
-      <p style={{ fontSize: "24px", fontWeight: 900, color: accent, fontFamily: "JetBrains Mono,monospace", margin: 0, lineHeight: 1.1 }}>{value}</p>
-      {sub && <p style={{ fontSize: "10px", color: "#444", margin: 0 }}>{sub}</p>}
+    <div style={{ flex: 1, background: "#0d0d0d", borderRadius: 14, padding: "10px 10px 8px" }}>
+      <p style={{ margin: 0, fontSize: 8, color: "#444", textTransform: "uppercase", letterSpacing: "0.18em" }}>{label}</p>
+      <p style={{ margin: "4px 0 2px", fontSize: 18, fontWeight: 900, color, fontFamily: "JetBrains Mono,monospace", lineHeight: 1 }}>{val}</p>
+      {sub && <p style={{ margin: 0, fontSize: 9, color: "#444" }}>{sub}</p>}
     </div>
   );
 }
 
-// ── Horizontal divider ─────────────────────────────────────────────────────
-function HDivider() {
-  return <div style={{ height: "1px", background: "#161616", margin: "0 0" }} />;
+// Mini bar (Performance History)
+function HistoryBar({ h, color, label }: { h: number; color: string; label: string }) {
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+      <div style={{ width: "70%", height: 56, display: "flex", alignItems: "flex-end" }}>
+        <div style={{ width: "100%", height: `${h}%`, background: color, borderRadius: "4px 4px 0 0", opacity: 0.85 }} />
+      </div>
+      <p style={{ margin: 0, fontSize: 9, color: "#444" }}>{label}</p>
+    </div>
+  );
 }
 
-const gold: React.CSSProperties = {
-  background: "linear-gradient(90deg, #f6dd8c, #d9b64f)",
+const goldStyle: React.CSSProperties = {
+  background: "linear-gradient(90deg,#f6dd8c,#d9b64f)",
   WebkitBackgroundClip: "text",
   WebkitTextFillColor: "transparent",
 };
 
 export function FinancesBold() {
-  // — Static demo values — (in app: computed live from shift state)
-  const perHour    = 72;
+  const perHour   = 65;
   const grossToday = 285.00;
   const goalToday  = 400;
   const goalPct    = grossToday / goalToday;
-  const hoursOn    = 3.9;
-  const tripsToday = 6;
-  const remaining  = Math.max(goalToday - grossToday, 0);
-
-  // Ring geometry
-  const R = 44, CX = 54, CY = 54, circ = 2 * Math.PI * R;
+  const R = 42, CX = 52, CY = 52, circ = 2 * Math.PI * R;
   const filled = Math.min(goalPct, 1) * circ;
-  const ringColor = goalPct >= 1 ? "#4ade80" : "#d9b64f";
 
   return (
-    <div style={{
-      minHeight: "100vh", width: "100%", background: "#000", color: "#fff",
-      fontFamily: "Inter, sans-serif", overflowY: "auto",
-    }}>
-      <div style={{ maxWidth: 390, margin: "0 auto", minHeight: "100vh", background: "#000" }}>
+    <div style={{ minHeight: "100vh", width: "100%", background: "#000", color: "#fff",
+      fontFamily: "Inter,sans-serif", overflowY: "auto" }}>
+      <div style={{ maxWidth: 390, margin: "0 auto" }}>
 
-        {/* ── Header ─────────────────────────────────────────────────────── */}
-        <div style={{ padding: "48px 18px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div>
-            <p style={{ fontSize: "9px", letterSpacing: "0.28em", color: "#555", textTransform: "uppercase", margin: 0 }}>Financial Intelligence</p>
-            <p style={{ fontSize: "18px", fontFamily: "Cinzel,serif", fontWeight: 700, margin: "2px 0 0", ...gold as any }}>ISLANDCITY</p>
+        {/* ── IC Brand header — matches IMG_1495 top bar ─────────────────── */}
+        <div style={{
+          background: "#0a0800",
+          borderBottom: "1px solid #d9b64f22",
+          padding: "44px 16px 14px",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          {/* Logo + name */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: "50%",
+              background: "radial-gradient(circle at 40% 40%,#1a1500,#000)",
+              border: "1.5px solid #d9b64f55",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 16,
+            }}>🌉</div>
+            <div>
+              <p style={{ margin: 0, fontFamily: "Cinzel,serif", fontWeight: 700, fontSize: 15,
+                letterSpacing: "0.04em", ...goldStyle as any }}>ISLANDCITY</p>
+              <p style={{ margin: 0, fontSize: 7, color: "#a07820", letterSpacing: "0.3em", textTransform: "uppercase" }}>
+                TRANSIT SERVICES
+              </p>
+            </div>
           </div>
-          <div style={{
-            display: "flex", alignItems: "center", gap: 8,
-          }}>
+          {/* EN TURNO badge */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{
-              background: "#0f1f0f", border: "1px solid #4ade8033", borderRadius: 999,
-              padding: "3px 10px", fontSize: 10, color: "#4ade80", display: "flex", alignItems: "center", gap: 5
+              background: "#0f1f0f", border: "1px solid #4ade8040",
+              borderRadius: 999, padding: "4px 12px",
+              fontSize: 10, color: "#4ade80", fontWeight: 700,
+              display: "flex", alignItems: "center", gap: 5,
             }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ade80", display: "inline-block", animation: "pulse 1s infinite" }} />
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ade80", display: "inline-block" }}/>
               EN TURNO
             </span>
             <div style={{
-              width: 34, height: 34, borderRadius: "50%", background: "#111",
+              width: 32, height: 32, borderRadius: "50%", background: "#161616",
               border: "1px solid #222", display: "flex", alignItems: "center", justifyContent: "center",
-              color: "#f6dd8c", fontSize: 12, fontWeight: 700
+              color: "#f6dd8c", fontSize: 11, fontWeight: 700,
             }}>M</div>
           </div>
         </div>
 
-        {/* ── Speedometer ────────────────────────────────────────────────── */}
-        <div style={{
-          background: "#080808", border: "1px solid #181818", borderRadius: 24,
-          margin: "0 12px", padding: "20px 10px 10px",
-        }}>
-          <div style={{ display: "flex", justifyContent: "center" }}>
-            <Speedometer value={perHour} />
+        {/* ── HOURLY EARNINGS ADVISOR card ───────────────────────────────── */}
+        <div style={{ margin: "12px 12px 0",
+          background: "#080808", border: "1px solid #1e1e1e", borderRadius: 22, overflow: "hidden" }}>
+          {/* Card title */}
+          <div style={{ padding: "14px 18px 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#d9b64f",
+              textTransform: "uppercase", letterSpacing: "0.18em" }}>HOURLY EARNINGS ADVISOR</p>
+            <span style={{
+              fontSize: 9, color: "#555", background: "#111",
+              border: "1px solid #222", borderRadius: 999, padding: "3px 9px",
+            }}>CURRENT HOURLY RATE</span>
           </div>
-          {/* Zone legend */}
-          <div style={{ display: "flex", justifyContent: "center", gap: 12, marginTop: 6 }}>
+
+          {/* Gauge — centred */}
+          <div style={{ display: "flex", justifyContent: "center", paddingTop: 8 }}>
+            <Gauge value={perHour} />
+          </div>
+
+          {/* Zone legend strip */}
+          <div style={{
+            display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap",
+            padding: "0 16px 14px",
+          }}>
             {ZONES.map(z => (
               <div key={z.label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <span style={{ width: 8, height: 8, borderRadius: "50%", background: z.color, display: "inline-block" }} />
-                <span style={{ fontSize: 9, color: "#444" }}>${z.min}+</span>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: z.color, display: "inline-block" }}/>
+                <span style={{ fontSize: 9, color: "#555" }}>${z.min}–{z.max}</span>
               </div>
             ))}
           </div>
-          {/* Shift clock */}
-          <div style={{ marginTop: 12, padding: "10px 16px", background: "#0a0a0a", borderRadius: 14,
-            display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <p style={{ margin: 0, fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.18em" }}>Turno activo</p>
-              <p style={{ margin: 0, fontSize: 20, fontWeight: 900, color: "#fff", fontFamily: "JetBrains Mono,monospace" }}>{hoursOn}h</p>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <p style={{ margin: 0, fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.18em" }}>Viajes hoy</p>
-              <p style={{ margin: 0, fontSize: 20, fontWeight: 900, color: "#fff", fontFamily: "JetBrains Mono,monospace" }}>{tripsToday}</p>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <p style={{ margin: 0, fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.18em" }}>Clock in</p>
-              <p style={{ margin: 0, fontSize: 20, fontWeight: 900, color: "#f6dd8c", fontFamily: "JetBrains Mono,monospace" }}>9:30 AM</p>
+        </div>
+
+        {/* ── TARGET VS. ACTUAL ───────────────────────────────────────────── */}
+        <div style={{ margin: "10px 12px 0",
+          background: "#080808", border: "1px solid #1e1e1e", borderRadius: 22, padding: "14px 16px" }}>
+          <p style={{ margin: "0 0 10px", fontSize: 9, color: "#555",
+            textTransform: "uppercase", letterSpacing: "0.22em", fontWeight: 700 }}>TARGET VS. ACTUAL</p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <StatChip label="Weekly Reg."  val="$68/hr"  sub="meta semanal" color="#d9b64f" />
+            <StatChip label="$/hr Actual"  val="$65/hr"  sub="este turno"   color="#4ade80" />
+            <StatChip label="Last Hour"    val="$71/hr"  sub="12:00–1:00"   color="#3b82f6" />
+          </div>
+          {/* Shift row */}
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <StatChip label="Turno activo" val="3h 54m" color="#fff" />
+            <StatChip label="Viajes"        val="6"     color="#fff" />
+            <StatChip label="Clock in"      val="9:30A" color="#f6dd8c" />
+          </div>
+        </div>
+
+        {/* ── PERFORMANCE HISTORY ─────────────────────────────────────────── */}
+        <div style={{ margin: "10px 12px 0",
+          background: "#080808", border: "1px solid #1e1e1e", borderRadius: 22, padding: "14px 16px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+            <p style={{ margin: 0, fontSize: 9, color: "#555",
+              textTransform: "uppercase", letterSpacing: "0.22em", fontWeight: 700 }}>PERFORMANCE HISTORY</p>
+            <span style={{ fontSize: 9, color: "#3b82f6" }}>Last 8 hours</span>
+          </div>
+          <div style={{ display: "flex", gap: 2, alignItems: "flex-end", height: 68 }}>
+            {[
+              { h: 55, c: "#eab308", l: "9AM" },
+              { h: 72, c: "#4ade80", l: "10A" },
+              { h: 68, c: "#4ade80", l: "11A" },
+              { h: 45, c: "#f97316", l: "12P" },
+              { h: 80, c: "#3b82f6", l: "1PM" },
+              { h: 88, c: "#3b82f6", l: "2PM" },
+              { h: 72, c: "#4ade80", l: "3PM" },
+              { h: 65, c: "#4ade80", l: "NOW" },
+            ].map((b, i) => <HistoryBar key={i} h={b.h} color={b.c} label={b.l} />)}
+          </div>
+          {/* Y-axis hint */}
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
+            <span style={{ fontSize: 8, color: "#333" }}>$0</span>
+            <span style={{ fontSize: 8, color: "#333" }}>$90/hr</span>
+          </div>
+        </div>
+
+        {/* ── ADVISOR PANEL ───────────────────────────────────────────────── */}
+        <div style={{ margin: "10px 12px 0",
+          background: "linear-gradient(135deg,#0a0900,#120f00)",
+          border: "1px solid #d9b64f22", borderRadius: 22, padding: "14px 16px" }}>
+          <p style={{ margin: "0 0 10px", fontSize: 9, color: "#a07820",
+            textTransform: "uppercase", letterSpacing: "0.22em", fontWeight: 700 }}>ADVISOR PANEL</p>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+            {/* Avatar */}
+            <div style={{
+              width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
+              background: "#d9b64f22", border: "1.5px solid #d9b64f44",
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
+            }}>🤖</div>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: "0 0 5px", fontSize: 13, fontWeight: 700, color: "#f6dd8c" }}>Your performance is good!</p>
+              <p style={{ margin: "0 0 6px", fontSize: 11, color: "#888", lineHeight: 1.5 }}>
+                $65/hr está en la zona <span style={{ color: "#4ade80", fontWeight: 700 }}>GRAN</span>.
+                Focus on high-demand zones or a slightly higher rate per mile to maintain target of $68–$70/hr.
+                Avoid lower-paid jobs.
+              </p>
+              <div style={{ display: "flex", gap: 6 }}>
+                {["Alta demanda →", "Evitar tráfico", "Meta: $70/hr"].map(tag => (
+                  <span key={tag} style={{
+                    fontSize: 8, color: "#d9b64f", background: "#d9b64f12",
+                    border: "1px solid #d9b64f30", borderRadius: 999, padding: "3px 8px",
+                  }}>{tag}</span>
+                ))}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* ── HOY — Meta ─────────────────────────────────────────────────── */}
-        <div style={{
-          margin: "12px 12px 0",
-          background: "#080808", border: "1px solid #181818", borderRadius: 24,
-          padding: "18px",
-        }}>
-          <p style={{ margin: "0 0 12px", fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.24em" }}>HOY — META DIARIA</p>
-
+        {/* ── HOY — Meta diaria (ring) ────────────────────────────────────── */}
+        <div style={{ margin: "10px 12px 20px",
+          background: "#080808", border: "1px solid #1e1e1e", borderRadius: 22, padding: "16px" }}>
+          <p style={{ margin: "0 0 12px", fontSize: 9, color: "#555",
+            textTransform: "uppercase", letterSpacing: "0.22em", fontWeight: 700 }}>HOY — META DIARIA</p>
           <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
             {/* Ring */}
-            <svg width={108} height={108} style={{ flexShrink: 0 }}>
+            <svg width={104} height={104} style={{ flexShrink: 0 }}>
               <circle cx={CX} cy={CY} r={R} fill="none" stroke="#141414" strokeWidth={9} />
-              <circle cx={CX} cy={CY} r={R} fill="none" stroke={ringColor} strokeWidth={9}
+              <circle cx={CX} cy={CY} r={R} fill="none"
+                stroke={goalPct >= 1 ? "#4ade80" : "#d9b64f"} strokeWidth={9}
                 strokeLinecap="round" strokeDasharray={`${filled} ${circ}`}
                 transform={`rotate(-90 ${CX} ${CY})`} />
-              <text x={CX} y={CY - 6} textAnchor="middle" fill={ringColor} fontSize="18" fontWeight="900"
-                fontFamily="JetBrains Mono,monospace">{Math.round(goalPct * 100)}%</text>
-              <text x={CX} y={CY + 10} textAnchor="middle" fill="#444" fontSize="8.5"
-                fontFamily="JetBrains Mono,monospace">${grossToday.toFixed(0)}/${goalToday}</text>
+              <text x={CX} y={CY - 4} textAnchor="middle" fill={goalPct >= 1 ? "#4ade80" : "#f6dd8c"}
+                fontSize="17" fontWeight="900" fontFamily="JetBrains Mono,monospace">
+                {Math.round(goalPct * 100)}%
+              </text>
+              <text x={CX} y={CY + 12} textAnchor="middle" fill="#444" fontSize="8"
+                fontFamily="JetBrains Mono,monospace">$285/$400</text>
             </svg>
-
-            {/* Right col */}
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10 }}>
-              {/* Big earned number */}
-              <div>
-                <p style={{ margin: 0, fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.18em" }}>Ganado hoy</p>
-                <p style={{ margin: 0, fontSize: 38, fontWeight: 900, color: "#f6dd8c",
-                  fontFamily: "JetBrains Mono,monospace", lineHeight: 1 }}>${grossToday.toFixed(0)}</p>
-              </div>
-              {/* Remaining + projected */}
-              <div style={{ display: "flex", gap: 8 }}>
-                <div style={{ flex: 1, background: "#0d0d0d", borderRadius: 12, padding: "8px 10px" }}>
-                  <p style={{ margin: 0, fontSize: 8, color: "#555" }}>Falta</p>
-                  <p style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "#fff",
-                    fontFamily: "JetBrains Mono,monospace" }}>${remaining.toFixed(0)}</p>
+            {/* Stats list — matches IMG_1498 right-side layout */}
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+              {[
+                { label: "Today",      val: `$${grossToday.toFixed(0)}`, color: "#fff"     },
+                { label: "Daily Goal", val: `$${goalToday}`,             color: "#f6dd8c"  },
+                { label: "Remaining",  val: `$${Math.max(goalToday - grossToday, 0).toFixed(0)}`, color: "#4ade80" },
+                { label: "Meta ≈",     val: "5:45 PM",                   color: "#3b82f6"  },
+              ].map(r => (
+                <div key={r.label} style={{ display: "flex", justifyContent: "space-between" }}>
+                  <p style={{ margin: 0, fontSize: 12, color: "#666" }}>{r.label}</p>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: r.color,
+                    fontFamily: "JetBrains Mono,monospace" }}>{r.val}</p>
                 </div>
-                <div style={{ flex: 1, background: "#0d0d0d", borderRadius: 12, padding: "8px 10px" }}>
-                  <p style={{ margin: 0, fontSize: 8, color: "#555" }}>Meta ≈</p>
-                  <p style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "#4ade80",
-                    fontFamily: "JetBrains Mono,monospace" }}>5:45 PM</p>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
-        </div>
-
-        {/* ── SuperPlus Balance ───────────────────────────────────────────── */}
-        <div style={{
-          margin: "12px 12px 0",
-          background: "linear-gradient(135deg, #0d0900, #1a0f00)",
-          border: "1px solid #d9b64f22",
-          borderRadius: 24, padding: "18px",
-          boxShadow: "0 0 24px #d9b64f08",
-        }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <p style={{ margin: 0, fontSize: 9, color: "#a07820", textTransform: "uppercase", letterSpacing: "0.28em" }}>SUPER PLUS · AGO</p>
-              <p style={{ margin: "6px 0 0", fontSize: 44, fontWeight: 900, lineHeight: 1, ...gold as any,
-                fontFamily: "JetBrains Mono,monospace" }}>+$1,840</p>
-              <p style={{ margin: "4px 0 0", fontSize: 10, color: "#666" }}>meta mensual $5,200</p>
-            </div>
-            <span style={{
-              background: "#4ade8015", border: "1px solid #4ade8030",
-              borderRadius: 999, padding: "4px 12px", fontSize: 10, color: "#4ade80", fontWeight: 700
-            }}>↗ En camino</span>
-          </div>
-
-          {/* Income vs Expenses row */}
-          <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-            <div style={{ flex: 1, background: "#00000040", borderRadius: 14, padding: "10px 12px" }}>
-              <p style={{ margin: 0, fontSize: 8, color: "#4ade8080", textTransform: "uppercase", letterSpacing: "0.18em" }}>Ingresos</p>
-              <p style={{ margin: "3px 0 0", fontSize: 22, fontWeight: 900, color: "#4ade80",
-                fontFamily: "JetBrains Mono,monospace" }}>$4,320</p>
-            </div>
-            <div style={{ flex: 1, background: "#00000040", borderRadius: 14, padding: "10px 12px" }}>
-              <p style={{ margin: 0, fontSize: 8, color: "#ef444480", textTransform: "uppercase", letterSpacing: "0.18em" }}>Gastos</p>
-              <p style={{ margin: "3px 0 0", fontSize: 22, fontWeight: 900, color: "#ef4444",
-                fontFamily: "JetBrains Mono,monospace" }}>$2,480</p>
-            </div>
-          </div>
-
-          {/* Annual bar */}
-          <div style={{ marginTop: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-              <p style={{ margin: 0, fontSize: 9, color: "#777" }}>Proyección anual</p>
-              <p style={{ margin: 0, fontSize: 9, color: "#f6dd8c" }}>$62.4k · 36%</p>
-            </div>
-            <div style={{ height: 6, background: "#111", borderRadius: 999, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: "36%", background: "linear-gradient(to right,#d9b64f,#f6dd8c)", borderRadius: 999 }} />
-            </div>
-          </div>
-        </div>
-
-        {/* ── Stat row ────────────────────────────────────────────────────── */}
-        <div style={{ margin: "12px 12px 0", display: "flex", gap: 8 }}>
-          <Tile label="Semana actual" value="$1,420" sub="meta $1,670" accent="#f6dd8c" />
-          <Tile label="Este mes" value="$4,320" sub="meta $6,800" accent="#4ade80" />
-          <Tile label="$/hr prom" value="$68" sub="este turno" accent="#3b82f6" />
-        </div>
-
-        {/* ── Platforms ───────────────────────────────────────────────────── */}
-        <div style={{
-          margin: "12px 12px 24px",
-          background: "#080808", border: "1px solid #181818", borderRadius: 24, padding: "18px",
-        }}>
-          <p style={{ margin: "0 0 14px", fontSize: 9, color: "#555", textTransform: "uppercase", letterSpacing: "0.24em" }}>INGRESOS POR PLATAFORMA</p>
-          {[
-            { name: "Uber",     color: "#4ade80", today: "$142", week: "$680" },
-            { name: "Lyft",     color: "#ff00bf", today: "$95",  week: "$320" },
-            { name: "EcoRide",  color: "#22c55e", today: "$48",  week: "$190" },
-            { name: "Empower",  color: "#3b82f6", today: "—",    week: "$230" },
-          ].map((p, i) => (
-            <div key={p.name} style={{
-              display: "flex", alignItems: "center", gap: 12,
-              paddingTop: i === 0 ? 0 : 12,
-              borderTop: i === 0 ? "none" : "1px solid #111",
-            }}>
-              <div style={{
-                width: 36, height: 36, borderRadius: "50%",
-                background: p.color + "22", border: `1.5px solid ${p.color}44`,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                color: p.color, fontSize: 11, fontWeight: 800, flexShrink: 0,
-              }}>{p.name[0]}</div>
-              <div style={{ flex: 1 }}>
-                <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#ddd" }}>{p.name}</p>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <p style={{ margin: 0, fontSize: 9, color: "#444" }}>HOY</p>
-                <p style={{ margin: 0, fontSize: 15, fontWeight: 800, color: p.color,
-                  fontFamily: "JetBrains Mono,monospace" }}>{p.today}</p>
-              </div>
-              <div style={{ textAlign: "right", minWidth: 52 }}>
-                <p style={{ margin: 0, fontSize: 9, color: "#444" }}>SEMANA</p>
-                <p style={{ margin: 0, fontSize: 15, fontWeight: 800, color: "#fff",
-                  fontFamily: "JetBrains Mono,monospace" }}>{p.week}</p>
-              </div>
-            </div>
-          ))}
         </div>
 
       </div>
