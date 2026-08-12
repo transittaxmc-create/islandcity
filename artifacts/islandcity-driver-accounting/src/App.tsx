@@ -67,6 +67,7 @@ type Expense = {
   dueDate?: string;     // next due date for recurring expenses
 };
 type ProjectionEntry = { date: string; projectedRevenue: number; projectedSavings: number; }; type FinancialSummary = { totalRevenue: number; totalExpenses: number; netIncome: number; projections: ProjectionEntry[]; };
+type BankAdjEntry = { id: string; date: string; time: string; prevBalance: number; newBalance: number; note: string; };
 // ── Toll plaza list — update rates each January ───────────────────────────
 // Last updated: 2026 · E-ZPass · passenger car · per crossing
 // Sources: MTA Bridges & Tunnels 2026; Port Authority 2026 schedule
@@ -525,6 +526,17 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem("ic-day-targets") || "{}"); } catch { return {}; }
   });
 
+  // Bank balance + adjustment history
+  const [bankBalance, setBankBalance] = useState<number>(() => {
+    try { return parseFloat(localStorage.getItem("ic-bank-balance") || "0") || 0; } catch { return 0; }
+  });
+  const [bankAdjHistory, setBankAdjHistory] = useState<BankAdjEntry[]>(() => {
+    try { return JSON.parse(localStorage.getItem("ic-bank-adj-history") || "[]"); } catch { return []; }
+  });
+  const [bankEditing, setBankEditing] = useState(false);
+  const [bankEditVal, setBankEditVal] = useState("");
+  const [bankEditNote, setBankEditNote] = useState("");
+
   // Live clock
   useEffect(() => {
     const id = window.setInterval(() => setCurrentTime(new Date()), 1000);
@@ -572,6 +584,8 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("ic-daily-goal", String(dailyGoal)); } catch {} }, [dailyGoal]);
   useEffect(() => { try { localStorage.setItem("ic-work-days", JSON.stringify(workDays)); } catch {} }, [workDays]);
   useEffect(() => { try { localStorage.setItem("ic-day-targets", JSON.stringify(dayTargets)); } catch {} }, [dayTargets]);
+  useEffect(() => { try { localStorage.setItem("ic-bank-balance", String(bankBalance)); } catch {} }, [bankBalance]);
+  useEffect(() => { try { localStorage.setItem("ic-bank-adj-history", JSON.stringify(bankAdjHistory)); } catch {} }, [bankAdjHistory]);
 
   // Keep refs in sync so the pagehide listener always has the latest state
   useEffect(() => { tripsRef.current    = trips;    }, [trips]);
@@ -946,7 +960,7 @@ export default function App() {
 
     // ── Goal reached ─────────────────────────────────────────────────────────
     if (grossToday >= todayGoal)
-      return { emoji: "🏆", text: `Meta $${todayGoal} alcanzada. ¡Turno excepcional!`, type: "gold" };
+      return { emoji: "🏆", text: `Goal $${todayGoal} reached. Exceptional shift!`, type: "gold" };
 
     // ── Rate-based checks fire FIRST when the driver has active earnings ──────
     // This overrides time-of-day messages so the driver always sees their real
@@ -956,43 +970,43 @@ export default function App() {
       if (perHourGross < 60)
         return {
           emoji: "🚨",
-          text: `Tu ritmo de $${perHourGross.toFixed(0)}/h está por debajo de tu zona saludable (mínimo $60/h). Considera reposicionarte — revisa las zonas de mayor demanda abajo.`,
+          text: `Your rate of $${perHourGross.toFixed(0)}/hr is below your healthy zone (minimum $60/hr). Consider repositioning — check the high-demand zones below.`,
           type: "warn",
         };
       if (perHourGross < 70)
         return {
           emoji: "📊",
-          text: `Vas a $${perHourGross.toFixed(0)}/h — ritmo aceptable, pero hay margen para mejorar. Mantente en zonas activas y aprovecha los picos.`,
+          text: `Running $${perHourGross.toFixed(0)}/hr — acceptable pace, but room to improve. Stay in active zones and catch the peaks.`,
           type: "warm",
         };
       if (perHourGross < 90)
         return {
           emoji: "💪",
-          text: `Ritmo excelente — $${perHourGross.toFixed(0)}/h. Estás en zona óptima. Sigue así y aprovecha cada oportunidad.`,
+          text: `Strong pace — $${perHourGross.toFixed(0)}/hr. You're in the sweet spot. Keep it up and make every opportunity count.`,
           type: "good",
         };
       // ≥ $90 — exceptional
       return {
         emoji: "🚀",
-        text: `Ritmo excepcional — $${perHourGross.toFixed(0)}/h. Turno top. No pares.`,
+        text: `Exceptional pace — $${perHourGross.toFixed(0)}/hr. Top-tier shift. Don't stop.`,
         type: "gold",
       };
     }
 
     // ── No active rate yet — fall back to time-of-day context ────────────────
     if (wd && h >= 7 && h < 9)
-      return { emoji: "🔥", text: "Rush matutino — Midtown, Queens→Manhattan, Penn Station. Ponte en movimiento.", type: "hot" };
+      return { emoji: "🔥", text: "Morning rush — Midtown, Queens→Manhattan, Penn Station. Get moving.", type: "hot" };
     if (h >= 12 && h < 14)
-      return { emoji: "🍽", text: "Surge del almuerzo — Midtown, FiDi, Brooklyn Heights. Viajes cortos rápidos.", type: "warm" };
+      return { emoji: "🍽", text: "Lunch surge — Midtown, FiDi, Brooklyn Heights. Quick short trips.", type: "warm" };
     if (wd && h >= 17 && h < 20)
-      return { emoji: "⚡", text: "Pico vespertino — mejor hora del día. JFK/LGA también activos. Sé agresivo.", type: "hot" };
+      return { emoji: "⚡", text: "Afternoon peak — best hour of the day. JFK/LGA also active. Push hard.", type: "hot" };
     if (we && (h >= 22 || h < 2))
-      return { emoji: "🌙", text: "Noche de fin de semana — LES, Williamsburg, Midtown. Alto potencial de surge.", type: "purple" };
+      return { emoji: "🌙", text: "Weekend night — LES, Williamsburg, Midtown. High surge potential.", type: "purple" };
     if (h >= 2 && h < 6)
-      return { emoji: "😴", text: "Zona muerta 2–6 AM — demanda muy baja. Descansa o reposiciónate.", type: "cold" };
+      return { emoji: "😴", text: "Dead zone 2–6 AM — very low demand. Rest or reposition.", type: "cold" };
     if (wd && h >= 9 && h < 11)
-      return { emoji: "📉", text: "Valle post-rush. Buen momento para una pausa o hacer cola en JFK/LGA.", type: "warn" };
-    return { emoji: "📍", text: "Inicia tu turno para comenzar a medir tu rendimiento.", type: "neutral" };
+      return { emoji: "📉", text: "Post-rush lull. Good time for a break or queuing at JFK/LGA.", type: "warn" };
+    return { emoji: "📍", text: "Start your shift to begin tracking your performance.", type: "neutral" };
   }, [currentTime, grossToday, todayGoal, perHourGross]);
 
   const resetForm = () => {
@@ -1157,9 +1171,9 @@ export default function App() {
     backgroundClip: "text",
   };
 
-  const shiftStatusLabel = shiftActive ? (isOnBreak ? "EN PAUSA" : "EN RUTA") : "FUERA DE TURNO";
-  const gpsStatusLabel   = gps.status === "active" ? "activo" : gps.status === "searching" ? "buscando" : "inactivo";
-  const greeting         = currentTime.getHours() < 6 ? "Buenas noches" : currentTime.getHours() < 12 ? "Buenos días" : currentTime.getHours() < 19 ? "Buenas tardes" : "Buenas noches";
+  const shiftStatusLabel = shiftActive ? (isOnBreak ? "ON BREAK" : "ON DUTY") : "OFF DUTY";
+  const gpsStatusLabel   = gps.status === "active" ? "active" : gps.status === "searching" ? "searching" : "inactive";
+  const greeting         = currentTime.getHours() < 6 ? "Good evening" : currentTime.getHours() < 12 ? "Good morning" : currentTime.getHours() < 19 ? "Good afternoon" : "Good evening";
 
   // ─── Nearest NYC demand zones (static reference — live API pending Task #7) ───
   const NYC_ZONES = [
@@ -1237,13 +1251,13 @@ export default function App() {
         </div>
         <div className="mt-2">
           <p className="font-mono-jet text-[11px] text-neutral-500">
-            {gps.lat && gps.lng ? `${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)}` : "GPS inactivo"}{gps.acc ? ` · ±${Math.round(gps.acc)}m` : ""}
+            {gps.lat && gps.lng ? `${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)}` : "GPS inactive"}{gps.acc ? ` · ±${Math.round(gps.acc)}m` : ""}
           </p>
           {gpsAddress && <p className="text-[11px] text-neutral-300 mt-0.5 truncate">{gpsAddress}</p>}
           {gpsAirport && <p className="font-mono-jet text-[10px] text-[#f6dd8c] mt-0.5">✈ {gpsAirport}</p>}
         </div>
         <p className="font-mono-jet text-[32px] font-black mt-2 tracking-tight" style={goldGradientStyle}>${grossToday.toFixed(2)}</p>
-        <p className="font-mono-jet text-[10px] text-neutral-500 mt-0.5">{todayTrips.length} {todayTrips.length === 1 ? "viaje" : "viajes"} · tarifa + propinas + peajes</p>
+        <p className="font-mono-jet text-[10px] text-neutral-500 mt-0.5">{todayTrips.length} {todayTrips.length === 1 ? "trip" : "trips"} · fare + tips + tolls</p>
         <div className="mt-3 h-px" style={{ background: "linear-gradient(90deg, #1e1400, #1e1e1e)" }} />
         <div className="mt-2.5 flex items-center gap-1.5">
           <span className={`w-1.5 h-1.5 rounded-full ${
@@ -1256,7 +1270,7 @@ export default function App() {
             : shiftActive && isOnBreak  ? "text-[#f97316]"
             : "text-neutral-500"
           }`}>
-            {shiftActive ? (isOnBreak ? "En pausa" : "En ruta") : "Turno finalizado"}
+            {shiftActive ? (isOnBreak ? "On break" : "On duty") : "Shift ended"}
           </span>
           <span className="ml-auto text-[9px] text-neutral-600 font-mono-jet flex items-center gap-1">
             <span className={`w-1 h-1 rounded-full ${gps.status === "active" ? "bg-[#4ade80]" : gps.status === "searching" ? "bg-yellow-400 animate-pulse" : "bg-neutral-600"}`} />
@@ -1278,7 +1292,7 @@ export default function App() {
                   : isActive ? { background: "linear-gradient(90deg, #f6dd8c, #d9b64f)", border: "1px solid #d9b64f", color: "#000" }
                   : { background: "transparent", border: "1px solid #d9b64f99", color: "#f6dd8c" }
                 }>
-                {s === "START" ? "INICIAR" : s === "BREAK" ? (isOnBreak ? "CONTINUAR" : "PAUSA") : "FINALIZAR"}
+                {s === "START" ? "START" : s === "BREAK" ? (isOnBreak ? "RESUME" : "BREAK") : "END SHIFT"}
               </button>
             );
           })}
@@ -1287,18 +1301,18 @@ export default function App() {
 
       {/* Performance grid — DESGLOSE full-width · GASTOS | NET side by side */}
       <div>
-        <p className="text-[10px] tracking-[0.22em] text-neutral-400 font-bold mb-2.5">RENDIMIENTO DEL TURNO</p>
+        <p className="text-[10px] tracking-[0.22em] text-neutral-400 font-bold mb-2.5">SHIFT BREAKDOWN</p>
         <div className="grid grid-cols-2 gap-3">
           {/* DESGLOSE DEL DÍA — full width con bruto total a la derecha */}
           <div className="col-span-2 rounded-xl p-3.5 flex items-start justify-between gap-3"
             style={{ background: "#0d0d0d", border: "1px solid #1e1400" }}>
             <div className="flex-1">
-              <p className="text-[9px] tracking-[0.18em] font-bold mb-2" style={{ color: "#d97706" }}>DESGLOSE DEL DÍA</p>
+              <p className="text-[9px] tracking-[0.18em] font-bold mb-2" style={{ color: "#d97706" }}>TODAY'S BREAKDOWN</p>
               <div className="space-y-1">
                 {([
-                  ["Tarifa",   todayTrips.reduce((a,b) => a + b.earnings, 0)],
-                  ["Propinas", todayTrips.reduce((a,b) => a + b.tips + b.extra, 0)],
-                  ["Peajes",   totalTollsToday],
+                  ["Fare",   todayTrips.reduce((a,b) => a + b.earnings, 0)],
+                  ["Tips",   todayTrips.reduce((a,b) => a + b.tips + b.extra, 0)],
+                  ["Tolls",  totalTollsToday],
                 ] as [string,number][]).map(([label, val]) => (
                   <div key={label} className="flex items-center gap-4">
                     <span className="text-[10px] text-neutral-500 font-mono-jet w-14">{label}</span>
@@ -1308,28 +1322,28 @@ export default function App() {
               </div>
             </div>
             <div className="text-right flex-shrink-0">
-              <p className="text-[8px] text-neutral-600 tracking-widest uppercase mb-1">BRUTO HOY</p>
+              <p className="text-[8px] text-neutral-600 tracking-widest uppercase mb-1">GROSS TODAY</p>
               <p className="font-mono-jet text-[22px] font-black text-[#f6dd8c] leading-none">${grossToday.toFixed(2)}</p>
-              <p className="text-[9px] text-neutral-600 mt-0.5">{todayTrips.length} viaje{todayTrips.length !== 1 ? "s" : ""}</p>
+              <p className="text-[9px] text-neutral-600 mt-0.5">{todayTrips.length} trip{todayTrips.length !== 1 ? "s" : ""}</p>
             </div>
           </div>
           {/* GASTOS DEL DÍA */}
           <div className="rounded-xl p-3.5" style={{ background: "#0d0d0d", border: "1px solid #1e0a0a" }}>
-            <p className="text-[9px] tracking-[0.18em] font-bold text-[#ef4444]">GASTOS DEL DÍA</p>
+            <p className="text-[9px] tracking-[0.18em] font-bold text-[#ef4444]">TODAY'S EXPENSES</p>
             <p className="font-mono-jet text-[22px] font-black text-[#ef4444] mt-2">
               {expensesToday > 0 ? `−$${expensesToday.toFixed(2)}` : "$0.00"}
             </p>
             <p className="text-[10px] text-neutral-600 mt-1 font-mono-jet">
-              {expenses.filter(e => e.date === toYYYYMMDD(currentTime)).length} registros del día
+              {expenses.filter(e => e.date === toYYYYMMDD(currentTime)).length} entries today
             </p>
           </div>
           {/* GANANCIA NETA HOY */}
           <div className="rounded-xl p-3.5" style={{ background: "#0d0d0d", border: `1px solid ${netToday >= 0 ? "#0a1e0a" : "#1e0a0a"}` }}>
-            <p className={`text-[9px] tracking-[0.18em] font-bold ${netToday >= 0 ? "text-[#4ade80]" : "text-[#ef4444]"}`}>GANANCIA NETA HOY</p>
+            <p className={`text-[9px] tracking-[0.18em] font-bold ${netToday >= 0 ? "text-[#4ade80]" : "text-[#ef4444]"}`}>NET EARNINGS TODAY</p>
             <p className={`font-mono-jet text-[22px] font-black mt-2 ${netToday >= 0 ? "text-[#4ade80]" : "text-[#ef4444]"}`}>
               ${netToday.toFixed(2)}
             </p>
-            <p className="text-[10px] text-neutral-600 mt-1 font-mono-jet">ingresos − gastos · ref. semanal ${weeklyTotal.toFixed(0)}</p>
+            <p className="text-[10px] text-neutral-600 mt-1 font-mono-jet">income − expenses · weekly ref. ${weeklyTotal.toFixed(0)}</p>
           </div>
         </div>
       </div>
@@ -1337,9 +1351,9 @@ export default function App() {
       {/* Goal tracker */}
       <div className="rounded-[20px] p-4 space-y-4" style={{ background: "#0d0d0d", border: "1px solid #1e1e1e" }}>
         <div className="flex items-center justify-between">
-          <h3 className="text-[11px] tracking-[0.18em] font-bold" style={goldGradientStyle}>RENDIMIENTO DE HOY</h3>
+          <h3 className="text-[11px] tracking-[0.18em] font-bold" style={goldGradientStyle}>TODAY'S PERFORMANCE</h3>
           <span className={`font-mono-jet text-[11px] font-bold ${goalPct >= 100 ? "text-[#4ade80]" : goalPct >= 70 ? "text-[#f6dd8c]" : "text-neutral-500"}`}>
-            {goalPct.toFixed(0)}% del día
+            {goalPct.toFixed(0)}% of goal
           </span>
         </div>
 
@@ -1377,10 +1391,10 @@ export default function App() {
               <text x={GCX} y={GCY-26} textAnchor="middle" fill={zColor} fontSize="28" fontWeight="900" fontFamily="'JetBrains Mono',monospace">
                 {perHourGross>0?`$${perHourGross.toFixed(0)}`:'—'}
               </text>
-              <text x={GCX} y={GCY-9} textAnchor="middle" fill="#6b7280" fontSize="9" fontFamily="monospace">/hora bruta</text>
+              <text x={GCX} y={GCY-9} textAnchor="middle" fill="#6b7280" fontSize="9" fontFamily="monospace">/hr gross</text>
               {perHourGross>0&&(
                 <text x={GCX} y={GCY+18} textAnchor="middle" fill={zColor} fontSize="8" fontWeight="bold" fontFamily="monospace" letterSpacing="2">
-                  {perHourGross>=90?'EXCEPCIONAL':perHourGross>=70?'EXCELENTE':perHourGross>=60?'MÍNIMO OK':'⚠ BAJO $60'}
+                  {perHourGross>=90?'EXCEPTIONAL':perHourGross>=70?'EXCELLENT':perHourGross>=60?'MINIMUM OK':'⚠ BELOW $60'}
                 </text>
               )}
             </svg>
@@ -1390,7 +1404,7 @@ export default function App() {
         {/* Daily goal — slim bar below gauge */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-[10px]">
-            <span className="text-neutral-500 font-mono-jet">META DIARIA $500</span>
+            <span className="text-neutral-500 font-mono-jet">DAILY GOAL $500</span>
             <span className={`font-mono-jet font-bold ${goalPct>=100?"text-[#4ade80]":goalPct>=70?"text-[#f6dd8c]":"text-neutral-400"}`}>{goalPct.toFixed(0)}%</span>
           </div>
           <div className="h-2 bg-[#1a1a1a] rounded-full overflow-hidden border border-[#2a2a2a]">
@@ -1399,10 +1413,10 @@ export default function App() {
           </div>
           <div className="flex items-center justify-between text-[10px] font-mono-jet">
             <span className="text-neutral-500">
-              {grossToday>=todayGoal?"🏆 ¡Meta alcanzada!":`Faltan $${remainingToGoal.toFixed(2)} para la meta`}
+              {grossToday>=todayGoal?"🏆 Goal reached!":`$${remainingToGoal.toFixed(2)} short of goal`}
             </span>
             <span className="text-neutral-400">
-              {projectedFinish?`Llegas ~${projectedFinish.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}`:grossToday>=todayGoal?"✓ Completado":"—"}
+              {projectedFinish?`Est. finish ~${projectedFinish.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}`:grossToday>=todayGoal?"✓ Done":"—"}
             </span>
           </div>
         </div>
@@ -1410,7 +1424,7 @@ export default function App() {
         {/* $/hr goal slider */}
         <div className="rounded-xl p-3.5" style={{ background: "#080808", border: "1px solid #1e1400" }}>
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-neutral-400">Objetivo de tarifa bruta por hora</span>
+            <span className="text-[11px] text-neutral-400">Gross hourly rate target</span>
             <span className="font-mono-jet text-[20px] font-black" style={goldGradientStyle}>${goal}/h</span>
           </div>
           <input type="range" min={50} max={100} step={1} value={goal}
@@ -1424,10 +1438,10 @@ export default function App() {
         {/* Actual vs Goal vs Delta */}
         <div className="grid grid-cols-3 gap-2">
           {([
-            ["REAL/H",      perHourGross > 0 ? `$${perHourGross.toFixed(2)}` : "—",
+            ["ACTUAL/HR",   perHourGross > 0 ? `$${perHourGross.toFixed(2)}` : "—",
               perHourGross >= goal ? "#4ade80" : perHourGross >= 60 ? "#f6dd8c" : "#ef4444"],
-            ["META/H",      `$${goal.toFixed(0)}`, "#f6dd8c"],
-            ["DIFERENCIA",  perHourGross > 0 ? `${perHourGross >= goal ? "+" : ""}$${(perHourGross - goal).toFixed(0)}/h` : "—",
+            ["GOAL/HR",     `$${goal.toFixed(0)}`, "#f6dd8c"],
+            ["GAP",         perHourGross > 0 ? `${perHourGross >= goal ? "+" : ""}$${(perHourGross - goal).toFixed(0)}/hr` : "—",
               perHourGross >= goal ? "#4ade80" : "#ef4444"],
           ] as [string,string,string][]).map(([label, val, col]) => (
             <div key={label} className="rounded-xl p-3" style={{ background: "#080808", border: `1px solid ${col}22` }}>
@@ -1454,7 +1468,7 @@ export default function App() {
           </div>
           {perHourGross > 0 && grossToday < todayGoal && (
             <p className="text-[10px] font-mono-jet text-neutral-500 mt-2">
-              A este ritmo necesitas {perHourGross > 0 ? `${(remainingToGoal / perHourGross).toFixed(1)}h` : "—"} más para $500
+              At this pace you need {perHourGross > 0 ? `${(remainingToGoal / perHourGross).toFixed(1)}h` : "—"} more to reach $500
             </p>
           )}
         </div>
@@ -1468,9 +1482,9 @@ export default function App() {
           const zoneBg     = zoneUrgent ? "#120505" : zoneOk ? "#0d0d05" : "#060e08";
           const zoneBorder = zoneUrgent ? "#ef444433" : zoneOk ? "#fbbf2433" : "#1a2a1a";
           const zoneAccent = zoneUrgent ? "#ef4444"   : zoneOk ? "#fbbf24"   : "#4ade80";
-          const zoneLabel  = zoneUrgent ? "REPOSICIONATE — TASA BAJA"
-            : zoneOk  ? "ZONAS CERCANAS — MANTÉN RITMO"
-            : "ZONAS DE ALTA DEMANDA";
+          const zoneLabel  = zoneUrgent ? "REPOSITION — RATE LOW"
+            : zoneOk  ? "NEARBY ZONES — KEEP PACE"
+            : "HIGH DEMAND ZONES";
           return (
             <div className="rounded-xl p-3.5" style={{ background: zoneBg, border: `1px solid ${zoneBorder}`, borderLeft: `3px solid ${zoneAccent}` }}>
               <div className="flex items-center justify-between mb-2.5">
@@ -1478,15 +1492,15 @@ export default function App() {
                   <span className="text-[14px]">{zoneUrgent ? "🚨" : "📍"}</span>
                   <span className="text-[9px] tracking-[0.18em] font-bold" style={{ color: zoneAccent }}>{zoneLabel}</span>
                 </div>
-                <span className="text-[8px] font-mono-jet text-neutral-600">referencia estática</span>
+                <span className="text-[8px] font-mono-jet text-neutral-600">static reference</span>
               </div>
 
               {gps.lat && gps.lng ? (
                 <>
                   <p className="text-[10px] text-neutral-500 mb-2">
                     {zoneUrgent
-                      ? "Tu tasa está baja — zonas NYC conocidas más cercanas:"
-                      : "Zonas NYC conocidas más cercanas a tu posición:"}
+                      ? "Rate is low — closest known NYC zones:"
+                      : "Closest known NYC zones to your position:"}
                   </p>
                   <div className="space-y-2">
                     {nearbyZones.map((z, i) => (
@@ -1501,17 +1515,17 @@ export default function App() {
                   </div>
                   <div className="mt-3 pt-2.5" style={{ borderTop: `1px solid ${zoneBorder}` }}>
                     <p className="text-[9px] text-neutral-600">
-                      Demanda en tiempo real no conectada · Tarea #7 pendiente
+                      Live demand data not connected · Task #7 pending
                     </p>
                   </div>
                 </>
               ) : (
                 <div>
                   <p className="text-[11px] text-neutral-500">
-                    Activa el GPS para ver zonas cercanas.
+                    Enable GPS to see nearby zones.
                   </p>
                   <p className="text-[9px] text-neutral-700 mt-1.5">
-                    Demanda en tiempo real: pendiente conectar API · Tarea #7
+                    Live demand data: API connection pending · Task #7
                   </p>
                 </div>
               )}
@@ -1522,17 +1536,17 @@ export default function App() {
         {/* Trip stats strip */}
         <div className="grid grid-cols-3 gap-0 bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl overflow-hidden">
           <div className="p-3 border-r border-[#1f1f1f] text-center">
-            <p className="text-[9px] text-neutral-500 tracking-widest">VIAJES HOY</p>
+            <p className="text-[9px] text-neutral-500 tracking-widest">TRIPS TODAY</p>
             <p className="font-mono-jet text-[13px] font-semibold mt-1 text-white">{todayTrips.length}</p>
           </div>
           <div className="p-3 border-r border-[#1f1f1f] text-center">
-            <p className="text-[9px] text-neutral-500 tracking-widest">PROMEDIO/VIAJE</p>
+            <p className="text-[9px] text-neutral-500 tracking-widest">AVG/TRIP</p>
             <p className="font-mono-jet text-[13px] font-semibold mt-1 text-[#f6dd8c]">
               ${todayTrips.length ? (grossToday / todayTrips.length).toFixed(2) : "0.00"}
             </p>
           </div>
           <div className="p-3 text-center">
-            <p className="text-[9px] text-neutral-500 tracking-widest">TOTAL SEMANA</p>
+            <p className="text-[9px] text-neutral-500 tracking-widest">WEEK TOTAL</p>
             <p className="font-mono-jet text-[13px] font-semibold mt-1 text-[#f5c518]">${weeklyTotal.toFixed(2)}</p>
           </div>
         </div>
@@ -1542,12 +1556,12 @@ export default function App() {
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-[#8b5cf6]" />
-              <p className="text-[10px] tracking-[0.18em] font-bold text-[#a78bfa]">E-ZPASS {TOLL_YEAR} · PEAJES PAGADOS</p>
+              <p className="text-[10px] tracking-[0.18em] font-bold text-[#a78bfa]">E-ZPASS {TOLL_YEAR} · TOLLS PAID</p>
             </div>
-            <span className="font-mono-jet text-[11px] font-bold text-[#c4b5fd]">${totalTollsToday.toFixed(2)} hoy</span>
+            <span className="font-mono-jet text-[11px] font-bold text-[#c4b5fd]">${totalTollsToday.toFixed(2)} today</span>
           </div>
           <div className="grid grid-cols-3 gap-2">
-            {([["SEMANA", tollsWeek], ["MES", tollsMonth], ["AÑO", tollsYear]] as [string,number][]).map(([label, val]) => (
+            {([["WEEK", tollsWeek], ["MONTH", tollsMonth], ["YEAR", tollsYear]] as [string,number][]).map(([label, val]) => (
               <div key={label} className="text-center">
                 <p className="text-[8px] text-[#6d5a9c] tracking-widest">{label}</p>
                 <p className="font-mono-jet text-[12px] font-semibold text-[#c4b5fd] mt-0.5">${val.toFixed(2)}</p>
@@ -1555,7 +1569,7 @@ export default function App() {
             ))}
           </div>
           <p className="text-[10px] text-[#c4b5fd]/70 mt-2">
-            {shiftActive ? "⚡ Geofencing activo — auto-detectando peajes" : "Inicia turno para auto-detección de peajes"}
+            {shiftActive ? "⚡ Geofencing active — auto-detecting tolls" : "Start your shift for auto toll detection"}
           </p>
         </div>
       </div>
@@ -2230,7 +2244,7 @@ export default function App() {
             else { setShowExpenseForm(true); setEditingExpenseId(null); resetExpenseForm(); setAddingCustomType(false); setAddingCustomCat(false); setAddingCustomVendor(false); }
           }}
           className="h-10 px-4 rounded-full bg-[#facc15] text-black text-[12px] font-bold tracking-wide hover:bg-[#fde047] transition-colors">
-          {showExpenseForm && !editingExpenseId ? "✕ Cerrar" : "+ Nuevo Gasto"}
+          {showExpenseForm && !editingExpenseId ? "✕ Close" : "+ New Expense"}
         </button>
       </div>
 
@@ -2239,11 +2253,11 @@ export default function App() {
         <div className="bg-[#101010] border border-[#2a2a2a] rounded-2xl p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-[11px] font-bold tracking-[0.16em] text-white uppercase">
-              {editingExpenseId ? "✏️ Editando gasto" : "Nuevo Gasto"}
+              {editingExpenseId ? "✏️ Edit Expense" : "New Expense"}
             </h3>
             {editingExpenseId && (
               <button onClick={() => { setEditingExpenseId(null); resetExpenseForm(); setShowExpenseForm(false); }}
-                className="text-[10px] text-neutral-500 hover:text-white transition-colors">← Cancelar</button>
+                className="text-[10px] text-neutral-500 hover:text-white transition-colors">← Cancel</button>
             )}
           </div>
 
@@ -2364,7 +2378,7 @@ export default function App() {
                       ? "bg-[#facc15] text-black"
                       : "bg-[#1e1e1e] text-neutral-500 border border-[#262626] hover:text-white"
                   }`}>
-                  {f === "none" ? "Una vez" : f === "daily" ? "Diario" : f === "weekly" ? "Semanal" : "Mensual"}
+                  {f === "none" ? "One-time" : f === "daily" ? "Daily" : f === "weekly" ? "Weekly" : "Monthly"}
                 </button>
               ))}
             </div>
@@ -2373,7 +2387,7 @@ export default function App() {
           {/* Due date — only if recurring */}
           {expenseForm.frequency !== "none" && (
             <div>
-              <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest mb-1 block">Próxima fecha de vencimiento</label>
+              <label className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest mb-1 block">Next due date</label>
               <input type="date" value={expenseForm.dueDate}
                 onChange={e => setExpenseForm(s => ({ ...s, dueDate: e.target.value }))}
                 className="w-full h-11 rounded-xl bg-black border border-[#262626] px-3 text-white text-[13px] focus:outline-none" />
@@ -2384,11 +2398,11 @@ export default function App() {
           <div className="flex gap-2 pt-1">
             <button onClick={handleSaveExpense}
               className="flex-1 h-12 rounded-full bg-[#facc15] text-black text-[13px] font-bold tracking-wide hover:bg-[#fde047] transition-colors">
-              {editingExpenseId ? "Actualizar" : "Guardar Gasto"}
+              {editingExpenseId ? "Update" : "Save Expense"}
             </button>
             <button onClick={() => { setShowExpenseForm(false); setEditingExpenseId(null); resetExpenseForm(); setAddingCustomType(false); setAddingCustomCat(false); setAddingCustomVendor(false); }}
               className="h-12 px-5 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-400 text-[13px] hover:text-white transition-colors">
-              Cancelar
+              Cancel
             </button>
           </div>
         </div>
@@ -2396,12 +2410,12 @@ export default function App() {
 
       {/* Register */}
       <div>
-        <p className="text-[10px] tracking-[0.22em] text-neutral-500 font-semibold mb-2.5">REGISTRO DE GASTOS</p>
+        <p className="text-[10px] tracking-[0.22em] text-neutral-500 font-semibold mb-2.5">EXPENSE LOG</p>
         {expenses.length === 0 ? (
           <div className="bg-[#141414] border border-[#222] rounded-2xl p-10 text-center">
             <p className="text-[32px] mb-2">🧾</p>
-            <p className="text-[14px] text-neutral-400">Sin gastos registrados</p>
-            <p className="text-[11px] text-neutral-600 mt-1">Toca "+ Nuevo Gasto" para añadir</p>
+            <p className="text-[14px] text-neutral-400">No expenses logged</p>
+            <p className="text-[11px] text-neutral-600 mt-1">Tap "+ New Expense" to add one</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -2539,8 +2553,8 @@ export default function App() {
             <p className="text-[10px] tracking-[0.18em] font-bold text-[#a78bfa]">IRS DEDUCTIONS · TOLLS {TOLL_YEAR}</p>
           </div>
           <p className="text-[12px] text-[#c4b5fd]/90 mt-1.5 leading-[1.5]">
-            Los peajes de E-ZPass son 100% deducibles como gasto de negocio (Schedule C, Line 9).
-            Guarda tus estados de cuenta de E-ZPass mensuales como respaldo para taxes.
+            E-ZPass tolls are 100% deductible as a business expense (Schedule C, Line 9).
+            Keep your monthly E-ZPass statements as backup documentation for your tax filing.
           </p>
         </div>
       </div>
@@ -2563,8 +2577,8 @@ export default function App() {
   const _earnYear  = trips.filter(t=>t.date>=_finYearStart).reduce((a,t)=>a+_tripNet(t),0);
 
   // Weekly bar chart (Mon i=0 … Sun i=6)
-  const _DAY = ['L','Ma','Mi','J','V','S','D'] as const;
-  const _DAY_FULL = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'] as const;
+  const _DAY = ['M','Tu','W','Th','F','Sa','Su'] as const;
+  const _DAY_FULL = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] as const;
   const _weekChart = Array.from({length:7},(_,i)=>{
     const d=new Date(_finMon); d.setDate(_finMon.getDate()+i);
     const ds=toYYYYMMDD(d);
@@ -2620,7 +2634,92 @@ export default function App() {
   const _ringPct=Math.min(_earnToday/Math.max(_todayPlan,1),1);
   const _CX=60,_CY=60;
 
-  const _finPageNames = ['Esta Semana','Proyecciones','Plataformas','Salud Financiera'];
+  // ── Monthly cash flow (Proyecciones) ──────────────────────────
+  // Weekly recurring expense amount (templates, not one-time entries)
+  const _recurWk = expenses.reduce((s,e)=>{
+    if(e.frequency==='monthly') return s+e.amount/4.33;
+    if(e.frequency==='weekly')  return s+e.amount;
+    if(e.frequency==='daily')   return s+e.amount*7;
+    return s;
+  },0);
+
+  const _mwYear=currentTime.getFullYear(), _mwMo=currentTime.getMonth();
+  const _mwFirst=new Date(_mwYear,_mwMo,1);
+  const _mwLast=new Date(_mwYear,_mwMo+1,0);
+  const _mwTodayStr=toYYYYMMDD(currentTime);
+
+  // Build weeks overlapping the current month (start on Monday)
+  const _mwWeeks=(()=>{
+    type W={start:Date;end:Date;wStr:string;eStr:string;label:string;
+      projIncome:number;projExp:number;actualIncome:number;actualExp:number;
+      isPast:boolean;isCurrent:boolean};
+    const wks:W[]=[];
+    const ws0=new Date(_mwFirst);
+    const sd=ws0.getDay(); ws0.setDate(ws0.getDate()-(sd===0?6:sd-1));
+    let ws=ws0;
+    while(ws<=_mwLast){
+      const we=new Date(ws); we.setDate(we.getDate()+6);
+      const wStr=toYYYYMMDD(ws), eStr=toYYYYMMDD(we);
+      // Projected income: work days in this week that fall in the current month
+      let projIncome=0, daysInMo=0;
+      for(let di=0;di<7;di++){
+        const dd=new Date(ws); dd.setDate(ws.getDate()+di);
+        if(dd.getMonth()!==_mwMo){ws=new Date(ws);ws.setDate(ws.getDate()-di+di);continue;}
+        daysInMo++;
+        const iso=dd.getDay()===0?7:dd.getDay();
+        if(workDays.includes(iso))projIncome+=(dayTargets[iso]??dailyGoal);
+      }
+      const projExp=_recurWk*(daysInMo/7);
+      const actualIncome=trips.filter(t=>t.date>=wStr&&t.date<=eStr).reduce((a,t)=>a+_tripNet(t),0);
+      const actualExp=expenses.filter(e=>(!e.frequency||e.frequency==='none')&&e.date>=wStr&&e.date<=eStr).reduce((a,e)=>a+e.amount,0);
+      const isPast=eStr<_mwTodayStr, isCurrent=wStr<=_mwTodayStr&&eStr>=_mwTodayStr;
+      const m1=ws.toLocaleDateString('es',{month:'short'}), m2=we.toLocaleDateString('es',{month:'short'});
+      const label=m1===m2?`${ws.getDate()}–${we.getDate()} ${m1}`:`${ws.getDate()} ${m1}–${we.getDate()} ${m2}`;
+      wks.push({start:new Date(ws),end:new Date(we),wStr,eStr,label,projIncome,projExp,actualIncome,actualExp,isPast,isCurrent});
+      ws=new Date(ws); ws.setDate(ws.getDate()+7);
+    }
+    return wks;
+  })();
+
+  // Running balance forward from today's bankBalance
+  const _mwCurIdx=_mwWeeks.findIndex(w=>w.isCurrent);
+  const _mwBalances:number[]=_mwWeeks.map(()=>NaN);
+  if(_mwCurIdx>=0){
+    const curW=_mwWeeks[_mwCurIdx];
+    const daysPast=Math.max(0,Math.floor((currentTime.getTime()-curW.start.getTime())/86400000));
+    const remRecurWk=_recurWk*((7-daysPast)/7);
+    _mwBalances[_mwCurIdx]=bankBalance+_remainWkPlan-remRecurWk;
+    for(let i=_mwCurIdx+1;i<_mwWeeks.length;i++){
+      _mwBalances[i]=_mwBalances[i-1]+_mwWeeks[i].projIncome-_mwWeeks[i].projExp;
+    }
+  }
+
+  // Monthly goal = sum of planned income across every day in the month
+  const _mwMonthGoal=(()=>{
+    let tot=0;
+    for(let d=new Date(_mwFirst);d<=_mwLast;d.setDate(d.getDate()+1)){
+      const iso=d.getDay()===0?7:d.getDay();
+      if(workDays.includes(iso))tot+=(dayTargets[iso]??dailyGoal);
+    }
+    return tot;
+  })();
+  const _mwEarned=trips.filter(t=>t.date>=toYYYYMMDD(_mwFirst)&&t.date<=_mwTodayStr).reduce((a,t)=>a+_tripNet(t),0);
+
+  // Scheduled payments viability (monthly recurring with dueDate)
+  const _mwPayments=expenses
+    .filter(e=>e.frequency==='monthly'&&e.dueDate)
+    .map(e=>{
+      const dueStr=e.dueDate!;
+      const dueDate=new Date(dueStr+'T00:00:00');
+      const daysUntil=Math.round((dueDate.getTime()-currentTime.getTime())/86400000);
+      const wkIdx=_mwWeeks.findIndex(w=>dueStr>=w.wStr&&dueStr<=w.eStr);
+      const projBal=wkIdx>=0&&!isNaN(_mwBalances[wkIdx])?_mwBalances[wkIdx]:bankBalance;
+      const covered=projBal>=e.amount;
+      return {name:e.vendor||e.category,amount:e.amount,dueStr,daysUntil,projBal,covered};
+    })
+    .sort((a,b)=>a.daysUntil-b.daysUntil);
+
+  const _finPageNames = ['This Week','Projections','Platforms','Financial Health'];
 
   const FinancesContent = (
     <div>
@@ -2647,16 +2746,16 @@ export default function App() {
         onScroll={e=>{const el=e.currentTarget;setFinPage(Math.round(el.scrollLeft/(el.offsetWidth||1)));}}
       >
 
-        {/* ── PAGE 0 · Esta Semana ── */}
+        {/* ── PAGE 0 · This Week ── */}
         <div className="flex-shrink-0 w-full px-4 space-y-4 pb-6" style={{scrollSnapAlign:'start'}}>
 
           {/* ESTA SEMANA chart */}
           <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">ESTA SEMANA</p>
+              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">THIS WEEK</p>
               <div className="flex gap-3 text-[8px] text-neutral-600">
-                <span className="flex items-center gap-1"><span className="inline-block w-2 h-1.5 rounded bg-[#d9b64f]/30"/>Planeado</span>
-                <span className="flex items-center gap-1"><span className="inline-block w-2 h-1.5 rounded bg-[#f6dd8c]"/>Real</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-2 h-1.5 rounded bg-[#d9b64f]/30"/>Planned</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-2 h-1.5 rounded bg-[#f6dd8c]"/>Actual</span>
               </div>
             </div>
             <ResponsiveContainer width="100%" height={90}>
@@ -2665,17 +2764,17 @@ export default function App() {
                 <YAxis hide domain={[0,Math.max(..._weekChart.map(d=>Math.max(d.projected,d.actual)),1)*1.15]}/>
                 <Tooltip contentStyle={{background:'#1a1a1a',border:'1px solid #2a2a2a',borderRadius:8,fontSize:11}}
                   labelStyle={{color:'#f6dd8c'}} formatter={(v:number)=>[`$${v.toFixed(0)}`]}/>
-                <Bar dataKey="projected" name="Planeado" fill="#d9b64f22" radius={[3,3,0,0]}/>
-                <Bar dataKey="actual"    name="Real"     fill="#f6dd8c"   radius={[3,3,0,0]}/>
+                <Bar dataKey="projected" name="Planned" fill="#d9b64f22" radius={[3,3,0,0]}/>
+                <Bar dataKey="actual"    name="Actual"  fill="#f6dd8c"   radius={[3,3,0,0]}/>
               </BarChart>
             </ResponsiveContainer>
             <div className="flex justify-between mt-2 pt-2 border-t border-[#1e1e1e]">
               <div>
-                <p className="text-[9px] text-neutral-500">Acumulado</p>
+                <p className="text-[9px] text-neutral-500">Earned so far</p>
                 <p className="text-[15px] font-bold text-[#f6dd8c] font-mono-jet">${_earnWeek.toFixed(2)}</p>
               </div>
               <div className="text-right">
-                <p className="text-[9px] text-neutral-500">Plan fin de semana</p>
+                <p className="text-[9px] text-neutral-500">Week plan total</p>
                 <p className="text-[15px] font-bold text-white font-mono-jet">${_projWeek.toFixed(2)}</p>
               </div>
             </div>
@@ -2684,8 +2783,8 @@ export default function App() {
           {/* PLAN SEMANAL DE INGRESOS */}
           <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">PLAN SEMANAL</p>
-              <span className="text-[9px] text-neutral-600">{workDays.length} día{workDays.length!==1?'s':''} activos</span>
+              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">WEEKLY INCOME PLAN</p>
+              <span className="text-[9px] text-neutral-600">{workDays.length} active day{workDays.length!==1?'s':''}</span>
             </div>
             <div className="grid grid-cols-7 gap-1 mb-1.5">
               {([1,2,3,4,5,6,7] as const).map((iso,i)=>{
@@ -2694,7 +2793,7 @@ export default function App() {
                   <button key={iso}
                     onClick={()=>setWorkDays(prev=>on?prev.filter(x=>x!==iso):[...prev,iso].sort())}
                     className={`flex flex-col items-center py-2 rounded-lg border transition-all active:scale-95 ${on?'bg-black border-[#f6dd8c]/50':'bg-[#0a0a0a] border-[#1a1a1a]'}`}>
-                    <span className={`text-[9px] font-bold leading-none mb-1.5 ${on?'text-[#f6dd8c]':'text-neutral-600'}`}>{['L','Ma','Mi','J','V','S','D'][i]}</span>
+                    <span className={`text-[9px] font-bold leading-none mb-1.5 ${on?'text-[#f6dd8c]':'text-neutral-600'}`}>{['M','Tu','W','Th','F','Sa','Su'][i]}</span>
                     <span className={`w-3 h-3 rounded-full transition-colors ${on?'bg-[#f6dd8c]':'bg-[#252525]'}`}/>
                   </button>
                 );
@@ -2716,74 +2815,276 @@ export default function App() {
             </div>
             <div className="pt-3 border-t border-[#1e1e1e]">
               <div className="flex items-baseline justify-between mb-0.5">
-                <p className="text-[9px] text-neutral-500 uppercase tracking-[0.15em]">Total semanal</p>
+                <p className="text-[9px] text-neutral-500 uppercase tracking-[0.15em]">Weekly total</p>
                 <p className="text-[22px] font-bold text-[#f6dd8c] font-mono-jet leading-none">
                   ${_weekPlanTotal.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})}
                 </p>
               </div>
-              <p className="text-[8px] text-neutral-600 mb-3">promedio ${_avgDayTarget.toFixed(0)}/día</p>
+              <p className="text-[8px] text-neutral-600 mb-3">avg ${_avgDayTarget.toFixed(0)}/day</p>
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <div className="bg-black border border-[#1e1e1e] rounded-xl p-2.5 text-center">
-                  <p className="text-[8px] text-neutral-600 uppercase tracking-widest mb-0.5">Est. mensual</p>
+                  <p className="text-[8px] text-neutral-600 uppercase tracking-widest mb-0.5">Est. monthly</p>
                   <p className="text-[13px] font-bold text-white font-mono-jet">${(_weekPlanTotal*4.33/1000).toFixed(1)}k</p>
                 </div>
                 <div className="bg-black border border-[#1e1e1e] rounded-xl p-2.5 text-center">
-                  <p className="text-[8px] text-neutral-600 uppercase tracking-widest mb-0.5">Est. anual</p>
+                  <p className="text-[8px] text-neutral-600 uppercase tracking-widest mb-0.5">Est. yearly</p>
                   <p className="text-[13px] font-bold text-white font-mono-jet">${(_annTarget/1000).toFixed(0)}k</p>
                 </div>
               </div>
               <div className="bg-[#0f0a00] border border-[#d9b64f]/20 rounded-xl p-2.5 flex items-center gap-2">
                 <span className="text-[#d9b64f] text-[12px]">💡</span>
-                <p className="text-[9px] text-[#a07820]">Días sin meta usan <strong className="text-[#d9b64f]">${dailyGoal}/día</strong> como base.</p>
+                <p className="text-[9px] text-[#a07820]">Days without a custom target use <strong className="text-[#d9b64f]">${dailyGoal}/day</strong> as the default.</p>
               </div>
             </div>
           </div>
 
         </div>{/* end page 0 */}
 
-        {/* ── PAGE 1 · Proyecciones ── */}
+        {/* ── PAGE 1 · Projections ── */}
         <div className="flex-shrink-0 w-full px-4 space-y-4 pb-6" style={{scrollSnapAlign:'start'}}>
+
+          {/* 1 · Balance bancario editable */}
           <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
-            <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">PROYECCIONES · A ESTE RITMO</p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">BANK BALANCE</p>
+              {!bankEditing && (
+                <button onClick={()=>{setBankEditVal(bankBalance.toFixed(2));setBankEditing(true);}}
+                  className="text-[9px] text-[#f6dd8c] border border-[#f6dd8c]/30 px-2 py-0.5 rounded-full active:scale-95 transition-transform">
+                  Edit
+                </button>
+              )}
+            </div>
+            {bankEditing ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-neutral-400 text-[16px] font-mono-jet">$</span>
+                  <input type="number" value={bankEditVal}
+                    onChange={e=>setBankEditVal(e.target.value)}
+                    className="flex-1 bg-black border border-[#f6dd8c]/40 rounded-xl px-3 py-2 text-[#f6dd8c] font-mono-jet text-[18px] font-bold focus:outline-none focus:border-[#f6dd8c]"
+                    autoFocus inputMode="decimal"/>
+                </div>
+                <input type="text" placeholder="Optional note (e.g. car repair −$270)" value={bankEditNote}
+                  onChange={e=>setBankEditNote(e.target.value)}
+                  className="w-full bg-black border border-[#1e1e1e] rounded-xl px-3 py-1.5 text-neutral-300 text-[11px] focus:outline-none focus:border-[#f6dd8c]/30"/>
+                <div className="flex gap-2">
+                  <button onClick={()=>{
+                    const nv=parseFloat(bankEditVal);
+                    if(!isNaN(nv)){
+                      const adj:BankAdjEntry={
+                        id:Date.now().toString(),
+                        date:toYYYYMMDD(currentTime),
+                        time:currentTime.toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'}),
+                        prevBalance:bankBalance, newBalance:nv,
+                        note:bankEditNote.trim()
+                      };
+                      setBankAdjHistory(prev=>[adj,...prev].slice(0,20));
+                      setBankBalance(nv);
+                    }
+                    setBankEditing(false); setBankEditVal(""); setBankEditNote("");
+                  }} className="flex-1 bg-[#f6dd8c] text-black text-[11px] font-bold py-2 rounded-xl active:scale-95 transition-transform">
+                    Save
+                  </button>
+                  <button onClick={()=>{setBankEditing(false);setBankEditVal("");setBankEditNote("");}}
+                    className="px-4 text-neutral-400 text-[11px] border border-[#2a2a2a] rounded-xl">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="font-mono-jet text-[28px] font-black text-[#f6dd8c] leading-none">
+                ${bankBalance.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
+              </p>
+            )}
+            {/* Recent adjustment log */}
+            {bankAdjHistory.length>0 && !bankEditing && (
+              <div className="mt-3 pt-3 border-t border-[#1e1e1e] space-y-1.5">
+                {bankAdjHistory.slice(0,3).map(adj=>(
+                  <div key={adj.id} className="flex items-start gap-2">
+                    <span className="text-[8px] text-neutral-600 mt-0.5 flex-shrink-0 font-mono-jet">{adj.date}</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="font-mono-jet text-[9px] text-neutral-400">
+                        ${adj.prevBalance.toFixed(0)} → ${adj.newBalance.toFixed(0)}{' '}
+                        <span className={adj.newBalance>=adj.prevBalance?'text-[#4ade80]':'text-red-400'}>
+                          ({adj.newBalance>=adj.prevBalance?'+':''}${(adj.newBalance-adj.prevBalance).toFixed(0)})
+                        </span>
+                      </span>
+                      {adj.note && <p className="text-[8px] text-neutral-600 truncate">— {adj.note}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 2 · Mes en semanas */}
+          <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">
+                {currentTime.toLocaleDateString('en-US',{month:'long',year:'numeric'}).toUpperCase()}
+              </p>
+              {_mwCurIdx>=0 && (
+                <p className="text-[9px] text-neutral-500">Week {_mwCurIdx+1} of {_mwWeeks.length}</p>
+              )}
+            </div>
+
+            {/* Monthly progress bar */}
+            {_mwMonthGoal>0 && (
+              <div className="mb-4">
+                <div className="flex justify-between text-[9px] mb-1.5">
+                  <span className="text-neutral-400 font-mono-jet">${_mwEarned.toFixed(0)} earned</span>
+                  <span className="text-[#f6dd8c] font-mono-jet">Goal ${_mwMonthGoal.toLocaleString('en-US',{maximumFractionDigits:0})}</span>
+                </div>
+                <div className="h-2.5 bg-[#1a1a1a] rounded-full overflow-hidden border border-[#2a2a2a]">
+                  <div className="h-full rounded-full transition-all duration-700"
+                    style={{width:`${Math.min(_mwEarned/_mwMonthGoal*100,100)}%`,background:'linear-gradient(90deg,#d9b64f,#f6dd8c)'}}/>
+                </div>
+                <p className="text-[8px] text-neutral-600 mt-1">
+                  {Math.round(_mwEarned/_mwMonthGoal*100)}% of your monthly goal
+                </p>
+              </div>
+            )}
+
+            {/* Week rows */}
+            <div className="space-y-2">
+              {_mwWeeks.map((w,i)=>{
+                const bal=_mwBalances[i];
+                const netActual=w.actualIncome-w.actualExp;
+                const netProj=w.projIncome-w.projExp;
+                const displayNet=w.isPast||w.isCurrent?netActual:netProj;
+                const displayIncome=w.isPast||w.isCurrent?w.actualIncome:w.projIncome;
+                const onPlan=w.projIncome>0?(w.actualIncome/w.projIncome)>=0.8:true;
+                return (
+                  <div key={w.wStr} className={`rounded-xl p-3 border ${
+                    w.isCurrent?'border-[#f6dd8c]/40 bg-[#0f0a00]':
+                    w.isPast?'border-[#1e1e1e] bg-black/40':
+                    'border-[#181818] bg-black/10'
+                  }`}>
+                    {/* Row header */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-[7px] font-black px-1.5 py-0.5 rounded tracking-widest uppercase ${
+                          w.isCurrent?'bg-[#f6dd8c]/20 text-[#f6dd8c]':
+                          w.isPast?'bg-[#1e1e1e] text-neutral-500':
+                          'bg-[#141414] text-neutral-600'
+                        }`}>{w.isCurrent?'CURRENT':w.isPast?'CLOSED':'UPCOMING'}</span>
+                        <span className="text-[10px] text-neutral-400">{w.label}</span>
+                      </div>
+                      {!isNaN(bal) && (
+                        <span className={`font-mono-jet text-[10px] font-bold ${bal>=0?'text-[#4ade80]':'text-red-400'}`}>
+                          ${bal.toFixed(0)}
+                        </span>
+                      )}
+                    </div>
+                    {/* Data grid */}
+                    <div className="grid grid-cols-3 gap-1">
+                      <div>
+                        <p className="text-[7px] text-neutral-600 uppercase mb-0.5">Earned</p>
+                        <p className={`font-mono-jet text-[11px] font-bold ${w.isCurrent?'text-[#f6dd8c]':w.isPast?'text-neutral-300':'text-neutral-500'}`}>
+                          ${displayIncome.toFixed(0)}
+                          {(w.isPast||w.isCurrent)&&w.projIncome>0&&(
+                            <span className="text-neutral-600 text-[8px]">/{w.projIncome.toFixed(0)}</span>
+                          )}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[7px] text-neutral-600 uppercase mb-0.5">Expenses</p>
+                        <p className="font-mono-jet text-[11px] font-bold text-red-400">
+                          ${w.actualExp.toFixed(0)}
+                          {w.projExp>0&&<span className="text-neutral-600 text-[8px]">+{w.projExp.toFixed(0)}</span>}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[7px] text-neutral-600 uppercase mb.0.5">Net</p>
+                        <p className={`font-mono-jet text-[11px] font-bold ${displayNet>=0?'text-[#4ade80]':'text-red-400'}`}>
+                          {displayNet>=0?'+':''}{displayNet.toFixed(0)}
+                        </p>
+                      </div>
+                    </div>
+                    {/* Past week variance note */}
+                    {w.isPast && w.projIncome>0 && (
+                      <p className={`text-[8px] mt-1.5 font-semibold ${onPlan?'text-[#4ade80]':'text-orange-400'}`}>
+                        {onPlan?'↑ Above plan':'↓ Below plan'} · {Math.round(w.actualIncome/w.projIncome*100)}% of goal
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 3 · Pagos programados */}
+          {_mwPayments.length>0 && (
+            <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">SCHEDULED PAYMENTS</p>
+              <div className="space-y-2">
+                {_mwPayments.map(p=>(
+                  <div key={p.dueStr} className={`rounded-xl p-3 border ${
+                    p.covered?'border-[#4ade80]/25 bg-[#020f02]':'border-red-500/25 bg-[#0f0202]'
+                  }`}>
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-semibold text-neutral-100 truncate">{p.name}</p>
+                        <p className="text-[9px] text-neutral-500 mt-0.5">
+                          {p.daysUntil<=0?'Due today':p.daysUntil===1?'Tomorrow':`In ${p.daysUntil} days`}
+                          {' · '}{new Date(p.dueStr+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+                        </p>
+                      </div>
+                      <p className="font-mono-jet text-[14px] font-black text-neutral-100 flex-shrink-0">${p.amount.toFixed(0)}</p>
+                    </div>
+                    <div className={`text-[9px] font-semibold flex items-center gap-1 ${p.covered?'text-[#4ade80]':'text-red-400'}`}>
+                      {p.covered
+                        ? <>✓ Covered · <span className="font-mono-jet">${(p.projBal-p.amount).toFixed(0)}</span> to spare</>
+                        : <>⚠ Short by <span className="font-mono-jet">${(p.amount-p.projBal).toFixed(0)}</span> to cover this payment</>
+                      }
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 4 · Panorama anual */}
+          <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
+            <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">ANNUAL OUTLOOK</p>
             <div className="grid grid-cols-3 gap-2 mb-3">
               {([
-                {label:'Fin Semana',val:_projWeek,  sub:new Date(_finMon.getTime()+6*86400000).toLocaleDateString('es',{month:'short',day:'numeric'})},
-                {label:'Fin Mes',   val:_projMonth, sub:new Date(currentTime.getFullYear(),currentTime.getMonth()+1,0).toLocaleDateString('es',{month:'short',day:'numeric'})},
-                {label:'Fin Año',   val:_projYear,  sub:'31 dic'},
-              ] as {label:string,val:number,sub:string}[]).map(({label,val,sub})=>(
+                {label:'End of Week', val:_projWeek},
+                {label:'End of Month',val:_projMonth},
+                {label:'End of Year', val:_projYear},
+              ] as {label:string,val:number}[]).map(({label,val})=>(
                 <div key={label} className="bg-black border border-[#1e1e1e] rounded-xl p-2.5 text-center">
                   <p className="text-[8px] text-neutral-500 uppercase tracking-widest leading-tight mb-1">{label}</p>
-                  <p className="text-[15px] font-bold text-[#f6dd8c] font-mono-jet leading-none">${(val/1000).toFixed(1)}k</p>
-                  <p className="text-[8px] text-neutral-600 mt-0.5">{sub}</p>
+                  <p className="text-[13px] font-bold text-[#f6dd8c] font-mono-jet">${(val/1000).toFixed(1)}k</p>
                 </div>
               ))}
             </div>
             <div className="bg-black border border-[#1e1e1e] rounded-xl p-3">
               <div className="flex justify-between items-center mb-1.5">
-                <p className="text-[9px] text-neutral-500">Meta anual · Super Plus</p>
+                <p className="text-[9px] text-neutral-500">Annual goal · Super Plus</p>
                 <p className="text-[9px] text-[#f6dd8c]">${(_annTarget/1000).toFixed(0)}k · {Math.round(_yearPct*100)}%</p>
               </div>
               <div className="h-2 bg-[#1e1e1e] rounded-full overflow-hidden">
                 <div className="h-full rounded-full transition-all duration-700"
                   style={{width:`${_yearPct*100}%`,background:'linear-gradient(to right,#d9b64f,#f6dd8c)'}}/>
               </div>
-              <p className="text-[8px] text-neutral-600 mt-1.5">Basado en plan semanal · {workDays.length} día{workDays.length!==1?'s':''}/semana</p>
+              <p className="text-[8px] text-neutral-600 mt-1.5">Based on weekly plan · {workDays.length} day{workDays.length!==1?'s':''}/week</p>
             </div>
           </div>
+
         </div>{/* end page 1 */}
 
-        {/* ── PAGE 2 · Plataformas ── */}
+        {/* ── PAGE 2 · Platforms ── */}
         <div className="flex-shrink-0 w-full px-4 pb-6" style={{scrollSnapAlign:'start'}}>
           {_platRows.length>0 ? (
             <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
-              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">INGRESOS POR PLATAFORMA</p>
+              <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">INCOME BY PLATFORM</p>
               <table className="w-full text-[11px]">
                 <thead>
                   <tr className="text-[8px] text-neutral-600 uppercase tracking-widest border-b border-[#1e1e1e]">
-                    <th className="text-left pb-2 font-semibold">Plataforma</th>
-                    <th className="text-right pb-2 font-semibold">Hoy</th>
-                    <th className="text-right pb-2 font-semibold">Semana</th>
-                    <th className="text-right pb-2 font-semibold">Mes</th>
+                    <th className="text-left pb-2 font-semibold">Platform</th>
+                    <th className="text-right pb-2 font-semibold">Today</th>
+                    <th className="text-right pb-2 font-semibold">Week</th>
+                    <th className="text-right pb-2 font-semibold">Month</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#1a1a1a]">
@@ -2809,24 +3110,24 @@ export default function App() {
           ) : (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <span className="text-[44px] mb-3">🚕</span>
-              <p className="text-[13px] font-semibold text-neutral-400 mb-1">Sin viajes registrados</p>
-              <p className="text-[11px] text-neutral-600 leading-relaxed">Registra tu primer viaje para ver<br/>el desglose por plataforma aquí</p>
+              <p className="text-[13px] font-semibold text-neutral-400 mb-1">No trips recorded yet</p>
+              <p className="text-[11px] text-neutral-600 leading-relaxed">Log your first trip to see<br/>your breakdown by platform here</p>
             </div>
           )}
         </div>{/* end page 2 */}
 
-        {/* ── PAGE 3 · Salud Financiera ── */}
+        {/* ── PAGE 3 · Financial Health ── */}
         <div className="flex-shrink-0 w-full px-4 space-y-4 pb-6" style={{scrollSnapAlign:'start'}}>
           <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
             <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">
-              SALUD FINANCIERA · {currentTime.toLocaleDateString('es',{month:'long'}).toUpperCase()}
+              FINANCIAL HEALTH · {currentTime.toLocaleDateString('en-US',{month:'long'}).toUpperCase()}
             </p>
             <div className="space-y-2.5">
               {([
-                {label:'Ingresos reales este mes',        val:_earnMonth,   color:'text-[#4ade80]'},
-                {label:'Proyección fin de mes',            val:_projMonth,   color:'text-[#f6dd8c]'},
-                {label:'Gastos reales este mes',           val:-_expMonth,   color:'text-red-400'},
-                {label:'Gastos recurrentes proyectados',   val:-_monthFixed, color:'text-orange-400'},
+                {label:'Actual earnings this month',       val:_earnMonth,   color:'text-[#4ade80]'},
+                {label:'Projected by month end',           val:_projMonth,   color:'text-[#f6dd8c]'},
+                {label:'Actual expenses this month',       val:-_expMonth,   color:'text-red-400'},
+                {label:'Projected recurring expenses',     val:-_monthFixed, color:'text-orange-400'},
               ] as {label:string,val:number,color:string}[]).map(({label,val,color})=>(
                 <div key={label} className="flex justify-between items-center gap-2">
                   <p className="text-[11px] text-neutral-400 leading-tight">{label}</p>
@@ -2836,7 +3137,7 @@ export default function App() {
                 </div>
               ))}
               <div className="pt-2.5 border-t border-[#2a2a2a] flex justify-between items-center">
-                <p className="text-[12px] font-bold text-white">GANANCIA NETA PROYECTADA</p>
+                <p className="text-[12px] font-bold text-white">PROJECTED NET EARNINGS</p>
                 <p className={`font-mono-jet text-[19px] font-bold ${_netProj>=0?'text-[#4ade80]':'text-red-400'}`}>
                   {_netProj<0?`-$${Math.abs(_netProj).toFixed(2)}`:`$${_netProj.toFixed(2)}`}
                 </p>
@@ -2971,15 +3272,15 @@ export default function App() {
                   <span className="font-mono-jet text-[12px] text-[#f6dd8c]">{trips.length}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[12px] text-neutral-300">Gastos guardados</span>
+                  <span className="text-[12px] text-neutral-300">Saved expenses</span>
                   <span className="font-mono-jet text-[12px] text-[#f6dd8c]">{expenses.length}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[12px] text-neutral-300">Días con horas</span>
+                  <span className="text-[12px] text-neutral-300">Days with hours</span>
                   <span className="font-mono-jet text-[12px] text-[#f6dd8c]">{hoursLog.length}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[12px] text-neutral-300">Tamaño disco</span>
+                  <span className="text-[12px] text-neutral-300">Storage size</span>
                   <span className="font-mono-jet text-[12px] text-neutral-400">{(storageBytes / 1024).toFixed(1)} KB</span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -3016,15 +3317,15 @@ export default function App() {
 
                 {resetStep === 1 && (
                   <div className="space-y-2">
-                    <p className="text-[11px] text-[#ff6b6b] font-semibold text-center">¿Estás seguro? Esta acción es irreversible.</p>
+                    <p className="text-[11px] text-[#ff6b6b] font-semibold text-center">Are you sure? This action cannot be undone.</p>
                     <div className="flex gap-2">
                       <button onClick={() => setResetStep(0)}
                         className="flex-1 h-11 rounded-full border border-[#333] text-neutral-400 text-[12px] font-bold hover:text-white transition-colors">
-                        Cancelar
+                        Cancel
                       </button>
                       <button onClick={handleFactoryReset}
                         className="flex-1 h-11 rounded-full bg-[#ff6b6b] text-black text-[12px] font-bold tracking-[0.08em] hover:bg-[#ff4444] transition-colors">
-                        Sí, borrar todo
+                        Yes, erase everything
                       </button>
                     </div>
                   </div>
