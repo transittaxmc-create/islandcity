@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { Home, Banknote, ClipboardList, BarChart2, BookOpen } from "lucide-react";
 
@@ -517,6 +517,7 @@ export default function App() {
   // visibilitychange listener so it never captures a stale closure.
   const tripsRef     = useRef<Trip[]>([]);
   const expensesRef  = useRef<Expense[]>([]);
+  const hoursLogRef  = useRef<HoursEntry[]>([]);
 
   // Storage state
   const [lastSavedAt, setLastSavedAt] = useState<string>(() => {
@@ -537,6 +538,9 @@ export default function App() {
   });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [inlineEditId, setInlineEditId] = useState<string | null>(null);
+  const [cloudBackupAt, setCloudBackupAt] = useState<Date | null>(() => {
+    try { const r = localStorage.getItem("ic-last-cloud-backup"); return r ? new Date(r) : null; } catch { return null; }
+  });
   const [inlineForm, setInlineForm] = useState({ pickup: "", dropoff: "", earnings: "", reference: "" });
 
   // Expense form
@@ -688,6 +692,7 @@ export default function App() {
   // Keep refs in sync so the pagehide listener always has the latest state
   useEffect(() => { tripsRef.current    = trips;    }, [trips]);
   useEffect(() => { expensesRef.current = expenses; }, [expenses]);
+  useEffect(() => { hoursLogRef.current = hoursLog; }, [hoursLog]);
 
   // iOS PWA safety net: when the user swipes the app away or switches apps,
   // iOS kills JS before useEffect can run. This listener fires synchronously
@@ -711,6 +716,43 @@ export default function App() {
       window.removeEventListener("pagehide", flush);
     };
   }, []); // set up once — refs always point to current state
+
+  // ── Auto-restore from cloud if localStorage has no trips ─────────────────
+  useEffect(() => {
+    const tryRestore = async () => {
+      try {
+        const raw = localStorage.getItem("island-city-trips");
+        const localTrips: Trip[] = raw ? JSON.parse(raw) : [];
+        if (localTrips.length > 0) return; // local data exists — skip restore
+        const res = await fetch("/api/backup/latest");
+        if (!res.ok) return;
+        const { backup } = await res.json() as { backup: null | {
+          trips: Trip[]; expenses: Expense[]; hoursLog: HoursEntry[];
+          settings: Record<string, string | null>;
+          tripCount: number; expenseCount: number;
+        }};
+        if (!backup || !Array.isArray(backup.trips) || backup.trips.length === 0) return;
+        // Restore data
+        try { localStorage.setItem("island-city-trips",    JSON.stringify(backup.trips));    } catch {}
+        try { localStorage.setItem("island-city-expenses", JSON.stringify(backup.expenses)); } catch {}
+        try { localStorage.setItem("island-city-hours",    JSON.stringify(backup.hoursLog)); } catch {}
+        setTrips(backup.trips);
+        setExpenses(backup.expenses ?? []);
+        setHoursLog(backup.hoursLog ?? []);
+        const s = backup.settings ?? {};
+        if (s.goal)           try { localStorage.setItem("ic-hourly-goal",      s.goal!); } catch {}
+        if (s.workDays)       try { localStorage.setItem("ic-work-days",        s.workDays!); } catch {}
+        if (s.dayTargets)     try { localStorage.setItem("ic-day-targets",      s.dayTargets!); } catch {}
+        if (s.bankBalance)    try { localStorage.setItem("ic-bank-balance",     s.bankBalance!); } catch {}
+        if (s.bankAdjHistory) try { localStorage.setItem("ic-bank-adj-history", s.bankAdjHistory!); } catch {}
+        if (s.recurringPlan)  try { localStorage.setItem("ic-recurring-plan",   s.recurringPlan!); } catch {}
+        if (s.weekOverrides)  try { localStorage.setItem("ic-week-overrides",   s.weekOverrides!); } catch {}
+        if (s.customVendors)  try { localStorage.setItem("ic-custom-vendors",   s.customVendors!); } catch {}
+        showToast(`☁️ Restored ${backup.tripCount} trips from cloud`);
+      } catch { /* silent — restore is best-effort */ }
+    };
+    tryRestore();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Initial storage check
   useEffect(() => {
@@ -968,6 +1010,8 @@ export default function App() {
     setClockInTime(null);
     stopGPS();
     showToast(`Clock Out · ${hours.toFixed(2)}h saved`);
+    // Backup after a short delay so the hoursLog state & ref have updated
+    setTimeout(() => saveCloudBackup(), 800);
   };
 
   const handleTurnButton = (s: TurnStatus) => {
@@ -1243,6 +1287,51 @@ export default function App() {
     try { localStorage.setItem("island-city-expenses", JSON.stringify(newExpenses)); } catch {}
     setExpenses(newExpenses);
   };
+
+  // ── Cloud backup — sends full snapshot to the API server → PostgreSQL ─────
+  const saveCloudBackup = useCallback(async () => {
+    try {
+      const payload = {
+        trips:    tripsRef.current,
+        expenses: expensesRef.current,
+        hoursLog: hoursLogRef.current,
+        settings: {
+          goal:               localStorage.getItem("ic-hourly-goal"),
+          workDays:           localStorage.getItem("ic-work-days"),
+          dayTargets:         localStorage.getItem("ic-day-targets"),
+          bankBalance:        localStorage.getItem("ic-bank-balance"),
+          bankAdjHistory:     localStorage.getItem("ic-bank-adj-history"),
+          recurringPlan:      localStorage.getItem("ic-recurring-plan"),
+          weekOverrides:      localStorage.getItem("ic-week-overrides"),
+          customVendors:      localStorage.getItem("ic-custom-vendors"),
+          customExpenseTypes: localStorage.getItem("ic-custom-exp-types"),
+          customExpenseCats:  localStorage.getItem("ic-custom-exp-cats"),
+        },
+      };
+      const res = await fetch("/api/backup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const now = new Date();
+        setCloudBackupAt(now);
+        try { localStorage.setItem("ic-last-cloud-backup", now.toISOString()); } catch {}
+      }
+    } catch { /* silent — cloud backup is best-effort */ }
+  }, []);
+
+  // Auto-backup: every 60 min + whenever the app goes to background
+  useEffect(() => {
+    const interval = setInterval(() => { saveCloudBackup(); }, 60 * 60 * 1000);
+    const onHide = () => { if (document.visibilityState === "hidden") saveCloudBackup(); };
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onHide);
+    };
+  }, [saveCloudBackup]);
+
   // Keep the old name as an alias so no other call sites break
   const deleteAndSave = syncSaveTrips;
 
@@ -4274,6 +4363,26 @@ export default function App() {
                   <span className="text-[12px] text-neutral-300">Last saved</span>
                   <span className="font-mono-jet text-[10px] text-neutral-400 text-right max-w-[180px] truncate">{lastSavedAt === "—" ? "—" : new Date(lastSavedAt).toLocaleString()}</span>
                 </div>
+              </div>
+
+              {/* ── Cloud backup status ── */}
+              <div className="bg-[#0a1a0e] border border-[#4ade80]/25 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[9px] tracking-[0.16em] text-[#4ade80] font-semibold uppercase">☁️ Cloud Backup</p>
+                  <span className={`text-[9px] font-mono-jet ${cloudBackupAt ? "text-[#4ade80]" : "text-neutral-400"}`}>
+                    {cloudBackupAt
+                      ? `Last: ${cloudBackupAt.toLocaleDateString([], { month:"short", day:"numeric" })} · ${cloudBackupAt.toLocaleTimeString([], { hour:"numeric", minute:"2-digit" })}`
+                      : "Not yet backed up"}
+                  </span>
+                </div>
+                <p className="text-[11px] text-neutral-400 leading-relaxed">
+                  Tu data se guarda automáticamente en la nube cada hora y al terminar el turno. Si reinstala la app o cambias de teléfono, se restaura solo.
+                </p>
+                <button
+                  onClick={async () => { await saveCloudBackup(); showToast("☁️ Cloud backup saved ✓"); }}
+                  className="w-full h-11 rounded-full bg-[#0d1f12] border border-[#4ade80]/30 text-[#4ade80] text-[12px] font-bold tracking-[0.1em] hover:bg-[#4ade80]/10 transition-colors">
+                  ☁️ Save to cloud now
+                </button>
               </div>
 
               {/* Backup — #8 */}
