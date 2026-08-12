@@ -18,3 +18,4 @@
 //   export type Post = typeof postsTable.$inferSelect;
 
 export * from "./driver-backups";
+export * from "./scanned-documents";

@@ -5,3 +5,4 @@
 - [IRS Statement implementation](irs-statement.md) — handlePrintIRSStatement uses string concatenation (not template literals) to avoid TSX parser confusion with HTML angle brackets; opens print dialog in new window.
 - [NYC vendors and data flow](data-flow-decisions.md) — NYC_DEFAULT_VENDORS constant at module level; allVendors = defaults + custom (deduped); expPeriodFiltered useMemo computed before ExpensesContent for period-aware header.
 - [Gemini receipt scan architecture](receipt-scan.md) — POST /api/receipt-scan; frontend compresses to JPEG 1024px before sending; @google/genai must NOT be in esbuild externals (removed @google/* wildcard, kept @google-cloud/*).
+- [Document archive system](document-archive.md) — Object Storage (GCS) + scanned_documents DB table; receipt-scan auto-saves to GCS after scan; GET /api/documents lists archive; GET /api/documents/:id/file streams file; 📁 Saved Documents section in EXPENSES tab with thumbnail viewer modal.

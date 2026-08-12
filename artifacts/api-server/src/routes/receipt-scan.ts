@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { ai } from "@workspace/integrations-gemini-ai";
+import { saveDocument } from "../lib/documentStorage";
 
 const receiptScanRouter = Router();
 
@@ -86,16 +87,33 @@ Rules:
       return;
     }
 
-    res.json({
-      vendor: typeof parsed.vendor === "string" ? parsed.vendor : "",
-      amount:
-        typeof parsed.amount === "number"
-          ? Math.round(parsed.amount * 100) / 100
-          : 0,
-      date: typeof parsed.date === "string" ? parsed.date : "",
+    const result = {
+      vendor:   typeof parsed.vendor   === "string" ? parsed.vendor   : "",
+      amount:   typeof parsed.amount   === "number" ? Math.round(parsed.amount * 100) / 100 : 0,
+      date:     typeof parsed.date     === "string" ? parsed.date     : "",
       category: typeof parsed.category === "string" ? parsed.category : "Other",
-      note: typeof parsed.note === "string" ? parsed.note : "",
-    });
+      note:     typeof parsed.note     === "string" ? parsed.note     : "",
+    };
+
+    // Save original image + metadata to GCS + DB — await so we can return docId for audit linking
+    let docId: number | null = null;
+    try {
+      const saved = await saveDocument({
+        type:      "receipt",
+        imageBase64,
+        mimeType,
+        fileDate:  result.date  || null,
+        category:  result.category,
+        vendor:    result.vendor,
+        amount:    result.amount || null,
+        metadata:  { note: result.note },
+      });
+      docId = saved.id;
+    } catch (err) {
+      console.warn("Receipt save to storage failed (non-fatal):", err);
+    }
+
+    res.json({ ...result, docId });
   } catch (err: unknown) {
     console.error("Receipt scan error:", err);
     res.status(500).json({ error: "AI processing failed. Please try again." });

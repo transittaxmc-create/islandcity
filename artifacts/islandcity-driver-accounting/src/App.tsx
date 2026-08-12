@@ -69,8 +69,14 @@ type Expense = {
   frequency?: "none" | "daily" | "weekly" | "monthly"; // recurrence
   dueDate?: string;     // next due date for recurring expenses
   endDate?: string;     // stop projecting after this date (set by "Repeat until" feature)
+  receiptDocId?: number; // cloud document ID — links to scanned receipt for audit trail
 };
 type BankAdjEntry = { id: string; date: string; time: string; prevBalance: number; newBalance: number; note: string; };
+type DocEntry = {
+  id: number; type: string;
+  fileDate: string | null; category: string | null; vendor: string | null; amount: string | null;
+  createdAt: string; objectPath: string;
+};
 // ── Toll plaza list — update rates each January ───────────────────────────
 // Last updated: 2026 · E-ZPass · passenger car · per crossing
 // Sources: MTA Bridges & Tunnels 2026; Port Authority 2026 schedule
@@ -541,6 +547,10 @@ export default function App() {
   const [cloudBackupAt, setCloudBackupAt] = useState<Date | null>(() => {
     try { const r = localStorage.getItem("ic-last-cloud-backup"); return r ? new Date(r) : null; } catch { return null; }
   });
+  const [documents,    setDocuments]    = useState<DocEntry[]>([]);
+  const [docsLoading,  setDocsLoading]  = useState(false);
+  const [showDocuments, setShowDocuments] = useState(false);
+  const [viewingDoc,   setViewingDoc]   = useState<DocEntry | null>(null);
   const [inlineForm, setInlineForm] = useState({ pickup: "", dropoff: "", earnings: "", reference: "" });
 
   // Expense form
@@ -553,8 +563,9 @@ export default function App() {
     dueDate: "",
   });
   const [editingExpenseId,   setEditingExpenseId]   = useState<string | null>(null);
-  const [scanningReceipt,   setScanningReceipt]   = useState(false);
-  const [receiptScanError,  setReceiptScanError]  = useState<string | null>(null);
+  const [scanningReceipt,     setScanningReceipt]     = useState(false);
+  const [receiptScanError,    setReceiptScanError]    = useState<string | null>(null);
+  const [pendingReceiptDocId, setPendingReceiptDocId] = useState<number | null>(null);
   const receiptInputRef = useRef<HTMLInputElement>(null);
 
   // Custom expense types & categories (user-added items, persisted)
@@ -1332,6 +1343,19 @@ export default function App() {
     };
   }, [saveCloudBackup]);
 
+  // ── Load scanned documents from cloud ────────────────────────────────────
+  const loadDocuments = useCallback(async () => {
+    setDocsLoading(true);
+    try {
+      const res = await fetch("/api/documents");
+      if (res.ok) {
+        const { documents: docs } = await res.json() as { documents: DocEntry[] };
+        setDocuments(docs ?? []);
+      }
+    } catch { /* silent */ }
+    setDocsLoading(false);
+  }, []);
+
   // Keep the old name as an alias so no other call sites break
   const deleteAndSave = syncSaveTrips;
 
@@ -1382,11 +1406,14 @@ export default function App() {
     setActiveTab("LEDGER");
   };
 
-  const resetExpenseForm = () => setExpenseForm({
-    name: "", type: "Gasoline / Fuel", category: "Vehicle & Fuel",
-    description: "", amount: "", date: new Date().toISOString().slice(0, 10),
-    frequency: "none", dueDate: "",
-  });
+  const resetExpenseForm = () => {
+    setExpenseForm({
+      name: "", type: "Gasoline / Fuel", category: "Vehicle & Fuel",
+      description: "", amount: "", date: new Date().toISOString().slice(0, 10),
+      frequency: "none", dueDate: "",
+    });
+    setPendingReceiptDocId(null);
+  };
 
   const handleSaveExpense = () => {
     if (!expenseForm.name.trim() || !expenseForm.amount) {
@@ -1405,6 +1432,7 @@ export default function App() {
         : false,
       frequency: expenseForm.frequency !== "none" ? expenseForm.frequency : undefined,
       dueDate: expenseForm.dueDate || undefined,
+      receiptDocId: pendingReceiptDocId ?? undefined,
     };
     if (editingExpenseId) {
       syncSaveExpenses(expenses.map(e => e.id === editingExpenseId ? newExpense : e));
@@ -1464,7 +1492,9 @@ export default function App() {
 
       const data = await res.json() as {
         vendor: string; amount: number; date: string; category: string; note: string;
+        docId?: number;
       };
+      if (data.docId) setPendingReceiptDocId(data.docId);
 
       // Map Gemini's category to our IRS categories
       const CAT_MAP: Record<string, string> = {
@@ -3075,7 +3105,14 @@ export default function App() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-[13px] font-semibold text-white">{ex.vendor}</span>
-                            {ex.verified&&<span className="text-[9px] bg-[#4ade80]/10 text-[#4ade80] px-2 py-0.5 rounded-full border border-[#4ade80]/20 font-mono-jet">✓ VERIFIED</span>}
+                            {ex.verified && <span className="text-[9px] bg-[#4ade80]/10 text-[#4ade80] px-2 py-0.5 rounded-full border border-[#4ade80]/20 font-mono-jet">✓ VERIFIED</span>}
+                            {ex.receiptDocId && (
+                              <button
+                                onClick={() => setViewingDoc({ id: ex.receiptDocId!, type: "receipt", fileDate: ex.date, category: ex.category, vendor: ex.vendor, amount: String(ex.amount), createdAt: ex.date, objectPath: "" })}
+                                className="text-[9px] bg-[#f6dd8c]/10 text-[#f6dd8c] px-2 py-0.5 rounded-full border border-[#f6dd8c]/20 font-mono-jet hover:bg-[#f6dd8c]/20 transition-colors">
+                                📎 RECEIPT
+                              </button>
+                            )}
                           </div>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
                             <span className="font-mono-jet text-[10px] text-neutral-400">{ex.date}</span>
@@ -3104,6 +3141,77 @@ export default function App() {
           </div>
         );
       })()}
+
+      {/* ── 📁 Documents Archive ── */}
+      <div className="mt-4">
+        <button
+          onClick={() => { setShowDocuments(s => { if (!s) loadDocuments(); return !s; }); }}
+          className="w-full flex items-center justify-between px-4 py-3 bg-[#0a0a1a] border border-[#4b4b8b]/40 rounded-2xl mb-3 transition-colors hover:border-[#818cf8]/40"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-[15px]">📁</span>
+            <span className="text-[10px] tracking-[0.18em] text-[#818cf8] font-bold uppercase">Saved Documents</span>
+            {documents.length > 0 && (
+              <span className="text-[9px] bg-[#818cf8]/10 text-[#818cf8] px-2 py-0.5 rounded-full border border-[#818cf8]/20 font-mono-jet">{documents.length}</span>
+            )}
+          </div>
+          <span className="text-[#818cf8] text-[11px] font-mono-jet">{showDocuments ? "▲ hide" : "▼ show"}</span>
+        </button>
+
+        {showDocuments && (
+          <div className="space-y-2">
+            {docsLoading ? (
+              <div className="text-center py-10 text-neutral-400 text-[13px]">Loading…</div>
+            ) : documents.length === 0 ? (
+              <div className="bg-[#0a0a1a] border border-[#4b4b8b]/30 rounded-2xl p-10 text-center">
+                <p className="text-[32px] mb-2">📁</p>
+                <p className="text-[14px] text-neutral-400">No saved documents yet</p>
+                <p className="text-[11px] text-neutral-400 mt-1">Receipts scanned with the 📷 button are archived here automatically</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {documents.map(doc => (
+                  <div key={doc.id} className="bg-[#0a0a1a] border border-[#4b4b8b]/30 rounded-xl overflow-hidden">
+                    <div className="flex gap-3 p-3">
+                      {/* Thumbnail */}
+                      <button onClick={() => setViewingDoc(doc)} className="flex-shrink-0">
+                        {doc.type === "receipt" ? (
+                          <img src={"/api/documents/" + doc.id + "/file"} alt="receipt"
+                            className="w-16 h-16 object-cover rounded-lg border border-[#4b4b8b]/40"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                        ) : (
+                          <div className="w-16 h-16 rounded-lg border border-[#4b4b8b]/40 bg-[#1a1a2e] flex items-center justify-center text-[28px]">🏦</div>
+                        )}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[13px] font-semibold text-white truncate">{doc.vendor || "—"}</span>
+                          {doc.category && <span className="text-[9px] text-[#818cf8] bg-[#818cf8]/10 px-2 py-0.5 rounded-full border border-[#818cf8]/20">{doc.category}</span>}
+                        </div>
+                        <p className="text-[10px] text-neutral-400 font-mono-jet mt-0.5">
+                          {doc.fileDate || new Date(doc.createdAt).toLocaleDateString([], { month:"short", day:"numeric", year:"numeric" })}
+                          {doc.amount ? " · $" + parseFloat(doc.amount).toFixed(2) : ""}
+                        </p>
+                        <p className="text-[9px] text-neutral-500 mt-0.5 capitalize">{doc.type}</p>
+                      </div>
+                      <div className="flex-shrink-0 flex flex-col gap-1.5 items-end">
+                        <button onClick={() => setViewingDoc(doc)}
+                          className="w-8 h-8 rounded-full bg-[#1a1a2e] border border-[#4b4b8b]/40 text-[#818cf8] text-[12px] flex items-center justify-center">👁</button>
+                        <button onClick={async () => {
+                          if (!window.confirm("Delete this document? Cannot be undone.")) return;
+                          await fetch("/api/documents/" + doc.id, { method: "DELETE" });
+                          setDocuments(d => d.filter(x => x.id !== doc.id));
+                          showToast("Document deleted");
+                        }} className="w-8 h-8 rounded-full bg-[#1a1a2e] border border-[#4b4b8b]/40 text-[#f87171] text-[11px] flex items-center justify-center">✕</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 
@@ -4296,6 +4404,37 @@ export default function App() {
           {activeTab === "EXPENSES"   && ExpensesContent}
           {activeTab === "REPORTS"    && ReportsContent}
         </div>
+
+        {/* Document viewer modal */}
+        {viewingDoc && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/92"
+            onClick={() => setViewingDoc(null)}>
+            <div className="relative max-w-[92vw] max-h-[90vh] flex flex-col items-center"
+              onClick={e => e.stopPropagation()}>
+              <button onClick={() => setViewingDoc(null)}
+                className="absolute -top-9 right-0 text-white text-[12px] font-bold tracking-wide bg-[#1a1a2e] border border-[#4b4b8b]/40 px-3 py-1 rounded-full">
+                ✕ Close
+              </button>
+              {viewingDoc.type === "receipt" ? (
+                <img src={"/api/documents/" + viewingDoc.id + "/file"} alt="receipt"
+                  className="max-w-full max-h-[78vh] object-contain rounded-2xl border border-[#4b4b8b]/40 shadow-2xl" />
+              ) : (
+                <div className="bg-[#0a0a1a] border border-[#4b4b8b]/40 p-10 rounded-2xl text-center">
+                  <p className="text-[52px] mb-4">🏦</p>
+                  <p className="text-white text-[16px] font-semibold mb-2">{viewingDoc.vendor || "Bank Statement"}</p>
+                  <a href={"/api/documents/" + viewingDoc.id + "/file"} target="_blank" rel="noopener noreferrer"
+                    className="text-[#818cf8] underline text-[13px]">Open PDF ↗</a>
+                </div>
+              )}
+              <div className="mt-3 flex items-center gap-3 text-[11px] text-neutral-400">
+                {viewingDoc.vendor   && <span className="font-semibold text-white">{viewingDoc.vendor}</span>}
+                {viewingDoc.category && <span className="bg-[#818cf8]/10 text-[#818cf8] px-2 py-0.5 rounded-full border border-[#818cf8]/20">{viewingDoc.category}</span>}
+                {viewingDoc.amount   && <span className="font-mono-jet text-[#f6dd8c]">${parseFloat(viewingDoc.amount).toFixed(2)}</span>}
+                {viewingDoc.fileDate && <span className="font-mono-jet">{viewingDoc.fileDate}</span>}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Toast */}
         {toast && (
