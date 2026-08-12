@@ -8,9 +8,11 @@ export const modules: ModuleMap = {
   "./components/mockups/islandcity/CashFlowJournal.tsx": () => import("../components/mockups/islandcity/CashFlowJournal.tsx"),
   "./components/mockups/islandcity/CashFlowRunway.tsx": () => import("../components/mockups/islandcity/CashFlowRunway.tsx"),
   "./components/mockups/islandcity/CashFlowRunwayAltLayout.tsx": () => import("../components/mockups/islandcity/CashFlowRunwayAltLayout.tsx"),
+  "./components/mockups/islandcity/ExpenseProjection.tsx": () => import("../components/mockups/islandcity/ExpenseProjection.tsx"),
   "./components/mockups/islandcity/FinancesBold.tsx": () => import("../components/mockups/islandcity/FinancesBold.tsx"),
   "./components/mockups/islandcity/FinancesBoldChat.tsx": () => import("../components/mockups/islandcity/FinancesBoldChat.tsx"),
   "./components/mockups/islandcity/FinancesBoldNetBalance.tsx": () => import("../components/mockups/islandcity/FinancesBoldNetBalance.tsx"),
+  "./components/mockups/islandcity/IncomeProjection.tsx": () => import("../components/mockups/islandcity/IncomeProjection.tsx"),
   "./components/mockups/islandcity/ReceiptScanner.tsx": () => import("../components/mockups/islandcity/ReceiptScanner.tsx"),
   "./components/mockups/islandcity/Speedometer.tsx": () => import("../components/mockups/islandcity/Speedometer.tsx")
 };
