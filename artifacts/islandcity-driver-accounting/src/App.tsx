@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { Home, Banknote, ClipboardList, BarChart2, BookOpen } from "lucide-react";
+import { Home, Banknote, ClipboardList, BarChart2, BookOpen, Receipt, FileText } from "lucide-react";
 
 type TurnStatus = "START" | "BREAK" | "END";
 type Tab = "ENTRY" | "REGISTER" | "DASHBOARD" | "EXPENSES" | "REPORTS" | "LEDGER" | "FINANCES";
@@ -70,6 +70,7 @@ type Expense = {
   dueDate?: string;     // next due date for recurring expenses
   endDate?: string;     // stop projecting after this date (set by "Repeat until" feature)
   receiptDocId?: number; // cloud document ID — links to scanned receipt for audit trail
+  purpose?: "business" | "personal"; // business expense (IRS deductible) or personal
 };
 type BankAdjEntry = { id: string; date: string; time: string; prevBalance: number; newBalance: number; note: string; };
 type DocEntry = {
@@ -561,6 +562,7 @@ export default function App() {
     description: "", amount: "", date: new Date().toISOString().slice(0, 10),
     frequency: "none" as "none" | "daily" | "weekly" | "monthly",
     dueDate: "",
+    purpose: "business" as "business" | "personal",
   });
   const [editingExpenseId,   setEditingExpenseId]   = useState<string | null>(null);
   const [scanningReceipt,     setScanningReceipt]     = useState(false);
@@ -1411,6 +1413,7 @@ export default function App() {
       name: "", type: "Gasoline / Fuel", category: "Vehicle & Fuel",
       description: "", amount: "", date: new Date().toISOString().slice(0, 10),
       frequency: "none", dueDate: "",
+      purpose: "business",
     });
     setPendingReceiptDocId(null);
   };
@@ -1433,6 +1436,7 @@ export default function App() {
       frequency: expenseForm.frequency !== "none" ? expenseForm.frequency : undefined,
       dueDate: expenseForm.dueDate || undefined,
       receiptDocId: pendingReceiptDocId ?? undefined,
+      purpose: expenseForm.purpose,
     };
     if (editingExpenseId) {
       syncSaveExpenses(expenses.map(e => e.id === editingExpenseId ? newExpense : e));
@@ -2772,14 +2776,17 @@ export default function App() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-[22px] font-bold text-white">Expenses</h2>
-          {expPeriod === 'ALL'
-            ? <p className="text-[11px] text-neutral-400 mt-0.5 font-mono-jet">{expenses.length} registros · −${totalExpenses.toFixed(2)}</p>
-            : <p className="text-[11px] mt-0.5 font-mono-jet">
-                <span className="text-[#facc15] font-bold">{expPeriodFiltered.length} entries</span>
-                <span className="text-neutral-400"> · −${expPeriodFiltered.reduce((a,e)=>a+e.amount,0).toFixed(2)}</span>
-                <span className="text-neutral-400"> · total {expenses.length} / ${totalExpenses.toFixed(0)}</span>
+          {(() => {
+            const biz = expenses.filter(e => !e.purpose || e.purpose === "business").reduce((a,e)=>a+e.amount,0);
+            const per = expenses.filter(e => e.purpose === "personal").reduce((a,e)=>a+e.amount,0);
+            return (
+              <p className="text-[11px] text-neutral-400 mt-0.5 font-mono-jet">
+                <span className="text-[#4ade80]">🏢 −${biz.toFixed(2)}</span>
+                <span className="text-neutral-500"> · </span>
+                <span className="text-[#818cf8]">👤 −${per.toFixed(2)}</span>
               </p>
-          }
+            );
+          })()}
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -2840,6 +2847,22 @@ export default function App() {
               )}
             </div>{/* end flex items-center gap-2 */}
           </div>{/* end flex items-center justify-between */}
+
+          {/* ── Business / Personal toggle ── */}
+          <div className="flex gap-2">
+            {(["business", "personal"] as const).map(p => (
+              <button key={p} onClick={() => setExpenseForm(s => ({ ...s, purpose: p }))}
+                className={`flex-1 h-9 rounded-full text-[11px] font-bold tracking-[0.08em] uppercase transition-all border ${
+                  expenseForm.purpose === p
+                    ? p === "business"
+                      ? "bg-[#0d2010] border-[#4ade80]/50 text-[#4ade80]"
+                      : "bg-[#0e0e20] border-[#818cf8]/50 text-[#818cf8]"
+                    : "bg-black/40 border-[#2a2a2a] text-neutral-500 hover:text-neutral-300"
+                }`}>
+                {p === "business" ? "🏢 Business" : "👤 Personal"}
+              </button>
+            ))}
+          </div>
 
           {/* Vendor / Name dropdown */}
           <div>
@@ -3120,6 +3143,13 @@ export default function App() {
                                 📎 RECEIPT
                               </button>
                             )}
+                            <span className={`text-[9px] px-2 py-0.5 rounded-full border font-mono-jet ${
+                              (ex.purpose || "business") === "personal"
+                                ? "bg-[#818cf8]/10 text-[#818cf8] border-[#818cf8]/25"
+                                : "bg-[#4ade80]/10 text-[#4ade80] border-[#4ade80]/25"
+                            }`}>
+                              {(ex.purpose || "business") === "personal" ? "👤 Personal" : "🏢 Business"}
+                            </span>
                           </div>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
                             <span className="font-mono-jet text-[10px] text-neutral-400">{ex.date}</span>
@@ -3133,7 +3163,7 @@ export default function App() {
                           <div className="flex items-center gap-1 mt-2 justify-end">
                             <button onClick={()=>handleToggleExpenseVerified(ex.id)}
                               className={`w-7 h-7 rounded-full border text-[11px] flex items-center justify-center transition-all ${ex.verified?"bg-[#4ade80]/20 border-[#4ade80]/40 text-[#4ade80]":"bg-[#1e1e1e] border-[#2a2a2a] text-neutral-400"}`}>✓</button>
-                            <button onClick={()=>{setEditingExpenseId(ex.id);setExpenseForm({name:ex.vendor,type:ex.type||"Other",category:ex.category,description:ex.note,amount:String(ex.amount),date:ex.date,frequency:ex.frequency||"none",dueDate:ex.dueDate||""});setShowExpenseForm(true);setAddingCustomType(false);setAddingCustomCat(false);}}
+                            <button onClick={()=>{setEditingExpenseId(ex.id);setExpenseForm({name:ex.vendor,type:ex.type||"Other",category:ex.category,description:ex.note,amount:String(ex.amount),date:ex.date,frequency:ex.frequency||"none",dueDate:ex.dueDate||"",purpose:ex.purpose||"business"});setShowExpenseForm(true);setAddingCustomType(false);setAddingCustomCat(false);}}
                               className="w-7 h-7 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-400 text-[10px] flex items-center justify-center">✏️</button>
                             <button onClick={()=>handleDeleteExpense(ex.id)}
                               className="w-7 h-7 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-[#f87171] text-[10px] flex items-center justify-center">✕</button>
@@ -3226,14 +3256,16 @@ export default function App() {
   // Only posted (Ledger) trips count toward the financial statement
   const grossAll    = postedTrips.reduce((a, b) => a + b.grandTotal, 0);
 
-  const expensesAll = expenses.reduce((a, b) => a + b.amount, 0);
+  // Financial Statement uses BUSINESS expenses only (personal are excluded from IRS deductions)
+  const bizExpenses = expenses.filter(e => !e.purpose || e.purpose === "business");
+  const expensesAll = bizExpenses.reduce((a, b) => a + b.amount, 0);
   const netAll      = grossAll - expensesAll;
 
   // ── #1 — IRS-ready Financial Statement (string concat avoids nested backtick TSX issue)
   const handlePrintIRSStatement = () => {
     const yr = currentTime.getFullYear();
     const byCat: Record<string,number> = {};
-    expenses.forEach(e => { byCat[e.category] = (byCat[e.category]||0) + e.amount; });
+    bizExpenses.forEach(e => { byCat[e.category] = (byCat[e.category]||0) + e.amount; });
     const catRows = Object.entries(byCat).sort((a,b)=>b[1]-a[1])
       .map(([c,a])=>['<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">',c,'</td>',
         '<td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right;font-family:monospace">$',a.toFixed(2),'</td></tr>'].join('')).join('');
@@ -4337,16 +4369,15 @@ export default function App() {
         </div>{/* end inner h-[68px] row */}
         </div>{/* end sticky header wrapper */}
 
-        {/* Tab bar */}
+        {/* Tab bar — two symmetric rows */}
         <div className="sticky z-30 bg-black" style={{ top: 'calc(68px + env(safe-area-inset-top))' }}>
 
-          {/* ── Primary 5 tabs — icon + label, equal width, always visible ── */}
-          <div className="flex border-b border-[#1a1a1a]">
+          {/* ── Row 1: Operations (daily driving) ── */}
+          <div className="flex border-b border-[#181818]">
             {([
               { key: "DASHBOARD", Icon: Home,          label: "DASH",    color: "#f6dd8c" },
               { key: "ENTRY",     Icon: Banknote,      label: "REVENUE", color: "#f6dd8c" },
               { key: "REGISTER",  Icon: ClipboardList, label: "QUEUE",   color: "#fbbf24" },
-              { key: "FINANCES",  Icon: BarChart2,     label: "FINANCE", color: "#60a5fa" },
               { key: "LEDGER",    Icon: BookOpen,      label: "LEDGER",  color: "#4ade80" },
             ] as { key: Tab; Icon: React.ElementType; label: string; color: string }[]).map(({ key, Icon, label, color }) => {
               const active = activeTab === key;
@@ -4355,45 +4386,42 @@ export default function App() {
                            : 0;
               return (
                 <button key={key} onClick={() => setActiveTab(key)}
-                  className={`flex-1 h-[52px] flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
-                    active ? "" : "text-neutral-300 hover:text-neutral-200"
+                  className={`flex-1 h-[50px] flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
+                    active ? "" : "text-neutral-500 hover:text-neutral-300"
                   }`}
                   style={active ? { color } : undefined}>
-                  {/* Icon with optional badge overlay */}
                   <div className="relative flex items-center justify-center">
-                    <Icon size={17} strokeWidth={active ? 2 : 1.75} />
+                    <Icon size={16} strokeWidth={active ? 2 : 1.75} />
                     {badge > 0 && (
                       <span className={`absolute -top-[5px] -right-[7px] min-w-[13px] h-[13px] flex items-center justify-center rounded-full text-[7px] font-bold leading-none px-[3px] ${
-                        key === "LEDGER"
-                          ? "bg-[#4ade80]/25 text-[#4ade80]"
-                          : "bg-[#facc15]/25 text-[#f6dd8c]"
+                        key === "LEDGER" ? "bg-[#4ade80]/25 text-[#4ade80]" : "bg-[#facc15]/25 text-[#f6dd8c]"
                       }`}>{badge > 99 ? "99+" : badge}</span>
                     )}
                   </div>
-                  {/* Short label */}
-                  <span className="text-[7.5px] tracking-[0.12em] font-semibold">{label}</span>
-                  {/* Active indicator — color matches tab identity */}
-                  {active && (
-                    <span className="absolute bottom-0 left-3 right-3 h-[2px] rounded-full" style={{ background: color }} />
-                  )}
+                  <span className="text-[7px] tracking-[0.13em] font-semibold">{label}</span>
+                  {active && <span className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full" style={{ background: color }} />}
                 </button>
               );
             })}
           </div>
 
-          {/* ── Secondary tabs — EXPENSES & REPORTS ── */}
-          <div className="flex border-b border-[#111] bg-[#060606]">
-            {(["EXPENSES", "REPORTS"] as Tab[]).map(tab => {
-              const active = activeTab === tab;
+          {/* ── Row 2: Finances (money management) ── */}
+          <div className="flex border-b border-[#111] bg-[#050505]">
+            {([
+              { key: "EXPENSES", Icon: Receipt,  label: "EXPENSES", color: "#fb923c" },
+              { key: "FINANCES", Icon: BarChart2, label: "FINANCE",  color: "#60a5fa" },
+              { key: "REPORTS",  Icon: FileText,  label: "REPORTS",  color: "#a78bfa" },
+            ] as { key: Tab; Icon: React.ElementType; label: string; color: string }[]).map(({ key, Icon, label, color }) => {
+              const active = activeTab === key;
               return (
-                <button key={tab} onClick={() => setActiveTab(tab)}
-                  className={`px-6 h-[26px] flex items-center text-[8.5px] tracking-[0.14em] font-semibold relative transition-colors ${
-                    active ? "text-[#f6dd8c]" : "text-neutral-400 hover:text-neutral-400"
-                  }`}>
-                  {tab}
-                  {active && (
-                    <span className="absolute bottom-0 left-4 right-4 h-[1.5px] bg-gradient-to-r from-[#f6dd8c] to-[#d9b64f] rounded-full" />
-                  )}
+                <button key={key} onClick={() => setActiveTab(key)}
+                  className={`flex-1 h-[42px] flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
+                    active ? "" : "text-neutral-600 hover:text-neutral-400"
+                  }`}
+                  style={active ? { color } : undefined}>
+                  <Icon size={13} strokeWidth={active ? 2 : 1.75} />
+                  <span className="text-[6.5px] tracking-[0.14em] font-semibold">{label}</span>
+                  {active && <span className="absolute bottom-0 left-3 right-3 h-[1.5px] rounded-full" style={{ background: color }} />}
                 </button>
               );
             })}
