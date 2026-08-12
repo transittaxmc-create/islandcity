@@ -960,21 +960,16 @@ export default function App() {
   }, [tripForm.earnings, tripForm.tips, tripForm.extraCash, tripForm.toll, tripForm.platformFee]);
 
   const todayTrips = useMemo(() => {
-    // When a shift is active: only count trips entered AFTER the shift started.
-    // This prevents pre-shift trips from inflating grossToday and making $/hr
-    // show astronomically high numbers (e.g. $144 ÷ 40 seconds = $12,000/hr).
-    // When no shift is active: show all trips for today's calendar date.
-    if (shiftActive && clockInTime) {
-      const shiftStartMs = clockInTime.getTime();
-      return trips.filter(t => {
-        try { return new Date(t.timestamp || t.date).getTime() >= shiftStartMs; } catch { return false; }
-      });
-    }
+    // Always use today's calendar date — include ALL trips from today regardless
+    // of whether the shift was active when they were entered.
+    // This fixes the bug where trips entered before pressing START were excluded.
+    // The $/hr gauge uses activeHoursDecimal (clock-in → now minus breaks) as
+    // the denominator, which correctly represents productive time on the clock.
     const todayStr = currentTime.toDateString();
     return trips.filter(t => {
       try { return new Date(t.timestamp || t.date).toDateString() === todayStr; } catch { return true; }
     });
-  }, [trips, currentTime, shiftActive, clockInTime]);
+  }, [trips, currentTime]);
 
   const todayEarnings = useMemo(() => todayTrips.reduce((a, b) => a + b.grandTotal, 0), [todayTrips]);
   const totalTollsToday = useMemo(() => todayTrips.reduce((a, b) => a + b.toll, 0), [todayTrips]);
@@ -1533,105 +1528,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* Performance grid — DESGLOSE full-width · GASTOS | NET side by side */}
-      <div>
-        <p className="text-[10px] tracking-[0.22em] text-neutral-400 font-bold mb-2.5">SHIFT BREAKDOWN</p>
-        <div className="grid grid-cols-2 gap-3">
-          {/* DESGLOSE DEL DÍA — full width con bruto total a la derecha */}
-          <div className="col-span-2 rounded-xl p-3.5 flex items-start justify-between gap-3"
-            style={{ background: "#0d0d0d", border: "1px solid #1e1400" }}>
-            <div className="flex-1">
-              <p className="text-[9px] tracking-[0.18em] font-bold mb-2" style={{ color: "#d97706" }}>TODAY'S BREAKDOWN</p>
-              <div className="space-y-1">
-                {([
-                  ["Fare",   todayTrips.reduce((a,b) => a + b.earnings, 0)],
-                  ["Tips",   todayTrips.reduce((a,b) => a + b.tips + b.extra, 0)],
-                  ["Tolls",  totalTollsToday],
-                ] as [string,number][]).map(([label, val]) => (
-                  <div key={label} className="flex items-center gap-4">
-                    <span className="text-[10px] text-neutral-500 font-mono-jet w-14">{label}</span>
-                    <span className="font-mono-jet text-[12px] font-semibold text-neutral-100">${val.toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="text-right flex-shrink-0">
-              <p className="text-[8px] text-neutral-600 tracking-widest uppercase mb-1">GROSS TODAY</p>
-              <p className="font-mono-jet text-[22px] font-black text-[#f6dd8c] leading-none">${grossToday.toFixed(2)}</p>
-              <p className="text-[9px] text-neutral-600 mt-0.5">{todayTrips.length} trip{todayTrips.length !== 1 ? "s" : ""}</p>
-            </div>
-          </div>
-          {/* GASTOS DEL DÍA */}
-          <div className="rounded-xl p-3.5" style={{ background: "#0d0d0d", border: "1px solid #1e0a0a" }}>
-            <p className="text-[9px] tracking-[0.18em] font-bold text-[#ef4444]">TODAY'S EXPENSES</p>
-            <p className="font-mono-jet text-[22px] font-black text-[#ef4444] mt-2">
-              {expensesToday > 0 ? `−$${expensesToday.toFixed(2)}` : "$0.00"}
-            </p>
-            <p className="text-[10px] text-neutral-600 mt-1 font-mono-jet">
-              {expenses.filter(e => e.date === toYYYYMMDD(currentTime)).length} entries today
-            </p>
-          </div>
-          {/* GANANCIA NETA HOY */}
-          <div className="rounded-xl p-3.5" style={{ background: "#0d0d0d", border: `1px solid ${netToday >= 0 ? "#0a1e0a" : "#1e0a0a"}` }}>
-            <p className={`text-[9px] tracking-[0.18em] font-bold ${netToday >= 0 ? "text-[#4ade80]" : "text-[#ef4444]"}`}>NET EARNINGS TODAY</p>
-            <p className={`font-mono-jet text-[22px] font-black mt-2 ${netToday >= 0 ? "text-[#4ade80]" : "text-[#ef4444]"}`}>
-              ${netToday.toFixed(2)}
-            </p>
-            <p className="text-[10px] text-neutral-600 mt-1 font-mono-jet">income − expenses · weekly ref. ${weeklyTotal.toFixed(0)}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Financial Intelligence — monthly summary */}
-      <div className="rounded-[20px] p-4" style={{ background: "#0d0d0d", border: "1px solid #1e1e1e" }}>
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">Financial Intelligence</p>
-            <p className="text-[11px] font-semibold text-neutral-300 mt-0.5">
-              {currentTime.toLocaleDateString('en-US',{month:'long',year:'numeric'})}
-            </p>
-          </div>
-          <span className={`px-2.5 py-1 rounded-full text-[9px] font-bold tracking-[0.12em] border ${
-            _dbOnTrack
-              ? 'bg-[#052e16] border-[#4ade8044] text-[#4ade80]'
-              : 'bg-[#1a0f00] border-[#f6dd8c44] text-[#f6dd8c]'
-          }`}>
-            {_dbOnTrack ? '✓ On track' : '↗ Keep pushing'}
-          </span>
-        </div>
-        {/* Net balance — big */}
-        <div className="mb-3">
-          <p className="text-[8px] text-neutral-600 uppercase tracking-widest">Net balance</p>
-          <p className={`font-mono-jet text-[30px] font-black leading-none tracking-tight mt-0.5 ${_dbNetMonth>=0?'text-[#f6dd8c]':'text-red-400'}`}>
-            {_dbNetMonth>=0?'+':''}{_dbNetMonth.toLocaleString('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0})}
-          </p>
-        </div>
-        {/* Income / Expenses row */}
-        <div className="flex gap-4 mb-3">
-          <div>
-            <p className="text-[8px] text-neutral-600 uppercase tracking-widest">INCOME</p>
-            <p className="font-mono-jet text-[16px] font-bold text-[#4ade80] mt-0.5">${_dbEarnMonth.toLocaleString('en-US',{maximumFractionDigits:0})}</p>
-          </div>
-          <div>
-            <p className="text-[8px] text-neutral-600 uppercase tracking-widest">EXPENSES</p>
-            <p className="font-mono-jet text-[16px] font-bold text-red-400 mt-0.5">-${_dbExpMonth.toLocaleString('en-US',{maximumFractionDigits:0})}</p>
-          </div>
-        </div>
-        {/* Monthly goal progress */}
-        {_dbMonthGoal>0 && (
-          <div>
-            <div className="flex justify-between text-[9px] mb-1.5">
-              <span className="font-mono-jet text-neutral-500">${_dbEarnMonth.toFixed(0)} earned</span>
-              <span className="font-mono-jet text-[#f6dd8c]">Goal ${_dbMonthGoal.toLocaleString('en-US',{maximumFractionDigits:0})}</span>
-            </div>
-            <div className="h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden">
-              <div className="h-full rounded-full transition-all duration-700"
-                style={{width:`${_dbMonthPct}%`,background:'linear-gradient(90deg,#d9b64f,#f6dd8c)'}}/>
-            </div>
-          </div>
-        )}
-      </div>
-
       {/* Goal tracker */}
       <div className="rounded-[20px] p-4 space-y-4" style={{ background: "#0d0d0d", border: "1px solid #1e1e1e" }}>
         <div className="flex items-center justify-between">
@@ -1911,6 +1807,100 @@ export default function App() {
           </p>
         </div>
       </div>
+
+      {/* Financial Intelligence — monthly summary */}
+      <div className="rounded-[20px] p-4" style={{ background: "#0d0d0d", border: "1px solid #1e1e1e" }}>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">Financial Intelligence</p>
+            <p className="text-[11px] font-semibold text-neutral-300 mt-0.5">
+              {currentTime.toLocaleDateString('en-US',{month:'long',year:'numeric'})}
+            </p>
+          </div>
+          <span className={`px-2.5 py-1 rounded-full text-[9px] font-bold tracking-[0.12em] border ${
+            _dbOnTrack
+              ? 'bg-[#052e16] border-[#4ade8044] text-[#4ade80]'
+              : 'bg-[#1a0f00] border-[#f6dd8c44] text-[#f6dd8c]'
+          }`}>
+            {_dbOnTrack ? '✓ On track' : '↗ Keep pushing'}
+          </span>
+        </div>
+        <div className="mb-3">
+          <p className="text-[8px] text-neutral-600 uppercase tracking-widest">Net balance</p>
+          <p className={`font-mono-jet text-[30px] font-black leading-none tracking-tight mt-0.5 ${_dbNetMonth>=0?'text-[#f6dd8c]':'text-red-400'}`}>
+            {_dbNetMonth>=0?'+':''}{_dbNetMonth.toLocaleString('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0})}
+          </p>
+        </div>
+        <div className="flex gap-4 mb-3">
+          <div>
+            <p className="text-[8px] text-neutral-600 uppercase tracking-widest">INCOME</p>
+            <p className="font-mono-jet text-[16px] font-bold text-[#4ade80] mt-0.5">${_dbEarnMonth.toLocaleString('en-US',{maximumFractionDigits:0})}</p>
+          </div>
+          <div>
+            <p className="text-[8px] text-neutral-600 uppercase tracking-widest">EXPENSES</p>
+            <p className="font-mono-jet text-[16px] font-bold text-red-400 mt-0.5">-${_dbExpMonth.toLocaleString('en-US',{maximumFractionDigits:0})}</p>
+          </div>
+        </div>
+        {_dbMonthGoal>0 && (
+          <div>
+            <div className="flex justify-between text-[9px] mb-1.5">
+              <span className="font-mono-jet text-neutral-500">${_dbEarnMonth.toFixed(0)} earned</span>
+              <span className="font-mono-jet text-[#f6dd8c]">Goal ${_dbMonthGoal.toLocaleString('en-US',{maximumFractionDigits:0})}</span>
+            </div>
+            <div className="h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden">
+              <div className="h-full rounded-full transition-all duration-700"
+                style={{width:`${_dbMonthPct}%`,background:'linear-gradient(90deg,#d9b64f,#f6dd8c)'}}/>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Shift Breakdown — daily detail below the gauge */}
+      <div>
+        <p className="text-[10px] tracking-[0.22em] text-neutral-400 font-bold mb-2.5">SHIFT BREAKDOWN</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="col-span-2 rounded-xl p-3.5 flex items-start justify-between gap-3"
+            style={{ background: "#0d0d0d", border: "1px solid #1e1400" }}>
+            <div className="flex-1">
+              <p className="text-[9px] tracking-[0.18em] font-bold mb-2" style={{ color: "#d97706" }}>TODAY'S BREAKDOWN</p>
+              <div className="space-y-1">
+                {([
+                  ["Fare",  todayTrips.reduce((a,b) => a + b.earnings, 0)],
+                  ["Tips",  todayTrips.reduce((a,b) => a + b.tips + b.extra, 0)],
+                  ["Tolls", totalTollsToday],
+                ] as [string,number][]).map(([label, val]) => (
+                  <div key={label} className="flex items-center gap-4">
+                    <span className="text-[10px] text-neutral-500 font-mono-jet w-14">{label}</span>
+                    <span className="font-mono-jet text-[12px] font-semibold text-neutral-100">${val.toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="text-right flex-shrink-0">
+              <p className="text-[8px] text-neutral-600 tracking-widest uppercase mb-1">GROSS TODAY</p>
+              <p className="font-mono-jet text-[22px] font-black text-[#f6dd8c] leading-none">${grossToday.toFixed(2)}</p>
+              <p className="text-[9px] text-neutral-600 mt-0.5">{todayTrips.length} trip{todayTrips.length !== 1 ? "s" : ""}</p>
+            </div>
+          </div>
+          <div className="rounded-xl p-3.5" style={{ background: "#0d0d0d", border: "1px solid #1e0a0a" }}>
+            <p className="text-[9px] tracking-[0.18em] font-bold text-[#ef4444]">TODAY'S EXPENSES</p>
+            <p className="font-mono-jet text-[22px] font-black text-[#ef4444] mt-2">
+              {expensesToday > 0 ? `−$${expensesToday.toFixed(2)}` : "$0.00"}
+            </p>
+            <p className="text-[10px] text-neutral-600 mt-1 font-mono-jet">
+              {expenses.filter(e => e.date === toYYYYMMDD(currentTime)).length} entries today
+            </p>
+          </div>
+          <div className="rounded-xl p-3.5" style={{ background: "#0d0d0d", border: `1px solid ${netToday >= 0 ? "#0a1e0a" : "#1e0a0a"}` }}>
+            <p className={`text-[9px] tracking-[0.18em] font-bold ${netToday >= 0 ? "text-[#4ade80]" : "text-[#ef4444]"}`}>NET EARNINGS TODAY</p>
+            <p className={`font-mono-jet text-[22px] font-black mt-2 ${netToday >= 0 ? "text-[#4ade80]" : "text-[#ef4444]"}`}>
+              ${netToday.toFixed(2)}
+            </p>
+            <p className="text-[10px] text-neutral-600 mt-1 font-mono-jet">income − expenses · weekly ref. ${weeklyTotal.toFixed(0)}</p>
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 
