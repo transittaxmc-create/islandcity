@@ -2565,7 +2565,7 @@ export default function App() {
   const _earnYear  = trips.filter(t=>t.date>=_finYearStart).reduce((a,t)=>a+_tripNet(t),0);
 
   // Weekly bar chart (Mon i=0 … Sun i=6)
-  const _DAY = ['L','M','M','J','V','S','D'] as const;
+  const _DAY = ['L','Ma','Mi','J','V','S','D'] as const;
   const _DAY_FULL = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'] as const;
   const _weekChart = Array.from({length:7},(_,i)=>{
     const d=new Date(_finMon); d.setDate(_finMon.getDate()+i);
@@ -2581,7 +2581,8 @@ export default function App() {
   const _weekPlanTotal = workDays.reduce((s,iso)=>s+(dayTargets[iso]??dailyGoal),0);
   const _avgDayTarget  = workDays.length>0?_weekPlanTotal/workDays.length:dailyGoal;
   // Week: actual so far + planned targets for remaining work days this week
-  const _remainWkPlan  = workDays.filter(d=>d>_todayISO).reduce((s,iso)=>s+(dayTargets[iso]??dailyGoal),0);
+  const _todayRem      = workDays.includes(_todayISO) ? Math.max((dayTargets[_todayISO]??dailyGoal)-_earnToday,0) : 0;
+  const _remainWkPlan  = _todayRem + workDays.filter(d=>d>_todayISO).reduce((s,iso)=>s+(dayTargets[iso]??dailyGoal),0);
   const _projWeek      = _earnWeek + _remainWkPlan;
 
   // Month: actual + estimated remaining work days × avg daily target
@@ -2619,7 +2620,7 @@ export default function App() {
   // Ring — uses today's specific per-day target
   const _todayPlan = workDays.includes(_todayISO)?(dayTargets[_todayISO]??dailyGoal):dailyGoal;
   const _ringPct=Math.min(_earnToday/Math.max(_todayPlan,1),1);
-  const _R=52,_CX=60,_CY=60,_circ=2*Math.PI*_R,_arc=_circ*_ringPct;
+  const _CX=60,_CY=60;
 
   const FinancesContent = (
     <div className="space-y-4">
@@ -2630,57 +2631,24 @@ export default function App() {
         <p className="text-[10px] text-neutral-600 mt-0.5">Real vs. proyectado · actualizado en vivo</p>
       </div>
 
-      {/* ── HOY — anillo de progreso ── */}
-      <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
-        <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-3">HOY — META DIARIA</p>
-        <div className="flex items-center gap-4">
-          <svg width="120" height="120" viewBox="0 0 120 120" className="flex-shrink-0">
-            <circle cx={_CX} cy={_CY} r={_R} fill="none" stroke="#1e1e1e" strokeWidth="10"/>
-            <circle cx={_CX} cy={_CY} r={_R} fill="none"
-              stroke={_ringPct>=1?"#4ade80":"#d9b64f"} strokeWidth="10" strokeLinecap="round"
-              strokeDasharray={`${_arc} ${_circ}`} transform={`rotate(-90 ${_CX} ${_CY})`}/>
-            <text x={_CX} y={_CY-7} textAnchor="middle" fill="#f6dd8c" fontSize="17" fontWeight="bold" fontFamily="monospace">{Math.round(_ringPct*100)}%</text>
-            <text x={_CX} y={_CY+10} textAnchor="middle" fill="#6b7280" fontSize="8">${_earnToday.toFixed(0)} / ${_todayPlan}</text>
-          </svg>
-          <div className="flex-1 space-y-2.5">
-            <div>
-              <p className="text-[9px] text-neutral-500 uppercase tracking-widest">Ganado hoy</p>
-              <p className="text-[24px] font-bold text-[#f6dd8c] font-mono-jet leading-none">${_earnToday.toFixed(2)}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="bg-black rounded-lg p-2">
-                <p className="text-[8px] text-neutral-600">Falta para meta</p>
-                <p className="text-[13px] font-bold text-white">${Math.max(_todayPlan-_earnToday,0).toFixed(0)}</p>
-              </div>
-              <div className="bg-black rounded-lg p-2">
-                <p className="text-[8px] text-neutral-600">Tarifa bruta/h</p>
-                <p className="text-[13px] font-bold text-white">${perHourGross.toFixed(2)}</p>
-              </div>
-            </div>
-            {projectedFinish && (
-              <p className="text-[9px] text-[#4ade80]">✓ Meta ≈ {projectedFinish.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</p>
-            )}
-          </div>
-        </div>
-      </div>
 
       {/* ── ESTA SEMANA — barras ── */}
       <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
         <div className="flex items-center justify-between mb-2">
           <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">ESTA SEMANA</p>
           <div className="flex gap-3 text-[8px] text-neutral-600">
-            <span className="flex items-center gap-1"><span className="inline-block w-2 h-1.5 rounded bg-[#d9b64f]/30"/>Proyectado</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-2 h-1.5 rounded bg-[#d9b64f]/30"/>Planeado</span>
             <span className="flex items-center gap-1"><span className="inline-block w-2 h-1.5 rounded bg-[#f6dd8c]"/>Real</span>
           </div>
         </div>
-        <ResponsiveContainer width="100%" height={130}>
-          <BarChart data={_weekChart} barGap={2} barSize={16} margin={{top:0,right:0,bottom:0,left:0}}>
-            <XAxis dataKey="day" tick={{fill:'#6b7280',fontSize:10}} axisLine={false} tickLine={false}/>
+        <ResponsiveContainer width="100%" height={90}>
+          <BarChart data={_weekChart} barGap={2} barSize={14} margin={{top:0,right:0,bottom:0,left:0}}>
+            <XAxis dataKey="day" tick={{fill:'#6b7280',fontSize:9}} axisLine={false} tickLine={false}/>
             <YAxis hide domain={[0,Math.max(..._weekChart.map(d=>Math.max(d.projected,d.actual)),1)*1.15]}/>
             <Tooltip contentStyle={{background:'#1a1a1a',border:'1px solid #2a2a2a',borderRadius:8,fontSize:11}}
               labelStyle={{color:'#f6dd8c'}} formatter={(v:number)=>[`$${v.toFixed(0)}`]}/>
-            <Bar dataKey="projected" fill="#d9b64f22" radius={[4,4,0,0]}/>
-            <Bar dataKey="actual"    fill="#f6dd8c"   radius={[4,4,0,0]}/>
+            <Bar dataKey="projected" name="Planeado" fill="#d9b64f22" radius={[3,3,0,0]}/>
+            <Bar dataKey="actual"    name="Real"     fill="#f6dd8c"   radius={[3,3,0,0]}/>
           </BarChart>
         </ResponsiveContainer>
         <div className="flex justify-between mt-2 pt-2 border-t border-[#1e1e1e]">
@@ -2689,7 +2657,7 @@ export default function App() {
             <p className="text-[15px] font-bold text-[#f6dd8c] font-mono-jet">${_earnWeek.toFixed(2)}</p>
           </div>
           <div className="text-right">
-            <p className="text-[9px] text-neutral-500">Proyección fin de semana</p>
+            <p className="text-[9px] text-neutral-500">Plan fin de semana</p>
             <p className="text-[15px] font-bold text-white font-mono-jet">${_projWeek.toFixed(2)}</p>
           </div>
         </div>
@@ -2788,85 +2756,77 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── PLAN SEMANAL DE INGRESOS ── */}
+      {/* ── PLAN SEMANAL DE INGRESOS — layout horizontal compacto ── */}
       <div className="bg-[#101010] border border-[#1e1e1e] rounded-2xl p-4">
-        <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase mb-0.5">PLAN SEMANAL DE INGRESOS</p>
-        <p className="text-[10px] text-neutral-600 mb-4 leading-relaxed">
-          Activa los días que trabajas y escribe tu meta de ingreso diario para calcular tus proyecciones
-        </p>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[9px] tracking-[0.22em] text-neutral-500 font-bold uppercase">PLAN SEMANAL DE INGRESOS</p>
+          <span className="text-[9px] text-neutral-600">{workDays.length} día{workDays.length!==1?'s':''} activos</span>
+        </div>
 
-        <div className="space-y-2">
+        {/* Fila 1 — toggle por día */}
+        <div className="grid grid-cols-7 gap-1 mb-1.5">
           {([1,2,3,4,5,6,7] as const).map((iso,i)=>{
             const on = workDays.includes(iso);
-            const target = dayTargets[iso] ?? dailyGoal;
+            const abbr = ['L','Ma','Mi','J','V','S','D'][i];
             return (
-              <div key={iso}
-                className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-all ${
-                  on ? 'bg-black border-[#2a2a2a]' : 'bg-[#0a0a0a] border-[#141414]'
+              <button key={iso}
+                onClick={()=>setWorkDays(prev=>on?prev.filter(x=>x!==iso):[...prev,iso].sort())}
+                className={`flex flex-col items-center py-2 rounded-lg border transition-all active:scale-95 ${
+                  on ? 'bg-black border-[#f6dd8c]/50' : 'bg-[#0a0a0a] border-[#1a1a1a]'
                 }`}>
-                {/* Day label */}
-                <div className="w-[72px] flex-shrink-0">
-                  <p className="text-[7px] text-neutral-700 font-mono leading-none mb-0.5">[{iso}]</p>
-                  <p className={`text-[12px] font-semibold leading-none ${on?'text-white':'text-neutral-600'}`}>
-                    {_DAY_FULL[i]}
-                  </p>
-                </div>
+                <span className={`text-[9px] font-bold leading-none mb-1.5 ${on ? 'text-[#f6dd8c]' : 'text-neutral-600'}`}>{abbr}</span>
+                <span className={`w-3 h-3 rounded-full transition-colors ${on ? 'bg-[#f6dd8c]' : 'bg-[#252525]'}`}/>
+              </button>
+            );
+          })}
+        </div>
 
-                {/* Toggle pill */}
-                <button
-                  onClick={()=>setWorkDays(prev=>on?prev.filter(x=>x!==iso):[...prev,iso].sort())}
-                  className={`flex-shrink-0 w-10 h-[22px] rounded-full relative transition-colors ${on?'bg-[#f6dd8c]':'bg-[#2a2a2a]'}`}>
-                  <span className={`absolute top-[3px] w-4 h-4 rounded-full transition-all ${on?'left-[22px] bg-black':'left-[3px] bg-neutral-500'}`}/>
-                </button>
-
-                <p className={`text-[9px] flex-shrink-0 w-[50px] ${on?'text-neutral-500':'text-neutral-700'}`}>
-                  {on ? 'Trabajo' : 'Descanso'}
-                </p>
-
-                {/* Dollar input */}
-                <div className={`flex-1 flex items-center justify-end gap-1 ${!on?'opacity-25':''}`}>
-                  <span className="text-[11px] text-neutral-500">$</span>
-                  <input
-                    type="number" min="0" max="9999" step="10"
-                    value={on ? target : 0}
-                    disabled={!on}
-                    onChange={e=>setDayTargets(prev=>({...prev,[iso]:parseFloat(e.target.value)||0}))}
-                    className="w-16 text-right bg-transparent text-[15px] font-bold font-mono-jet text-[#f6dd8c] focus:outline-none disabled:text-neutral-700 border-b border-[#2a2a2a] pb-0.5"
-                  />
-                </div>
+        {/* Fila 2 — monto por día */}
+        <div className="grid grid-cols-7 gap-1 mb-4">
+          {([1,2,3,4,5,6,7] as const).map((iso)=>{
+            const on = workDays.includes(iso);
+            return (
+              <div key={iso} className={`transition-opacity ${on ? 'opacity-100' : 'opacity-20'}`}>
+                <input
+                  type="number" min="0" max="9999" step="10"
+                  value={on ? (dayTargets[iso] ?? dailyGoal) : ''}
+                  disabled={!on}
+                  placeholder="—"
+                  onChange={e=>setDayTargets(prev=>({...prev,[iso]:parseFloat(e.target.value)||0}))}
+                  className="w-full text-center bg-transparent text-[10px] font-bold font-mono-jet text-[#f6dd8c] focus:outline-none disabled:cursor-default border-b border-[#2a2a2a] pb-0.5 focus:border-[#f6dd8c]/50 transition-colors"
+                />
               </div>
             );
           })}
         </div>
 
-        {/* Weekly total — big like reference */}
-        <div className="mt-5 pt-4 border-t border-[#1e1e1e] text-center">
-          <p className="text-[9px] text-neutral-500 uppercase tracking-[0.2em] mb-1">TOTAL PROYECTADO SEMANAL</p>
-          <p className="text-[32px] font-bold text-[#f6dd8c] font-mono-jet leading-none">
-            ${_weekPlanTotal.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
-          </p>
-          <p className="text-[9px] text-neutral-600 mt-1">{workDays.length} día{workDays.length!==1?'s':''} de trabajo · promedio ${_avgDayTarget.toFixed(0)}/día</p>
-        </div>
-
-        {/* Monthly / Annual estimates */}
-        <div className="grid grid-cols-2 gap-2 mt-3">
-          <div className="bg-black border border-[#1e1e1e] rounded-xl p-3 text-center">
-            <p className="text-[8px] text-neutral-600 uppercase tracking-widest mb-0.5">Estimado mensual</p>
-            <p className="text-[14px] font-bold text-white font-mono-jet">${(_weekPlanTotal*4.33/1000).toFixed(1)}k</p>
+        {/* Total semanal + estimados */}
+        <div className="pt-3 border-t border-[#1e1e1e]">
+          <div className="flex items-baseline justify-between mb-0.5">
+            <p className="text-[9px] text-neutral-500 uppercase tracking-[0.15em]">Total semanal</p>
+            <p className="text-[22px] font-bold text-[#f6dd8c] font-mono-jet leading-none">
+              ${_weekPlanTotal.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})}
+            </p>
           </div>
-          <div className="bg-black border border-[#1e1e1e] rounded-xl p-3 text-center">
-            <p className="text-[8px] text-neutral-600 uppercase tracking-widest mb-0.5">Estimado anual</p>
-            <p className="text-[14px] font-bold text-white font-mono-jet">${(_annTarget/1000).toFixed(0)}k</p>
-          </div>
-        </div>
+          <p className="text-[8px] text-neutral-600 mb-3">promedio ${_avgDayTarget.toFixed(0)}/día</p>
 
-        {/* Default rate helper */}
-        <div className="mt-3 bg-[#0f0a00] border border-[#d9b64f]/20 rounded-xl p-3 flex items-center gap-2">
-          <span className="text-[#d9b64f] text-[14px]">💡</span>
-          <p className="text-[9px] text-[#a07820] leading-relaxed">
-            Los días sin meta específica usan la tasa base de <strong className="text-[#d9b64f]">${dailyGoal}/día</strong>.
-            Ajusta cada día según tus horas planeadas.
-          </p>
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <div className="bg-black border border-[#1e1e1e] rounded-xl p-2.5 text-center">
+              <p className="text-[8px] text-neutral-600 uppercase tracking-widest mb-0.5">Estimado mensual</p>
+              <p className="text-[13px] font-bold text-white font-mono-jet">${(_weekPlanTotal*4.33/1000).toFixed(1)}k</p>
+            </div>
+            <div className="bg-black border border-[#1e1e1e] rounded-xl p-2.5 text-center">
+              <p className="text-[8px] text-neutral-600 uppercase tracking-widest mb-0.5">Estimado anual</p>
+              <p className="text-[13px] font-bold text-white font-mono-jet">${(_annTarget/1000).toFixed(0)}k</p>
+            </div>
+          </div>
+
+          <div className="bg-[#0f0a00] border border-[#d9b64f]/20 rounded-xl p-2.5 flex items-center gap-2">
+            <span className="text-[#d9b64f] text-[12px]">💡</span>
+            <p className="text-[9px] text-[#a07820] leading-relaxed">
+              Días sin meta usan <strong className="text-[#d9b64f]">${dailyGoal}/día</strong> como base.
+            </p>
+          </div>
         </div>
       </div>
 
