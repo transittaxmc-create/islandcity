@@ -2675,7 +2675,10 @@ export default function App() {
       }
       const projExp=_recurWk*(daysInMo/7);
       const actualIncome=trips.filter(t=>t.date>=wStr&&t.date<=eStr).reduce((a,t)=>a+_tripNet(t),0);
-      const actualExp=expenses.filter(e=>(!e.frequency||e.frequency==='none')&&e.date>=wStr&&e.date<=eStr).reduce((a,e)=>a+e.amount,0);
+      // One-time expenses logged in this date range
+      const actualExpOneTime=expenses.filter(e=>(!e.frequency||e.frequency==='none')&&e.date>=wStr&&e.date<=eStr).reduce((a,e)=>a+e.amount,0);
+      // For past/current weeks include the pro-rated recurring cost so Net is accurate
+      const actualExp=actualExpOneTime+projExp;
       const isPast=eStr<_mwTodayStr, isCurrent=wStr<=_mwTodayStr&&eStr>=_mwTodayStr;
       const m1=ws.toLocaleDateString('en-US',{month:'short'}), m2=we.toLocaleDateString('en-US',{month:'short'});
       const label=m1===m2?`${ws.getDate()}–${we.getDate()} ${m1}`:`${ws.getDate()} ${m1}–${we.getDate()} ${m2}`;
@@ -2994,7 +2997,6 @@ export default function App() {
                         <p className="text-[7px] text-neutral-600 uppercase mb-0.5">Expenses</p>
                         <p className="font-mono-jet text-[11px] font-bold text-red-400">
                           ${w.actualExp.toFixed(0)}
-                          {w.projExp>0&&<span className="text-neutral-600 text-[8px]">+{w.projExp.toFixed(0)}</span>}
                         </p>
                       </div>
                       <div>
