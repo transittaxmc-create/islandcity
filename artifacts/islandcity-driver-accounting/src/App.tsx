@@ -24,6 +24,7 @@ type Trip = {
   date: string;
   timestamp: string;
   gps?: { lat: number; lng: number; acc?: number };
+  miles?: number;    // GPS miles tracked during this trip via watchPosition polyline
   status: "pending" | "posted";
   reviewed: boolean;
   postedAt?: string;
@@ -43,6 +44,7 @@ type TripForm = {
   notes: string;
   tripDate: string; // YYYY-MM-DD — actual date the trip happened (editable for late entries)
   tripTime: string; // HH:MM     — actual time the trip happened (editable for late entries)
+  tripMiles: string; // GPS miles accumulated by watchPosition during this trip
 };
 
 type GpsState = {
@@ -503,6 +505,12 @@ export default function App() {
   });
   const watchIdRef  = useRef<number | null>(null);
   const prevGpsRef  = useRef<{ lat: number; lng: number } | null>(null);
+  // ── Per-trip GPS mileage tracking ────────────────────────────────────────
+  const tripWatchIdRef  = useRef<number | null>(null);
+  const tripPrevGpsRef  = useRef<{ lat: number; lng: number } | null>(null);
+  const tripMilesRef    = useRef<number>(0); // mutable accumulator — avoids stale closures
+  const [tripTracking,      setTripTracking]      = useState(false);
+  const [tripMilesDisplay,  setTripMilesDisplay]  = useState(0);
   // Miles accumulated from GPS during the active shift — date-guarded, persisted alongside other shift keys
   const [shiftMiles, setShiftMiles] = useState<number>(() => {
     try {
@@ -547,6 +555,7 @@ export default function App() {
       platformFee: "", platform: "Uber", pickup: "", dropoff: "", notes: "",
       tripDate: toYYYYMMDD(_n),
       tripTime: _n.toTimeString().slice(0, 5),
+      tripMiles: "",
     };
   });
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -886,6 +895,57 @@ export default function App() {
     setGps(s => ({ ...s, status: "inactive" }));
   };
 
+  // ── Per-trip GPS mileage tracking ─────────────────────────────────────────
+  // Uses a SEPARATE watchPosition from the shift odometer so they don't
+  // interfere. Battery-friendly: updates triggered by device movement,
+  // not a polling timer. Watch is stopped immediately on trip save or cancel.
+  const startTripTracking = () => {
+    if (!navigator.geolocation) { showToast("GPS not available on this device"); return; }
+    // Reset accumulators
+    tripMilesRef.current   = 0;
+    tripPrevGpsRef.current = null;
+    setTripMilesDisplay(0);
+    // Clear any stale watch
+    if (tripWatchIdRef.current !== null) {
+      try { navigator.geolocation.clearWatch(tripWatchIdRef.current); } catch {}
+    }
+    const id = navigator.geolocation.watchPosition(
+      pos => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const acc = pos.coords.accuracy ?? 999;
+        // Only accumulate when GPS signal is good (< 80 m) and movement is plausible
+        if (tripPrevGpsRef.current && acc < 80) {
+          const km = haversineKm(tripPrevGpsRef.current.lat, tripPrevGpsRef.current.lng, lat, lng);
+          // >10 m movement, <1.5 km per update (noise/teleport filter — mirrors shift GPS)
+          if (km >= 0.01 && km < 1.5) {
+            tripMilesRef.current = +(tripMilesRef.current + km * 0.621371).toFixed(4);
+            setTripMilesDisplay(tripMilesRef.current);
+          }
+        }
+        tripPrevGpsRef.current = { lat, lng };
+      },
+      () => showToast("GPS signal lost — tracking paused"),
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+    );
+    tripWatchIdRef.current = id as unknown as number;
+    setTripTracking(true);
+    showToast("▶ Trip mileage tracking started");
+  };
+
+  const stopTripTracking = (saveToForm = true) => {
+    if (tripWatchIdRef.current !== null) {
+      try { navigator.geolocation.clearWatch(tripWatchIdRef.current); } catch {}
+      tripWatchIdRef.current = null;
+    }
+    setTripTracking(false);
+    if (saveToForm && tripMilesRef.current > 0) {
+      setTripForm(s => ({ ...s, tripMiles: tripMilesRef.current.toFixed(2) }));
+      showToast(`⏹ Tracking stopped — ${tripMilesRef.current.toFixed(2)} mi recorded`);
+    }
+    tripPrevGpsRef.current = null;
+  };
+
   const showToast = (msg: string, ms = 2500) => {
     setToast(msg);
     setTimeout(() => setToast(null), ms);
@@ -979,7 +1039,7 @@ export default function App() {
       setTripForm({
         reference: "", earnings: "", tips: "", extraCash: "", otherCashIncome: "", toll: "",
         platformFee: "", platform: "Uber", pickup: "", dropoff: "", notes: "",
-        tripDate: todayYMD, tripTime: new Date().toTimeString().slice(0, 5),
+        tripDate: todayYMD, tripTime: new Date().toTimeString().slice(0, 5), tripMiles: "",
       });
       setEditingId(null);
       showToast(`Nuevo día ${todayYMD} · pantallas limpias ✓`);
@@ -1259,8 +1319,17 @@ export default function App() {
 
   const resetForm = () => {
     const _nr = new Date();
+    // Stop any active trip tracking without saving miles (trip was cancelled/reset)
+    if (tripWatchIdRef.current !== null) {
+      try { navigator.geolocation.clearWatch(tripWatchIdRef.current); } catch {}
+      tripWatchIdRef.current = null;
+    }
+    tripPrevGpsRef.current = null;
+    tripMilesRef.current   = 0;
+    setTripTracking(false);
+    setTripMilesDisplay(0);
     setTripForm({ reference: "", earnings: "", tips: "", extraCash: "", otherCashIncome: "", toll: "", platformFee: "", platform: "Uber", pickup: "", dropoff: "", notes: "",
-      tripDate: toYYYYMMDD(_nr), tripTime: _nr.toTimeString().slice(0, 5) });
+      tripDate: toYYYYMMDD(_nr), tripTime: _nr.toTimeString().slice(0, 5), tripMiles: "" });
     setEditingId(null);
     setDetectedToll(null);
     setTollManuallyEdited(false);
@@ -1276,6 +1345,7 @@ export default function App() {
     const oci = parseFloat(tripForm.otherCashIncome) || 0;
     const tl  = parseFloat(tripForm.toll) || 0;
     const f   = parseFloat(tripForm.platformFee) || 0;
+    const tripMi = parseFloat(tripForm.tripMiles) || 0;
     const newTrip: Trip = {
       id: editingId || Date.now().toString(),
       reference: tripForm.reference.trim(),
@@ -1289,17 +1359,25 @@ export default function App() {
       date: tripForm.tripDate || toYYYYMMDD(now),
       timestamp: (() => { try { return new Date(`${tripForm.tripDate}T${tripForm.tripTime}:00`).toISOString(); } catch { return now.toISOString(); } })(),
       gps: gps.lat && gps.lng ? { lat: gps.lat, lng: gps.lng, acc: gps.acc ?? undefined } : undefined,
+      miles: tripMi > 0 ? tripMi : undefined,
       status: "pending" as const,
       reviewed: false,
     };
+    // Stop trip-level GPS tracking (if active) before clearing the form
+    if (tripWatchIdRef.current !== null) {
+      try { navigator.geolocation.clearWatch(tripWatchIdRef.current); } catch {}
+      tripWatchIdRef.current = null;
+    }
+    tripPrevGpsRef.current = null;
+    tripMilesRef.current   = 0;
+    setTripTracking(false);
+    setTripMilesDisplay(0);
     const updated = editingId ? trips.map(p => p.id === editingId ? newTrip : p) : [newTrip, ...trips];
     syncSaveTrips(updated);
     resetForm();
-    showToast(editingId ? `Trip updated ✓` : `Trip saved ✓ $${newTrip.grandTotal.toFixed(2)}`);
+    showToast(editingId ? `Trip updated ✓` : `Trip saved ✓ $${newTrip.grandTotal.toFixed(2)}${tripMi > 0 ? ` · ${tripMi.toFixed(2)} mi` : ""}`);
     setActiveTab("TRIPS"); setTripsTab("REGISTER");
     // ── Immediate cloud backup on every Register save ──────────────────────
-    // Runs in the background — does not block the UI. If offline, the
-    // 60-min auto-backup and the pagehide flush will catch it later.
     setTimeout(() => saveCloudBackup(), 0);
   };
 
@@ -1312,6 +1390,7 @@ export default function App() {
       platform: trip.platform, pickup: trip.pickup, dropoff: trip.dropoff, notes: trip.notes,
       tripDate: trip.date,
       tripTime: _tsDt.toTimeString().slice(0, 5),
+      tripMiles: trip.miles ? String(trip.miles) : "",
     });
     setActiveTab("TRIPS"); setTripsTab("ENTRY");
   };
@@ -2368,6 +2447,71 @@ export default function App() {
         )}
       </div>
 
+      {/* ══ TRIP MILEAGE TRACKER ══════════════════════════════════ */}
+      <div className="border-t border-[#252525] pt-3 pb-3">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[9px] tracking-[0.2em] text-neutral-500 font-bold uppercase">TRIP MILEAGE</p>
+          {tripTracking && (
+            <span className="flex items-center gap-1 text-[9px] font-bold text-[#4ade80]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse inline-block" />
+              TRACKING
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Start / Stop button */}
+          {!tripTracking ? (
+            <button type="button" onClick={startTripTracking}
+              className="flex items-center gap-2 h-11 px-4 rounded-xl border border-[#2e2e2e] bg-[#0a0a0a] active:scale-95 transition-all">
+              <span className="text-[#facc15] text-[16px]">▶</span>
+              <span className="text-[11px] font-bold text-white tracking-[0.06em]">START TRACKING</span>
+            </button>
+          ) : (
+            <button type="button" onClick={() => stopTripTracking(true)}
+              className="flex items-center gap-2 h-11 px-4 rounded-xl border border-[#4ade80]/40 bg-[#052e16]/30 active:scale-95 transition-all">
+              <span className="text-[#f87171] text-[16px]">⏹</span>
+              <span className="text-[11px] font-bold text-[#4ade80] tracking-[0.06em]">STOP &amp; SAVE</span>
+            </button>
+          )}
+          {/* Miles display / editable field */}
+          <div className="flex-1 flex items-center gap-1.5 h-11 rounded-xl border bg-[#080808] px-3"
+            style={{ borderColor: parseFloat(tripForm.tripMiles) > 0 ? "#facc15" : "#2e2e2e" }}>
+            <span className="font-mono-jet text-[20px] font-bold"
+              style={{ color: parseFloat(tripForm.tripMiles) > 0 ? "#facc15" : (tripTracking ? "#4ade80" : "#555") }}>
+              {tripTracking ? tripMilesDisplay.toFixed(2) : (tripForm.tripMiles || "0.00")}
+            </span>
+            <span className="text-[11px] text-neutral-500 font-mono-jet">mi</span>
+            {/* Allow manual override when not tracking */}
+            {!tripTracking && (
+              <input
+                inputMode="decimal"
+                value={tripForm.tripMiles}
+                onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, tripMiles: e.target.value })); }}
+                placeholder="0.00"
+                className="absolute opacity-0 w-0 h-0 pointer-events-none"
+                aria-hidden
+              />
+            )}
+          </div>
+          {/* Manual edit button — tap to type miles manually */}
+          {!tripTracking && (
+            <button type="button"
+              onClick={() => {
+                const v = window.prompt("Enter miles manually:", tripForm.tripMiles || "0");
+                if (v !== null && numericFilter(v)) setTripForm(s => ({ ...s, tripMiles: v }));
+              }}
+              className="h-11 w-11 rounded-xl border border-[#2e2e2e] bg-[#0a0a0a] flex items-center justify-center active:scale-95 transition-all text-neutral-400 text-[14px]">
+              ✏️
+            </button>
+          )}
+        </div>
+        <p className="text-[9px] text-neutral-600 mt-1.5 leading-relaxed">
+          {tripTracking
+            ? "GPS is recording your route. Tap STOP & SAVE when you arrive."
+            : "Tap ▶ before you start driving. Or enter miles manually with ✏️."}
+        </p>
+      </div>
+
       {/* ══ ADDITIONAL INCOME & DEDUCTIONS ═══════════════════════ */}
       <div className="border-t border-[#252525] pt-3 pb-3">
         <p className="text-[9px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-2">ADDITIONAL INCOME &amp; DEDUCTIONS</p>
@@ -2666,6 +2810,7 @@ export default function App() {
                             {t.extra > 0 && <span>Extra ${t.extra.toFixed(2)}</span>}
                             {t.toll > 0  && <span>Toll ${t.toll.toFixed(2)}</span>}
                             {t.fee > 0   && <span>Fee −${t.fee.toFixed(2)}</span>}
+                            {t.miles && t.miles > 0 && <span className="text-[#facc15]">🛣 {t.miles.toFixed(2)} mi</span>}
                             {t.gps       && <span>📍 {t.gps.lat.toFixed(4)},{t.gps.lng.toFixed(4)}</span>}
                           </div>
                           {t.notes && <p className="text-[11px] text-neutral-400 mt-1 leading-[1.4] break-words">{t.notes}</p>}
