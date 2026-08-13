@@ -98,6 +98,22 @@ type VoiceResult = {
     vendor?: string; amount?: number; category?: string; description?: string;
   };
 };
+type BroadcastEval = {
+  id: string;
+  timestamp: string;
+  recommendation: "GO" | "SKIP" | "MAYBE";
+  confidence: "high" | "medium" | "low";
+  jobDetails: {
+    pickup: string; dropoff: string; fare: string;
+    distance: string; estimatedDuration: string; platform: string;
+  };
+  trafficNote: string;
+  estimatedNetDollars: number;
+  estimatedHourlyRate: number;
+  factors: string[];
+  tip: string;
+  accepted?: boolean;
+};
 type DocEntry = {
   id: number; type: string;
   fileDate: string | null; category: string | null; vendor: string | null; amount: string | null;
@@ -609,6 +625,7 @@ export default function App() {
   const statementInputRef = useRef<HTMLInputElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const voiceRecRef = useRef<any>(null);
+  const broadcastInputRef = useRef<HTMLInputElement>(null);
 
   // Custom expense types & categories (user-added items, persisted)
   const [customExpenseTypes, setCustomExpenseTypes] = useState<string[]>(() => {
@@ -688,6 +705,15 @@ export default function App() {
   const [voiceParsing, setVoiceParsing] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [showVoicePanel, setShowVoicePanel] = useState(false);
+
+  // ── Broadcast eval ────────────────────────────────────────────────────────
+  const [showBroadcastModal, setShowBroadcastModal] = useState(false);
+  const [broadcastCapturing, setBroadcastCapturing] = useState(false);
+  const [broadcastResult, setBroadcastResult] = useState<BroadcastEval | null>(null);
+  const [broadcastError, setBroadcastError] = useState<string | null>(null);
+  const [broadcastHistory, setBroadcastHistory] = useState<BroadcastEval[]>(() => {
+    try { return JSON.parse(localStorage.getItem("ic-broadcast-history") || "[]"); } catch { return []; }
+  });
 
   // Live clock
   useEffect(() => {
@@ -1636,6 +1662,83 @@ export default function App() {
   const stopVoice = () => {
     voiceRecRef.current?.stop?.();
     setVoiceListening(false);
+  };
+
+  // ── Broadcast eval handlers ────────────────────────────────────────────────
+  const handleBroadcastCapture = async (file: File) => {
+    setBroadcastCapturing(true);
+    setBroadcastError(null);
+    setBroadcastResult(null);
+    try {
+      // Compress to JPEG 1024px max before sending
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            const MAX = 1024;
+            const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+            canvas.width = Math.round(img.width * scale);
+            canvas.height = Math.round(img.height * scale);
+            const ctx = canvas.getContext("2d")!;
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL("image/jpeg", 0.85));
+          };
+          img.onerror = reject;
+          img.src = e.target!.result as string;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const base64 = dataUrl.split(",")[1];
+      const res = await fetch("/api/broadcast-eval", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageBase64: base64,
+          mimeType: "image/jpeg",
+          currentTime: new Date().toISOString(),
+          driverLocation: gps.lat != null ? { lat: gps.lat, lng: gps.lng } : undefined,
+        }),
+      });
+      const data = await res.json() as Omit<BroadcastEval, "id" | "timestamp"> & { error?: string };
+      if (!res.ok) throw new Error(data.error || "Evaluation failed");
+
+      const evalResult: BroadcastEval = {
+        id: Date.now().toString(),
+        timestamp: new Date().toISOString(),
+        recommendation: data.recommendation,
+        confidence: data.confidence,
+        jobDetails: data.jobDetails,
+        trafficNote: data.trafficNote,
+        estimatedNetDollars: data.estimatedNetDollars,
+        estimatedHourlyRate: data.estimatedHourlyRate,
+        factors: data.factors,
+        tip: data.tip,
+      };
+
+      setBroadcastResult(evalResult);
+      setBroadcastHistory(prev => {
+        const updated = [evalResult, ...prev].slice(0, 20);
+        try { localStorage.setItem("ic-broadcast-history", JSON.stringify(updated)); } catch {}
+        return updated;
+      });
+    } catch (err: unknown) {
+      setBroadcastError(err instanceof Error ? err.message : "Evaluation failed. Please try again.");
+    } finally {
+      setBroadcastCapturing(false);
+    }
+  };
+
+  const markBroadcastAccepted = (id: string, accepted: boolean) => {
+    setBroadcastHistory(prev => {
+      const updated = prev.map(e => e.id === id ? { ...e, accepted } : e);
+      try { localStorage.setItem("ic-broadcast-history", JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    setBroadcastResult(prev => prev && prev.id === id ? { ...prev, accepted } : prev);
   };
 
   // ── Cloud backup — sends full snapshot to the API server → PostgreSQL ─────
@@ -5192,6 +5295,286 @@ export default function App() {
           {activeTab === "REPORTS"   && ReportsContent}
         </div>
 
+        {/* ── Broadcast Eval Modal ─────────────────────────────────────────── */}
+        {showBroadcastModal && (() => {
+          // Per-base stats computed inline for modal (week start mirrors _finWeekStart)
+          const _bwd = currentTime.getDay();
+          const _bMon = new Date(currentTime);
+          _bMon.setDate(currentTime.getDate() + (_bwd === 0 ? -6 : 1 - _bwd));
+          const _bWeekStart = toYYYYMMDD(_bMon);
+          const _bNet = (t: Trip) => (t.earnings||0)+(t.tips||0)+(t.extra||0)+(t.otherCash||0)+(t.toll||0);
+          const _bByPlat: Record<string,{week:number;total:number;count:number;weekCount:number}> = {};
+          trips.forEach(t => {
+            if (!_bByPlat[t.platform]) _bByPlat[t.platform] = { week:0, total:0, count:0, weekCount:0 };
+            const n = _bNet(t);
+            _bByPlat[t.platform].total += n;
+            _bByPlat[t.platform].count++;
+            if (t.date >= _bWeekStart) { _bByPlat[t.platform].week += n; _bByPlat[t.platform].weekCount++; }
+          });
+          const _bRows = Object.entries(_bByPlat).sort((a,b)=>b[1].week-a[1].week);
+
+          const recColor = broadcastResult?.recommendation === "GO" ? "#4ade80"
+            : broadcastResult?.recommendation === "SKIP" ? "#f87171" : "#facc15";
+          const recBg = broadcastResult?.recommendation === "GO"
+            ? "linear-gradient(135deg,#071410,#0a1a10)"
+            : broadcastResult?.recommendation === "SKIP"
+            ? "linear-gradient(135deg,#140707,#1a0a0a)"
+            : "linear-gradient(135deg,#141000,#1a1600)";
+          const recBorder = broadcastResult?.recommendation === "GO"
+            ? "rgba(74,222,128,0.28)" : broadcastResult?.recommendation === "SKIP"
+            ? "rgba(248,113,113,0.28)" : "rgba(250,204,21,0.28)";
+
+          return (
+            <div className="fixed inset-0 z-[60] bg-black/96 flex flex-col"
+              style={{ paddingTop:'env(safe-area-inset-top)', paddingBottom:'env(safe-area-inset-bottom)' }}>
+
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-[#1c1c1c] flex-shrink-0">
+                <div>
+                  <p className="text-[12px] font-black text-[#c4b5fd] tracking-[0.18em]">📡 BROADCAST</p>
+                  <p className="text-[9px] text-neutral-600 tracking-[0.1em] mt-0.5">AI JOB EVALUATOR · NYC TRAFFIC</p>
+                </div>
+                <button onClick={() => { setShowBroadcastModal(false); setBroadcastResult(null); setBroadcastError(null); setBroadcastCapturing(false); }}
+                  className="w-8 h-8 rounded-full bg-[#1e1e1e] flex items-center justify-center text-neutral-500 text-[13px]">✕</button>
+              </div>
+
+              {/* Scrollable body */}
+              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+
+                {/* ── Capture button (idle) */}
+                {!broadcastCapturing && !broadcastResult && !broadcastError && (
+                  <div>
+                    <button onClick={() => broadcastInputRef.current?.click()}
+                      className="w-full h-[68px] rounded-2xl flex items-center justify-center gap-3 font-bold text-[14px] tracking-wide transition-all active:scale-[0.97]"
+                      style={{ background:"linear-gradient(135deg,#110d1e,#0d0a18)", border:"1.5px solid rgba(167,139,250,0.35)", color:"#c4b5fd" }}>
+                      <span className="text-[26px]">📸</span>
+                      Capture Job Offer
+                    </button>
+                    <p className="text-[10px] text-neutral-600 text-center mt-2">Photo or screenshot of any rideshare job offer</p>
+                  </div>
+                )}
+
+                {/* ── AI processing */}
+                {broadcastCapturing && (
+                  <div className="flex flex-col items-center justify-center py-14 gap-5">
+                    <div className="w-16 h-16 rounded-full flex items-center justify-center"
+                      style={{ background:"#0e0817", border:"1.5px solid rgba(167,139,250,0.3)" }}>
+                      <span className="text-[30px]">🤖</span>
+                    </div>
+                    <div>
+                      <p className="text-[13px] font-bold text-[#c4b5fd] text-center tracking-wide animate-pulse">ANALYZING JOB…</p>
+                      <p className="text-[11px] text-neutral-500 text-center mt-1">Checking traffic + earnings potential</p>
+                    </div>
+                    <div className="flex gap-[6px]">
+                      {[0,1,2].map(i => (
+                        <div key={i} className="w-2 h-2 rounded-full bg-[#a78bfa] animate-bounce"
+                          style={{ animationDelay: i*0.15+"s" }} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Error */}
+                {broadcastError && !broadcastCapturing && (
+                  <div className="bg-[#1a0808] border border-[#f87171]/20 rounded-2xl p-5 text-center space-y-2">
+                    <p className="text-[22px]">⚠️</p>
+                    <p className="text-[13px] text-[#f87171] font-bold">Evaluation failed</p>
+                    <p className="text-[11px] text-neutral-400 leading-relaxed">{broadcastError}</p>
+                    <button onClick={() => { setBroadcastError(null); broadcastInputRef.current?.click(); }}
+                      className="mt-1 text-[11px] text-[#a78bfa] font-bold">Try again →</button>
+                  </div>
+                )}
+
+                {/* ── Result card */}
+                {broadcastResult && !broadcastCapturing && (() => {
+                  const ev = broadcastResult;
+                  return (
+                    <div className="rounded-2xl overflow-hidden"
+                      style={{ background: recBg, border: `1.5px solid ${recBorder}` }}>
+
+                      {/* Recommendation hero */}
+                      <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+                        <span className="text-[38px] leading-none">
+                          {ev.recommendation === "GO" ? "✅" : ev.recommendation === "SKIP" ? "❌" : "⚠️"}
+                        </span>
+                        <div>
+                          <p className="text-[30px] font-black leading-none" style={{ color: recColor }}>{ev.recommendation}</p>
+                          <p className="text-[9px] font-bold tracking-[0.14em] mt-0.5 opacity-60" style={{ color: recColor }}>
+                            {ev.confidence.toUpperCase()} CONFIDENCE
+                          </p>
+                        </div>
+                        {ev.estimatedNetDollars > 0 && (
+                          <div className="ml-auto text-right">
+                            <p className="text-[24px] font-black text-white leading-tight">${ev.estimatedNetDollars.toFixed(2)}</p>
+                            <p className="text-[9px] text-neutral-500 tracking-wide">EST. NET</p>
+                            {ev.estimatedHourlyRate > 0 && (
+                              <p className="text-[10px] font-bold text-[#f6dd8c] mt-0.5">${ev.estimatedHourlyRate.toFixed(0)}/hr</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Job details */}
+                      {(ev.jobDetails.pickup || ev.jobDetails.dropoff) && (
+                        <div className="mx-4 mb-3 bg-black/30 rounded-xl p-3 space-y-2">
+                          {ev.jobDetails.pickup && (
+                            <div className="flex gap-2 items-start">
+                              <span className="text-[9px] text-neutral-500 w-10 shrink-0 pt-0.5 font-bold">FROM</span>
+                              <span className="text-[12px] text-white font-medium leading-tight">{ev.jobDetails.pickup}</span>
+                            </div>
+                          )}
+                          {ev.jobDetails.dropoff && (
+                            <div className="flex gap-2 items-start">
+                              <span className="text-[9px] text-neutral-500 w-10 shrink-0 pt-0.5 font-bold">TO</span>
+                              <span className="text-[12px] text-white font-medium leading-tight">{ev.jobDetails.dropoff}</span>
+                            </div>
+                          )}
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1.5 border-t border-white/[0.06]">
+                            {ev.jobDetails.fare !== "not shown" && (
+                              <div><p className="text-[12px] text-white font-bold">{ev.jobDetails.fare}</p><p className="text-[8px] text-neutral-500 tracking-wide">FARE</p></div>
+                            )}
+                            {ev.jobDetails.distance !== "not shown" && (
+                              <div><p className="text-[12px] text-white font-bold">{ev.jobDetails.distance}</p><p className="text-[8px] text-neutral-500 tracking-wide">DIST</p></div>
+                            )}
+                            {ev.jobDetails.estimatedDuration !== "not shown" && (
+                              <div><p className="text-[12px] text-white font-bold">{ev.jobDetails.estimatedDuration}</p><p className="text-[8px] text-neutral-500 tracking-wide">TIME</p></div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Traffic note */}
+                      {ev.trafficNote && (
+                        <div className="mx-4 mb-3 flex gap-2 items-start bg-black/20 rounded-xl px-3 py-2">
+                          <span className="text-[14px] shrink-0">🚦</span>
+                          <p className="text-[11px] text-neutral-400 leading-relaxed">{ev.trafficNote}</p>
+                        </div>
+                      )}
+
+                      {/* Factors */}
+                      {ev.factors.length > 0 && (
+                        <div className="mx-4 mb-3 space-y-1.5">
+                          {ev.factors.map((f, i) => (
+                            <div key={i} className="flex gap-2 items-start">
+                              <span className="text-[10px] text-neutral-600 mt-0.5 shrink-0">•</span>
+                              <p className="text-[11px] text-neutral-300 leading-relaxed">{f}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Tip */}
+                      {ev.tip && (
+                        <div className="mx-4 mb-3 flex gap-2 items-start">
+                          <span className="text-[13px] shrink-0">💡</span>
+                          <p className="text-[11px] text-neutral-400 italic leading-relaxed">{ev.tip}</p>
+                        </div>
+                      )}
+
+                      {/* Accept / Skip buttons */}
+                      <div className="flex gap-2 px-4 pb-4">
+                        <button onClick={() => { markBroadcastAccepted(ev.id, true); showToast("✅ Logged as accepted"); }}
+                          className={`flex-1 h-10 rounded-xl text-[12px] font-bold border transition-all ${ev.accepted === true ? "bg-[#4ade80]/20 text-[#4ade80] border-[#4ade80]/40" : "bg-transparent text-neutral-500 border-[#2e2e2e]"}`}>
+                          ✅ Took it
+                        </button>
+                        <button onClick={() => { markBroadcastAccepted(ev.id, false); showToast("❌ Logged as skipped"); }}
+                          className={`flex-1 h-10 rounded-xl text-[12px] font-bold border transition-all ${ev.accepted === false ? "bg-[#f87171]/15 text-[#f87171] border-[#f87171]/35" : "bg-transparent text-neutral-500 border-[#2e2e2e]"}`}>
+                          ❌ Skipped
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Evaluate another button (shown after a result) */}
+                {broadcastResult && !broadcastCapturing && (
+                  <button onClick={() => { setBroadcastResult(null); setBroadcastError(null); setTimeout(() => broadcastInputRef.current?.click(), 80); }}
+                    className="w-full h-11 rounded-xl text-[12px] font-bold text-[#a78bfa] border border-[#a78bfa]/20">
+                    📸 Evaluate another job
+                  </button>
+                )}
+
+                {/* ── Per-base earnings stats */}
+                {!broadcastCapturing && (
+                  <div>
+                    <p className="text-[10px] font-bold text-neutral-600 tracking-[0.12em] uppercase mb-2.5">
+                      Earnings by Base · This Week
+                    </p>
+                    {_bRows.length === 0 ? (
+                      <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl py-6 text-center">
+                        <p className="text-[11px] text-neutral-600">No trips this week yet</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {_bRows.map(([plat, vals]) => {
+                          const avgPerTrip = vals.count > 0 ? vals.total / vals.count : 0;
+                          return (
+                            <div key={plat}
+                              className="bg-[#0c0c0c] border border-[#1e1e1e] rounded-xl px-3 py-2.5 flex items-center gap-3">
+                              <PlatformBadge platform={plat} size={30} />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[12px] font-bold text-white truncate">{plat}</p>
+                                <p className="text-[9px] text-neutral-500">
+                                  {vals.weekCount} trip{vals.weekCount !== 1 ? "s" : ""} · avg ${avgPerTrip.toFixed(2)}
+                                </p>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className="text-[15px] font-black text-[#f6dd8c]">${vals.week.toFixed(2)}</p>
+                                <p className="text-[8px] text-neutral-600">THIS WEEK</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Recent eval history (shown on idle screen only) */}
+                {!broadcastCapturing && !broadcastResult && broadcastHistory.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-bold text-neutral-600 tracking-[0.12em] uppercase mb-2.5">Recent Evaluations</p>
+                    <div className="space-y-1.5">
+                      {broadcastHistory.slice(0, 6).map(ev => (
+                        <button key={ev.id} onClick={() => setBroadcastResult(ev)}
+                          className="w-full bg-[#0c0c0c] border border-[#1e1e1e] rounded-xl px-3 py-2.5 flex items-center gap-3 text-left active:opacity-70">
+                          <span className="text-[18px] shrink-0">
+                            {ev.recommendation === "GO" ? "✅" : ev.recommendation === "SKIP" ? "❌" : "⚠️"}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[11px] font-bold text-white truncate">
+                              {ev.jobDetails.pickup || "Job offer"}
+                              {ev.jobDetails.dropoff ? ` → ${ev.jobDetails.dropoff}` : ""}
+                            </p>
+                            <p className="text-[9px] text-neutral-600">
+                              {new Date(ev.timestamp).toLocaleString("en-US", { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" })}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {ev.estimatedNetDollars > 0 && (
+                              <p className="text-[12px] font-bold text-neutral-400">${ev.estimatedNetDollars.toFixed(2)}</p>
+                            )}
+                            {ev.accepted !== undefined && (
+                              <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${ev.accepted ? "bg-[#4ade80]/15 text-[#4ade80]" : "bg-[#f87171]/15 text-[#f87171]"}`}>
+                                {ev.accepted ? "TOOK" : "SKIP"}
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              </div>{/* end scrollable body */}
+
+              {/* Hidden file input */}
+              <input ref={broadcastInputRef} type="file" accept="image/*" className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleBroadcastCapture(f); e.target.value = ""; }} />
+            </div>
+          );
+        })()}
+
         {/* ── Voice Entry Panel + Mic Button ─────────────────────────────── */}
         {showVoicePanel && (
           <div className="fixed bottom-[138px] left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-[440px] z-50"
@@ -5260,6 +5643,20 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {/* 📡 Broadcast button */}
+        <button
+          onClick={() => setShowBroadcastModal(true)}
+          className="fixed bottom-[76px] right-[72px] z-50 w-[52px] h-[52px] rounded-full flex items-center justify-center transition-all active:scale-90"
+          style={{
+            background: showBroadcastModal ? "#0e0a1a" : "#111111",
+            border: showBroadcastModal ? "2px solid rgba(167,139,250,0.6)" : "2px solid rgba(167,139,250,0.25)",
+            boxShadow: showBroadcastModal
+              ? "0 0 22px rgba(167,139,250,0.3), 0 4px 16px rgba(0,0,0,0.7)"
+              : "0 0 18px rgba(167,139,250,0.06), 0 4px 16px rgba(0,0,0,0.6)",
+          }}>
+          <span className="text-[22px] select-none">📡</span>
+        </button>
 
         {/* Mic button */}
         <button
