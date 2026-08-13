@@ -736,7 +736,7 @@ export default function App() {
   // ── Broadcast eval ────────────────────────────────────────────────────────
   // ── AI Assistant tab ─────────────────────────────────────────────────────
   const [aiPeriod, setAiPeriod] = useState<"day" | "week" | "month">("week");
-  const [aiSimPercent, setAiSimPercent] = useState(0);
+  const [aiSimTarget, setAiSimTarget] = useState(0); // $/hr goal, 0 = off
   const [limoOverlayOn, setLimoOverlayOn] = useState(false);
   const [limoMinHourly, setLimoMinHourly] = useState<number>(() => {
     try { return parseFloat(localStorage.getItem("ic-limo-min-hr") ?? "40") || 40; } catch { return 40; }
@@ -747,11 +747,12 @@ export default function App() {
   interface LimoOffer {
     decision: string; company: string; price: number; pickupTime: string;
     origin: string; destination: string; hourlyRate: number; perMileRate: number;
-    distance: number; estimatedMinutes: number;
+    distance: number; estimatedMinutes: number; isBest?: boolean;
   }
-  const [limoCapturing, setLimoCapturing] = useState(false);
-  const [limoResult,    setLimoResult]    = useState<LimoOffer | null>(null);
-  const [limoError,     setLimoError]     = useState<string | null>(null);
+  const [limoCapturing,  setLimoCapturing]  = useState(false);
+  const [limoOffers,     setLimoOffers]     = useState<LimoOffer[]>([]);
+  const [limoOfferIdx,   setLimoOfferIdx]   = useState(0);
+  const [limoError,      setLimoError]      = useState<string | null>(null);
   const [limoOverlayPos, setLimoOverlayPos] = useState({ x: 0, y: 60 });
 
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
@@ -1332,7 +1333,8 @@ export default function App() {
     const margin = gross > 0 ? (net / gross * 100) : 0;
     const hours  = filteredHours.reduce((s, h) => s + h.hours, 0);
     const miles  = filteredHours.reduce((s, h) => s + (h.miles ?? 0), 0);
-    const simFactor = 1 + aiSimPercent / 100;
+    // Simulated gross = target $/hr × hours worked in period
+    const simGross = aiSimTarget > 0 && hours > 0 ? aiSimTarget * hours : gross;
     return {
       gross, costs, net, margin, hours, miles,
       tripCount: filteredTrips.length,
@@ -1340,12 +1342,12 @@ export default function App() {
       costPerMile:     miles > 0 ? costs / miles : 0,
       earningsPerHour: hours > 0 ? gross / hours : 0,
       costPerHour:     hours > 0 ? costs / hours : 0,
-      simGross: gross * simFactor,
-      simNet:   gross * simFactor - costs,
-      simEarningsPerMile: miles > 0 ? gross * simFactor / miles : 0,
-      simEarningsPerHour: hours > 0 ? gross * simFactor / hours : 0,
+      simGross,
+      simNet:   simGross - costs,
+      simEarningsPerMile: miles > 0 ? simGross / miles : 0,
+      simEarningsPerHour: aiSimTarget > 0 ? aiSimTarget : (hours > 0 ? simGross / hours : 0),
     };
-  }, [trips, expenses, hoursLog, aiPeriod, currentTime, aiSimPercent]);
+  }, [trips, expenses, hoursLog, aiPeriod, currentTime, aiSimTarget]);
 
   const cumulative = useMemo(() => {
     const todayYMD = toYYYYMMDD(currentTime);
@@ -1973,11 +1975,12 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageBase64: base64, mimeType: "image/jpeg", minHourly: limoMinHourly, minPerMile: limoMinPerMile }),
       });
-      const data = await res.json() as { offers?: LimoOffer[]; error?: string };
+      const data = await res.json() as { offers?: LimoOffer[]; warning?: string; error?: string };
       if (data.error) throw new Error(data.error);
-      const offer = data.offers?.[0];
-      if (!offer) throw new Error("No offers detected");
-      setLimoResult(offer);
+      const offers = data.offers ?? [];
+      if (offers.length === 0) throw new Error("No offers detected");
+      setLimoOffers(offers);
+      setLimoOfferIdx(0);
       setLimoOverlayOn(true);
     } catch (err: unknown) {
       setLimoError(err instanceof Error ? err.message : "Error evaluando oferta");
@@ -5836,8 +5839,8 @@ export default function App() {
             <p className="font-mono-jet text-[24px] font-black leading-none" style={{ color: card.color }}>
               {card.value > 0 ? `$${card.value.toFixed(2)}` : "—"}
             </p>
-            {card.sim !== null && aiSimPercent > 0 && card.value > 0 && (
-              <p className="text-[9px] text-[#facc15] mt-1">+{aiSimPercent}% → ${card.sim.toFixed(2)}</p>
+            {card.sim !== null && aiSimTarget > 0 && card.value > 0 && (
+              <p className="text-[9px] text-[#facc15] mt-1">Meta → ${card.sim.toFixed(2)}</p>
             )}
             <p className="text-[9px] text-neutral-600 mt-0.5">{card.label.includes("mi") ? "$/mi" : "$/hr"}</p>
           </div>
@@ -5848,17 +5851,30 @@ export default function App() {
       <div className="bg-[#0a0a0a] border border-[#1e1e1e] rounded-xl p-4">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <p className="text-[12px] font-bold text-white">Simulate Higher Earnings</p>
-            <p className="text-[9px] text-neutral-500">¿Y si ganara X% más este período?</p>
+            <p className="text-[12px] font-bold text-white">Simular Meta $/hr</p>
+            <p className="text-[9px] text-neutral-500">¿Cuánto quieres ganar por hora?</p>
           </div>
-          <span className="font-mono-jet text-[18px] font-black text-[#facc15]">+{aiSimPercent}%</span>
+          <span className="font-mono-jet text-[18px] font-black text-[#facc15]">
+            {aiSimTarget > 0 ? `$${aiSimTarget}/hr` : "OFF"}
+          </span>
         </div>
-        <input type="range" min={0} max={50} step={1} value={aiSimPercent}
-          onChange={e => setAiSimPercent(parseInt(e.target.value))} className="w-full" />
-        {aiSimPercent > 0 && (
+        <input type="range" min={0} max={150} step={5} value={aiSimTarget}
+          onChange={e => setAiSimTarget(parseInt(e.target.value))} className="w-full" />
+        <div className="flex justify-between text-[9px] text-neutral-600 mt-1">
+          <span>OFF</span><span>$50</span><span>$100</span><span>$150/hr</span>
+        </div>
+        {aiSimTarget > 0 && (
           <div className="mt-3 flex justify-between text-[11px]">
-            <div><p className="text-neutral-500">Gross simulado</p><p className="font-mono-jet font-bold text-[#facc15]">${aiMetrics.simGross.toFixed(2)}</p></div>
-            <div className="text-right"><p className="text-neutral-500">Net simulado</p><p className="font-mono-jet font-bold text-[#4ade80]">${aiMetrics.simNet.toFixed(2)}</p></div>
+            <div>
+              <p className="text-neutral-500">Gross simulado</p>
+              <p className="font-mono-jet font-bold text-[#facc15]">${aiMetrics.simGross.toFixed(2)}</p>
+              <p className="text-[9px] text-neutral-600">${aiSimTarget}/hr × {aiMetrics.hours.toFixed(1)} hrs</p>
+            </div>
+            <div className="text-right">
+              <p className="text-neutral-500">Net simulado</p>
+              <p className="font-mono-jet font-bold text-[#4ade80]">${aiMetrics.simNet.toFixed(2)}</p>
+              <p className="text-[9px] text-neutral-600">− ${aiMetrics.costs.toFixed(2)} costos</p>
+            </div>
           </div>
         )}
       </div>
@@ -5910,18 +5926,29 @@ export default function App() {
         </button>
         {limoError && <p className="text-red-400 text-[11px] text-center">{limoError}</p>}
 
-        {limoResult && (
-          <div className="rounded-xl p-3" style={{ background: "#000", border: `1.5px solid ${limoResult.decision === "TOMAR" ? "#00FF00" : "#FF0000"}` }}>
-            <p className="text-[9px] text-neutral-500 mb-1.5">Última Evaluación</p>
-            <div className="flex items-center gap-3 mb-1">
-              <span className="text-[15px] font-black" style={{ color: limoResult.decision === "TOMAR" ? "#00FF00" : "#FF0000" }}>
-                {limoResult.decision === "TOMAR" ? "🟢 ¡TOMAR!" : "🔴 RECHAZAR"}
-              </span>
-              <span className="font-mono-jet text-[16px] font-black text-[#FFFF00]">${limoResult.price.toFixed(2)}</span>
-              <span className="font-mono-jet text-[13px] font-bold text-white ml-auto">💰 ${limoResult.hourlyRate.toFixed(2)}/hr</span>
-            </div>
-            <p className="text-[12px] font-bold text-white">📍 {limoResult.origin} ➔ {limoResult.destination}</p>
-            <p className="text-[10px] text-neutral-500 mt-0.5">⏱️ {limoResult.pickupTime} · {limoResult.company}</p>
+        {limoOffers.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[9px] text-neutral-500 uppercase tracking-wider">
+              {limoOffers.length} oferta{limoOffers.length > 1 ? "s" : ""} detectada{limoOffers.length > 1 ? "s" : ""}
+            </p>
+            {limoOffers.map((o, i) => (
+              <div key={i} className="rounded-xl p-3 relative"
+                style={{ background: "#000", border: `1.5px solid ${o.decision === "TOMAR" ? "#00FF00" : "#FF0000"}` }}>
+                {o.isBest && (
+                  <span className="absolute top-2 right-2 text-[8px] font-black px-1.5 py-0.5 rounded-full"
+                    style={{ background: "#FFFF00", color: "#000" }}>⭐ MEJOR</span>
+                )}
+                <div className="flex items-center gap-3 mb-1 pr-12">
+                  <span className="text-[14px] font-black" style={{ color: o.decision === "TOMAR" ? "#00FF00" : "#FF0000" }}>
+                    {o.decision === "TOMAR" ? "🟢 TOMAR" : "🔴 RECHAZAR"}
+                  </span>
+                  <span className="font-mono-jet text-[15px] font-black text-[#FFFF00]">${o.price.toFixed(2)}</span>
+                  <span className="font-mono-jet text-[12px] font-bold text-white ml-auto">💰 ${o.hourlyRate.toFixed(2)}/hr</span>
+                </div>
+                <p className="text-[11px] font-bold text-white">📍 {o.origin} ➔ {o.destination}</p>
+                <p className="text-[9px] text-neutral-500 mt-0.5">⏱️ {o.pickupTime} · {o.company} · ${o.perMileRate.toFixed(2)}/mi</p>
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -6500,52 +6527,72 @@ export default function App() {
         )}
 
         {/* LimoSys Draggable Overlay */}
-        {limoOverlayOn && limoResult && (
-          <div
-            className="fixed z-[100] select-none"
-            style={{
-              left: `calc(50% + ${limoOverlayPos.x}px)`,
-              top: `${limoOverlayPos.y}px`,
-              transform: "translateX(-50%)",
-              width: "min(95vw, 440px)",
-              background: "#000000",
-              border: `2px solid ${limoResult.decision === "TOMAR" ? "#00FF00" : "#FF0000"}`,
-              borderRadius: "14px",
-              boxShadow: `0 0 32px ${limoResult.decision === "TOMAR" ? "rgba(0,255,0,0.28)" : "rgba(255,0,0,0.28)"}`,
-              cursor: "grab",
-            }}
-            onPointerDown={onLimoDragStart}
-            onPointerMove={onLimoDragMove}
-            onPointerUp={onLimoDragEnd}
-            onPointerCancel={onLimoDragEnd}
-          >
-            {/* Handle bar */}
-            <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#111]">
-              <span className="text-[9px] text-neutral-700 font-mono-jet tracking-widest">⠿⠿ LIMOSYS AI ⠿⠿</span>
-              <div className="flex items-center gap-2">
-                <span className="text-[9px] text-neutral-600 font-mono-jet">{limoResult.company}</span>
-                <button
-                  onPointerDown={e => e.stopPropagation()}
-                  onClick={() => setLimoOverlayOn(false)}
-                  className="text-neutral-600 text-[12px] active:text-white w-5 h-5 flex items-center justify-center"
-                >✕</button>
+        {limoOverlayOn && limoOffers.length > 0 && (() => {
+          const cur = limoOffers[Math.min(limoOfferIdx, limoOffers.length - 1)];
+          const total = limoOffers.length;
+          const idx = Math.min(limoOfferIdx, total - 1);
+          return (
+            <div
+              className="fixed z-[100] select-none"
+              style={{
+                left: `calc(50% + ${limoOverlayPos.x}px)`,
+                top: `${limoOverlayPos.y}px`,
+                transform: "translateX(-50%)",
+                width: "min(95vw, 440px)",
+                background: "#000000",
+                border: `2px solid ${cur.decision === "TOMAR" ? "#00FF00" : "#FF0000"}`,
+                borderRadius: "14px",
+                boxShadow: `0 0 32px ${cur.decision === "TOMAR" ? "rgba(0,255,0,0.28)" : "rgba(255,0,0,0.28)"}`,
+                cursor: "grab",
+              }}
+              onPointerDown={onLimoDragStart}
+              onPointerMove={onLimoDragMove}
+              onPointerUp={onLimoDragEnd}
+              onPointerCancel={onLimoDragEnd}
+            >
+              {/* Handle bar */}
+              <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#111]">
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] text-neutral-700 font-mono-jet tracking-widest">⠿⠿ LIMOSYS AI ⠿⠿</span>
+                  {cur.isBest && <span className="text-[8px] font-black px-1 py-0.5 rounded" style={{ background: "#FFFF00", color: "#000" }}>⭐ MEJOR</span>}
+                </div>
+                <div className="flex items-center gap-1">
+                  {/* Navigation arrows */}
+                  {total > 1 && (
+                    <>
+                      <button onPointerDown={e => e.stopPropagation()}
+                        onClick={() => setLimoOfferIdx(i => Math.max(0, i - 1))}
+                        disabled={idx === 0}
+                        className="w-6 h-6 flex items-center justify-center text-[14px] font-black disabled:opacity-30 active:text-white text-neutral-400">‹</button>
+                      <span className="font-mono-jet text-[9px] text-neutral-500">{idx + 1}/{total}</span>
+                      <button onPointerDown={e => e.stopPropagation()}
+                        onClick={() => setLimoOfferIdx(i => Math.min(total - 1, i + 1))}
+                        disabled={idx === total - 1}
+                        className="w-6 h-6 flex items-center justify-center text-[14px] font-black disabled:opacity-30 active:text-white text-neutral-400">›</button>
+                    </>
+                  )}
+                  <span className="text-[9px] text-neutral-600 font-mono-jet ml-1">{cur.company}</span>
+                  <button onPointerDown={e => e.stopPropagation()} onClick={() => setLimoOverlayOn(false)}
+                    className="text-neutral-600 text-[12px] active:text-white w-5 h-5 flex items-center justify-center ml-1">✕</button>
+                </div>
+              </div>
+              {/* Row 1: Decision | Price | $/hr | time */}
+              <div className="flex items-center justify-between px-3 py-2.5 gap-2">
+                <span className="text-[15px] font-black shrink-0" style={{ color: cur.decision === "TOMAR" ? "#00FF00" : "#FF0000" }}>
+                  {cur.decision === "TOMAR" ? "🟢 ¡TOMAR!" : "🔴 RECHAZAR"}
+                </span>
+                <span className="font-mono-jet text-[18px] font-black text-[#FFFF00]">${cur.price.toFixed(2)}</span>
+                <span className="font-mono-jet text-[13px] font-bold text-white">💰 ${cur.hourlyRate.toFixed(2)}/hr</span>
+                <span className="font-mono-jet text-[11px] font-bold text-[#FFFF00] shrink-0">⏱️ {cur.pickupTime}</span>
+              </div>
+              {/* Row 2: Route + $/mi */}
+              <div className="px-3 pb-3 flex items-end justify-between">
+                <span className="text-[13px] font-bold text-white">📍 {cur.origin} ➔ {cur.destination}</span>
+                <span className="font-mono-jet text-[11px] text-neutral-400 shrink-0 ml-2">${cur.perMileRate.toFixed(2)}/mi</span>
               </div>
             </div>
-            {/* Row 1: Decision | Price | $/hr | Pickup time */}
-            <div className="flex items-center justify-between px-3 py-2.5 gap-2">
-              <span className="text-[15px] font-black shrink-0" style={{ color: limoResult.decision === "TOMAR" ? "#00FF00" : "#FF0000" }}>
-                {limoResult.decision === "TOMAR" ? "🟢 ¡TOMAR!" : "🔴 RECHAZAR"}
-              </span>
-              <span className="font-mono-jet text-[18px] font-black text-[#FFFF00]">${limoResult.price.toFixed(2)}</span>
-              <span className="font-mono-jet text-[13px] font-bold text-white">💰 ${limoResult.hourlyRate.toFixed(2)}/hr</span>
-              <span className="font-mono-jet text-[12px] font-bold text-[#FFFF00] shrink-0">⏱️ {limoResult.pickupTime}</span>
-            </div>
-            {/* Row 2: Route */}
-            <div className="px-3 pb-3">
-              <span className="text-[13px] font-bold text-white">📍 {limoResult.origin} ➔ {limoResult.destination}</span>
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ✨ Gemini Assistant button */}
         <button

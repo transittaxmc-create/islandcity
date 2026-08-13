@@ -98,8 +98,8 @@ If this is NOT a LimoSys screenshot or no offers are visible, return:
       typeof v === "number" && isFinite(v) && v >= 0 ? Math.round(v * 100) / 100 : 0;
     const safeStr = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 
-    const buildOffers = (rawOffers: Record<string, unknown>[]) =>
-      rawOffers.map(o => ({
+    const buildOffers = (rawOffers: Record<string, unknown>[]) => {
+      const offers = rawOffers.map(o => ({
         decision: ["TOMAR","RECHAZAR"].includes(safeStr(o.decision)) ? safeStr(o.decision) : "RECHAZAR",
         company: safeStr(o.company) || "LimoSys",
         price: safeNum(o.price),
@@ -110,7 +110,16 @@ If this is NOT a LimoSys screenshot or no offers are visible, return:
         estimatedMinutes: safeNum(o.estimatedMinutes),
         hourlyRate: safeNum(o.hourlyRate),
         perMileRate: safeNum(o.perMileRate),
+        isBest: false,
       }));
+      // Mark the best offer: highest $/hr among TOMAR offers, else highest $/hr overall
+      const tomarOffers = offers.filter(o => o.decision === "TOMAR");
+      const pool = tomarOffers.length > 0 ? tomarOffers : offers;
+      const bestIdx = pool.reduce((bi, o, i) => o.hourlyRate > pool[bi].hourlyRate ? i : bi, 0);
+      const bestOffer = pool[bestIdx];
+      if (bestOffer) bestOffer.isBest = true;
+      return offers;
+    };
 
     let parsed: unknown;
     try {
