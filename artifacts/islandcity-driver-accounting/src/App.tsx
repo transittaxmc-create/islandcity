@@ -1415,7 +1415,7 @@ export default function App() {
     const newEarnings = parseFloat(inlineForm.earnings) || 0;
     syncSaveTrips(trips.map(t => {
       if (t.id !== id) return t;
-      return { ...t, pickup: inlineForm.pickup, dropoff: inlineForm.dropoff, earnings: newEarnings, reference: inlineForm.reference, grandTotal: newEarnings + t.tips + t.extra + t.toll - t.fee };
+      return { ...t, pickup: inlineForm.pickup, dropoff: inlineForm.dropoff, earnings: newEarnings, reference: inlineForm.reference, grandTotal: newEarnings + t.tips + t.extra + (t.otherCash||0) + t.toll - t.fee };
     }));
     setInlineEditId(null);
     showToast("Trip updated ✓");
@@ -1613,7 +1613,7 @@ export default function App() {
   // ─── Dashboard monthly summary (used in FI card) ─────────────
   const _dbMonthStr   = `${currentTime.getFullYear()}-${String(currentTime.getMonth()+1).padStart(2,'0')}`;
   const _dbEarnMonth  = trips.filter(t=>t.date.startsWith(_dbMonthStr))
-    .reduce((a,t)=>a+(t.earnings||0)+(t.tips||0)+(t.extra||0)+(t.toll||0),0);
+    .reduce((a,t)=>a+(t.earnings||0)+(t.tips||0)+(t.extra||0)+(t.otherCash||0)+(t.toll||0),0);
   const _dbExpMonth   = expenses.filter(e=>e.date?.startsWith(_dbMonthStr)&&e.frequency!=='monthly'&&e.frequency!=='weekly')
     .reduce((a,e)=>a+e.amount,0);
   const _dbNetMonth   = _dbEarnMonth - _dbExpMonth;
@@ -2621,7 +2621,7 @@ export default function App() {
                   const pm    = getPlatformMeta(t.platform);
                   const isSel = selectedForPost.has(t.id);
                   const liveFare = parseFloat(inlineEditId === t.id ? inlineForm.earnings : String(t.earnings)) || 0;
-                  const liveTotal = liveFare + t.tips + t.extra + t.toll - t.fee;
+                  const liveTotal = liveFare + t.tips + t.extra + (t.otherCash||0) + t.toll - t.fee;
 
                   return (
                     <div key={t.id} className={`border rounded-2xl p-4 space-y-3 transition-all duration-150 ${isSel ? "bg-[#141410] border-[#facc15]/30" : "bg-[#141414] border-[#2e2e2e]"}`}>
