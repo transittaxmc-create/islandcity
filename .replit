@@ -21,3 +21,8 @@ timeoutMs = 20000
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+FRONTEND_ORIGIN = "https://bc4f4560-1fe9-4910-bf55-bd9e47407ede-00-zcnr18xocwym-b6j1ll8d.kirk.replit.dev"
