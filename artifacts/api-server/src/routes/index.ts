@@ -7,6 +7,7 @@ import broadcastEvalRouter from "./broadcast-eval";
 import backupRouter from "./backup";
 import documentsRouter from "./documents";
 import gitPushRouter from "./git-push";
+import geminiChatRouter from "./gemini-chat";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(broadcastEvalRouter);
 router.use(backupRouter);
 router.use(documentsRouter);
 router.use(gitPushRouter);
+router.use(geminiChatRouter);
 
 export default router;

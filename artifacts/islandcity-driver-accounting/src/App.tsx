@@ -631,6 +631,7 @@ export default function App() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaChunksRef   = useRef<BlobPart[]>([]);
   const broadcastInputRef = useRef<HTMLInputElement>(null);
+  const geminiEndRef      = useRef<HTMLDivElement>(null);
 
   // Custom expense types & categories (user-added items, persisted)
   const [customExpenseTypes, setCustomExpenseTypes] = useState<string[]>(() => {
@@ -711,6 +712,14 @@ export default function App() {
   const [voiceParsing, setVoiceParsing] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [showVoicePanel, setShowVoicePanel] = useState(false);
+
+  // ── Gemini Assistant Chat ─────────────────────────────────────────────────
+  interface GeminiMessage { role: "user" | "assistant"; text: string; ts: number; }
+  const [showGeminiChat,    setShowGeminiChat]    = useState(false);
+  const [geminiMessages,    setGeminiMessages]    = useState<GeminiMessage[]>([]);
+  const [geminiInput,       setGeminiInput]       = useState("");
+  const [geminiLoading,     setGeminiLoading]     = useState(false);
+  const [geminiChatRec,     setGeminiChatRec]     = useState(false); // recording mic for chat
 
   // ── Two-tap GPS trip flow ─────────────────────────────────────────────────
   type VoiceTripStep = "idle" | "started" | "listening" | "confirm";
@@ -952,6 +961,13 @@ export default function App() {
     })();
     return () => controller.abort();
   }, [gps.lat, gps.lng]);
+
+  // Auto-scroll Gemini chat to latest message
+  useEffect(() => {
+    if (showGeminiChat && geminiEndRef.current) {
+      geminiEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [geminiMessages, showGeminiChat]);
 
   const IRS_RATE_PER_MILE = 0.70; // 2025 IRS standard mileage rate — verify at irs.gov for the current tax year
 
@@ -1805,6 +1821,83 @@ export default function App() {
         { timeout: 8000, enableHighAccuracy: true, maximumAge: 0 }
       );
     });
+
+  // ── Gemini Chat functions ─────────────────────────────────────────────────
+  const sendGeminiMessage = async (text: string) => {
+    if (!text.trim() || geminiLoading) return;
+    const userMsg: GeminiMessage = { role: "user", text: text.trim(), ts: Date.now() };
+    const nextHistory = [...geminiMessages, userMsg];
+    setGeminiMessages(nextHistory);
+    setGeminiInput("");
+    setGeminiLoading(true);
+    const todayYMD = toYYYYMMDD(new Date());
+    const expensesToday = expenses
+      .filter(e => e.date === todayYMD)
+      .reduce((s, e) => s + e.amount, 0);
+    try {
+      const res = await fetch("/api/gemini-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: text.trim(),
+          context: {
+            date: new Date().toLocaleString("en-US", { weekday:"short", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" }),
+            shiftActive,
+            grossToday,
+            tripCount: todayTrips.length,
+            dailyGoal,
+            hourlyGoal: goal,
+            shiftMiles,
+            shiftHours: activeHoursDecimal,
+            expensesToday,
+            netToday: grossToday - expensesToday,
+            location: gpsAddress || undefined,
+          },
+          history: geminiMessages.slice(-10).map(m => ({ role: m.role, text: m.text })),
+        }),
+      });
+      const data = await res.json() as { reply?: string; error?: string };
+      setGeminiMessages(prev => [...prev, {
+        role: "assistant",
+        text: data.reply ?? (data.error ?? "Error — intenta de nuevo."),
+        ts: Date.now(),
+      }]);
+    } catch {
+      setGeminiMessages(prev => [...prev, { role: "assistant", text: "Sin conexión — intenta de nuevo.", ts: Date.now() }]);
+    } finally {
+      setGeminiLoading(false);
+    }
+  };
+
+  const handleGeminiVoice = () => {
+    if (geminiChatRec) {
+      // Tap again → stop recording
+      if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
+      setGeminiChatRec(false);
+      return;
+    }
+    setGeminiChatRec(true);
+    startMediaRecording(async (base64, mimeType) => {
+      setGeminiChatRec(false);
+      setGeminiLoading(true);
+      try {
+        const vr = await fetch("/api/voice-parse", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ audioBase64: base64, mimeType }),
+        });
+        const vd = await vr.json() as { transcript?: string };
+        const transcript = vd.transcript?.trim();
+        if (transcript) {
+          await sendGeminiMessage(transcript);
+        } else {
+          setGeminiLoading(false);
+        }
+      } catch {
+        setGeminiLoading(false);
+      }
+    });
+  };
 
   const resetVoiceTripFlow = () => {
     if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
@@ -6163,6 +6256,161 @@ export default function App() {
                   )}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* ✨ Gemini Assistant button */}
+        <button
+          onClick={() => setShowGeminiChat(v => !v)}
+          className="fixed bottom-[76px] left-4 z-50 w-[52px] h-[52px] rounded-full flex items-center justify-center transition-all active:scale-90"
+          style={{
+            background: showGeminiChat ? "#0a1a14" : "#111111",
+            border: showGeminiChat ? "2px solid rgba(74,222,128,0.55)" : "2px solid rgba(74,222,128,0.22)",
+            boxShadow: showGeminiChat
+              ? "0 0 22px rgba(74,222,128,0.25), 0 4px 16px rgba(0,0,0,0.7)"
+              : "0 0 18px rgba(74,222,128,0.06), 0 4px 16px rgba(0,0,0,0.6)",
+          }}>
+          <span className="text-[22px] select-none">✨</span>
+          {geminiLoading && (
+            <span className="absolute inset-[-4px] rounded-full border-2 border-[#4ade80]/30 animate-ping pointer-events-none" />
+          )}
+        </button>
+
+        {/* ✨ Gemini Assistant Chat Panel */}
+        {showGeminiChat && (
+          <div
+            className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] z-[55] flex flex-col"
+            style={{
+              height: "76vh",
+              background: "#080808",
+              borderTop: "1px solid #1e1e1e",
+              borderLeft: "1px solid #141414",
+              borderRight: "1px solid #141414",
+              borderRadius: "20px 20px 0 0",
+              boxShadow: "0 -8px 40px rgba(74,222,128,0.08)",
+            }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a1a1a] shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="text-[18px]">✨</span>
+                <div>
+                  <p className="text-[13px] font-bold text-[#4ade80] tracking-wide">IslandCity AI</p>
+                  <p className="text-[9px] text-neutral-500 tracking-wider">Gemini · datos de tu turno en tiempo real</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {geminiMessages.length > 0 && (
+                  <button
+                    onClick={() => setGeminiMessages([])}
+                    className="text-[10px] text-neutral-600 active:text-neutral-400 px-2 py-1"
+                  >borrar</button>
+                )}
+                <button
+                  onClick={() => setShowGeminiChat(false)}
+                  className="w-7 h-7 rounded-full bg-[#1a1a1a] flex items-center justify-center text-neutral-400 active:text-white"
+                >✕</button>
+              </div>
+            </div>
+
+            {/* Message list */}
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3" style={{ overscrollBehavior: "contain" }}>
+              {geminiMessages.length === 0 && !geminiLoading && (
+                <div className="flex flex-col items-center justify-center h-full gap-3 pb-8">
+                  <span className="text-[40px]">✨</span>
+                  <p className="text-[13px] text-neutral-400 text-center leading-relaxed px-6">
+                    Pregúntame sobre tus ganancias, gastos, o estrategia de manejo. Puedes hablar o escribir.
+                  </p>
+                  {/* Quick prompts */}
+                  {[
+                    "¿Cuánto gané hoy?",
+                    "¿Cuánto me falta para mi meta?",
+                    "¿Cuánto gasté este mes?",
+                  ].map(q => (
+                    <button
+                      key={q}
+                      onClick={() => sendGeminiMessage(q)}
+                      className="text-[12px] text-[#4ade80] border border-[#4ade80]/25 rounded-full px-4 py-1.5 active:bg-[#4ade80]/10"
+                    >{q}</button>
+                  ))}
+                </div>
+              )}
+              {geminiMessages.map((msg, i) => (
+                <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed ${
+                      msg.role === "user"
+                        ? "bg-[#1a1400] text-[#f6dd8c] rounded-br-sm"
+                        : "bg-[#0f1f0f] text-[#c8f0c8] rounded-bl-sm border border-[#1e3a1e]"
+                    }`}
+                    style={{ whiteSpace: "pre-wrap" }}
+                  >
+                    {msg.text}
+                  </div>
+                </div>
+              ))}
+              {geminiLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-[#0f1f0f] border border-[#1e3a1e] rounded-2xl rounded-bl-sm px-4 py-3 flex gap-1.5 items-center">
+                    {[0,1,2].map(i => (
+                      <div key={i} className="w-1.5 h-1.5 rounded-full bg-[#4ade80]/60 animate-bounce"
+                        style={{ animationDelay: i * 0.15 + "s" }} />
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div ref={geminiEndRef} />
+            </div>
+
+            {/* Input bar */}
+            <div
+              className="shrink-0 flex items-center gap-2 px-3 py-2 border-t border-[#1a1a1a]"
+              style={{ paddingBottom: "max(8px, env(safe-area-inset-bottom))" }}
+            >
+              {/* Mic button */}
+              <button
+                onClick={handleGeminiVoice}
+                disabled={geminiLoading && !geminiChatRec}
+                className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all active:scale-90"
+                style={{
+                  background: geminiChatRec ? "#1a0505" : "#161616",
+                  border: geminiChatRec ? "1.5px solid rgba(239,68,68,0.6)" : "1.5px solid #2a2a2a",
+                }}
+              >
+                {geminiChatRec ? (
+                  <>
+                    <span className="text-[18px]">⏹</span>
+                    <span className="absolute inset-[-3px] rounded-full border border-red-500/30 animate-ping pointer-events-none" />
+                  </>
+                ) : (
+                  <span className="text-[18px]">🎤</span>
+                )}
+              </button>
+
+              {/* Text input */}
+              <input
+                type="text"
+                value={geminiInput}
+                onChange={e => setGeminiInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendGeminiMessage(geminiInput); }}}
+                placeholder="Escribe o habla con Gemini…"
+                disabled={geminiLoading || geminiChatRec}
+                className="flex-1 bg-[#111] border border-[#222] rounded-full px-4 py-2.5 text-[13px] text-white placeholder-neutral-600 outline-none focus:border-[#4ade80]/40"
+              />
+
+              {/* Send button */}
+              <button
+                onClick={() => sendGeminiMessage(geminiInput)}
+                disabled={!geminiInput.trim() || geminiLoading}
+                className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all active:scale-90 disabled:opacity-30"
+                style={{
+                  background: geminiInput.trim() ? "linear-gradient(135deg,#1a3a1a,#0f2a0f)" : "#111",
+                  border: geminiInput.trim() ? "1.5px solid rgba(74,222,128,0.5)" : "1.5px solid #222",
+                }}
+              >
+                <span className="text-[16px]">↑</span>
+              </button>
             </div>
           </div>
         )}
