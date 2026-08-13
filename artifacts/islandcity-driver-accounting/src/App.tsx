@@ -1945,6 +1945,16 @@ export default function App() {
     };
   }, [saveCloudBackup]);
 
+  // Auto-backup: also 5 s after any trip or expense change (debounced)
+  // Skips the initial mount so the restore-from-cloud on load doesn't trigger a redundant write.
+  const backupDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dataBackupMountedRef = useRef(false);
+  useEffect(() => {
+    if (!dataBackupMountedRef.current) { dataBackupMountedRef.current = true; return; }
+    if (backupDebounceRef.current) clearTimeout(backupDebounceRef.current);
+    backupDebounceRef.current = setTimeout(() => saveCloudBackup(), 5000);
+  }, [trips, expenses, saveCloudBackup]);
+
   // ── Load scanned documents from cloud ────────────────────────────────────
   const loadDocuments = useCallback(async () => {
     setDocsLoading(true);
