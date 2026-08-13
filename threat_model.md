@@ -2,44 +2,63 @@
 
 ## Project Overview
 
-IslandCity Driver Accounting is a Node.js/Express 5 API backend with a React (Vite) frontend. The project is currently a scaffold — it has one health-check endpoint (`GET /api/healthz`), an empty database schema (PostgreSQL + Drizzle ORM), and a placeholder frontend. The application is not yet deployed.
+IslandCity Driver Accounting is a Node.js/Express 5 API backend with a React (Vite) frontend for a single NYC rideshare driver. The application tracks trips, expenses, hours, and financial data. It integrates with Google Gemini AI for receipt scanning, bank statement parsing, voice-command parsing, and job-offer evaluation.
 
-Tech stack: pnpm workspaces, TypeScript 5.9, Express 5, PostgreSQL, Drizzle ORM, Zod, React 18 / Wouter.
+Tech stack: pnpm workspaces, TypeScript 5.9, Express 5, PostgreSQL, Drizzle ORM, Zod, React 18 / Wouter, Google Cloud Storage, Google Gemini AI.
+
+Deployment: Autoscale on Replit, currently `private` visibility (platform-level access control blocks public internet).
 
 ## Assets
 
-- **Trip and financial data** — will include driver trip logs, earnings, deductions, and IRS-reportable income (not yet implemented).
-- **Driver identity** — driver names, IDs, and home region (not yet implemented).
-- **Application secrets** — `DATABASE_URL` environment variable (currently the only required secret).
+- **Driver financial data** — trip logs (fare, tips, tolls, platform, mileage), expense records, hours log, and settings — stored in PostgreSQL via the backup endpoints and Drizzle ORM.
+- **Scanned documents** — receipt images and bank statement PDFs uploaded to Google Cloud Storage and indexed in the database.
+- **Application secrets** — `DATABASE_URL`, `GITHUB_PAT`, `DEFAULT_OBJECT_STORAGE_BUCKET_ID`, and Gemini AI API key (injected via `@workspace/integrations-gemini-ai`).
+- **GitHub repository** — the project's source code and history, writable via the `GITHUB_PAT` stored as a server-side secret.
 
 ## Trust Boundaries
 
-- **Browser to API** — all client requests cross this boundary. The API must authenticate and authorize every request once real endpoints are added; the client is untrusted.
-- **API to PostgreSQL** — the application uses Drizzle ORM with parameterized queries; direct string concatenation into SQL must not be introduced.
-- **Authenticated to Unauthenticated** — no auth is implemented yet. When auth is added (e.g., Replit Auth), every route that handles personal or financial data must require a valid session server-side.
+- **Browser to API** — all client requests cross this boundary. Currently no server-side auth enforces the caller's identity; the private Replit deployment is the only access gate.
+- **API to PostgreSQL** — Drizzle ORM with parameterized queries; no raw string concatenation into SQL is present.
+- **API to Google Cloud Storage** — server-side only; presigned URLs are not used; files are written and served server-to-bucket.
+- **API to Google Gemini** — server relays caller-supplied base64 image/audio/text to Gemini; no sanitization of caller intent is possible, only MIME-type allowlisting.
+- **API to GitHub** — `POST /api/git-push` executes `git push` with the `GITHUB_PAT` embedded in the remote URL; this is a server-side shell execution boundary.
 
 ## Scan Anchors
 
 - Production entry points: `artifacts/api-server/src/routes/index.ts` (route registration), `artifacts/api-server/src/app.ts` (middleware stack)
-- Highest-risk areas when built out: route handlers accessing driver/financial records, any export or report-generation endpoint
+- Highest-risk routes: `POST /api/git-push` (shell execution + GITHUB_PAT), `GET /api/backup/latest` (full driver data dump), `DELETE /api/documents/:id` (destructive, unauthenticated)
+- AI inference routes (all unauthenticated, quota-exhaustion risk): `/api/receipt-scan`, `/api/statement-scan`, `/api/voice-parse`, `/api/broadcast-eval`, `/api/gemini-chat`, `/api/limosys-eval`
 - Public surface: `GET /api/healthz` (intentionally open)
-- Authenticated surface: none yet — must be added before any personal/financial data is exposed
+- Authenticated surface: **none** — no auth middleware is present on any route
 - Dev-only: `artifacts/mockup-sandbox/` (Replit design sandbox, not production-reachable)
 
 ## Threat Categories
 
-### Spoofing
+### Spoofing / Authentication
 
-No authentication is implemented. Once driver data is added, every API endpoint that returns or mutates driver records must require a validated session. The current scaffold presents no spoofing risk because no user-specific data exists.
+No authentication is implemented on any API endpoint. The `private` Replit deployment visibility is the sole access gate. Once any auth mechanism (e.g., Replit Auth, session cookies) is added, every route that handles driver data or infrastructure operations must require a validated session server-side before the platform-level gate can safely change to `public`.
+
+**Required guarantee:** All endpoints except `GET /api/healthz` MUST require a valid authenticated session before deployment visibility is changed to public or before additional users are added.
 
 ### Information Disclosure
 
-The CORS middleware is configured with `cors()` and no options, which emits `Access-Control-Allow-Origin: *`. Any origin can make cross-origin requests to the API. This is harmless for the current health-check-only API, but will become a real risk once authenticated or user-scoped endpoints are added. CORS should be restricted to the known frontend origin before any sensitive routes are deployed.
+- Raw `String(err)` error objects are returned in 500 responses from `backup.ts` and `documents.ts`, potentially leaking database hostnames, table names, and GCS bucket paths.
+- `CORS({ origin: process.env["FRONTEND_ORIGIN"] })` defaults to allow-all origins when the env var is unset; safe for now but will become a real risk if session cookies are introduced.
+- `GET /api/git-push/status` discloses whether `GITHUB_PAT` is configured.
 
 ### Elevation of Privilege
 
-No role or permission model exists yet. When implemented, all authorization checks must be enforced server-side. The frontend is never a trust boundary.
+- `POST /api/git-push` executes `git add -A && git commit && git push` with the server's `GITHUB_PAT` without authentication. Any caller within the private deployment can trigger this.
+- No role or permission model exists. When implemented, all authorization must be server-side.
+- The `objectAcl.ts` ACL framework is implemented but never invoked from the documents routes; the infrastructure is present but not wired up.
 
-### Denial of Service
+### Denial of Service / Cost Exhaustion
 
-No rate limiting is configured. The Express `json()` body parser uses its default 100 kB limit, which is acceptable for current use. As the API grows, resource-intensive endpoints (e.g., report generation, bulk exports) must add rate limiting and request-size caps.
+- Six AI inference endpoints accept up to 20 MB payloads each with no rate limiting. Rapid repeated calls exhaust the Gemini API quota and may incur billing charges.
+- No rate limiting on backup write (`POST /api/backup`) — an attacker could fill the database with large JSON blobs.
+- The `POST /api/git-push` rate limit (one push per 10 minutes) is a global in-memory singleton that resets on server restart.
+
+### Tampering
+
+- `POST /api/backup` accepts arbitrary JSON arrays for `trips`, `expenses`, `hoursLog`, and `settings` with no schema validation on the content beyond TypeScript casting. Malicious data can be persisted and later restored, corrupting the driver's records.
+- All database queries use Drizzle ORM parameterized statements; no SQL injection risk is present in the current code.
