@@ -8,6 +8,7 @@ import backupRouter from "./backup";
 import documentsRouter from "./documents";
 import gitPushRouter from "./git-push";
 import geminiChatRouter from "./gemini-chat";
+import limosysEvalRouter from "./limosys-eval";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(backupRouter);
 router.use(documentsRouter);
 router.use(gitPushRouter);
 router.use(geminiChatRouter);
+router.use(limosysEvalRouter);
 
 export default router;

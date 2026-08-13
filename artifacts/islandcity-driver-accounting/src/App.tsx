@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { Home, Banknote, ClipboardList, BarChart2, BookOpen, Receipt, FileText } from "lucide-react";
+import { Home, Banknote, ClipboardList, BarChart2, BookOpen, Receipt, FileText, Brain } from "lucide-react";
 
 type TurnStatus = "START" | "BREAK" | "END";
-type Tab      = "DASHBOARD" | "TRIPS" | "EXPENSES" | "FINANCES" | "REPORTS";
+type Tab      = "DASHBOARD" | "TRIPS" | "EXPENSES" | "FINANCES" | "REPORTS" | "AI";
 type TripsTab = "ENTRY" | "REGISTER" | "LEDGER";
 
 type Trip = {
@@ -632,6 +632,8 @@ export default function App() {
   const mediaChunksRef   = useRef<BlobPart[]>([]);
   const broadcastInputRef = useRef<HTMLInputElement>(null);
   const geminiEndRef      = useRef<HTMLDivElement>(null);
+  const limoInputRef      = useRef<HTMLInputElement>(null);
+  const limoDragRef       = useRef<{ startX: number; startY: number; px: number; py: number } | null>(null);
 
   // Custom expense types & categories (user-added items, persisted)
   const [customExpenseTypes, setCustomExpenseTypes] = useState<string[]>(() => {
@@ -732,6 +734,26 @@ export default function App() {
   const [vtSaving, setVtSaving] = useState(false);
 
   // ── Broadcast eval ────────────────────────────────────────────────────────
+  // ── AI Assistant tab ─────────────────────────────────────────────────────
+  const [aiPeriod, setAiPeriod] = useState<"day" | "week" | "month">("week");
+  const [aiSimPercent, setAiSimPercent] = useState(0);
+  const [limoOverlayOn, setLimoOverlayOn] = useState(false);
+  const [limoMinHourly, setLimoMinHourly] = useState<number>(() => {
+    try { return parseFloat(localStorage.getItem("ic-limo-min-hr") ?? "40") || 40; } catch { return 40; }
+  });
+  const [limoMinPerMile, setLimoMinPerMile] = useState<number>(() => {
+    try { return parseFloat(localStorage.getItem("ic-limo-min-mi") ?? "2.5") || 2.5; } catch { return 2.5; }
+  });
+  interface LimoOffer {
+    decision: string; company: string; price: number; pickupTime: string;
+    origin: string; destination: string; hourlyRate: number; perMileRate: number;
+    distance: number; estimatedMinutes: number;
+  }
+  const [limoCapturing, setLimoCapturing] = useState(false);
+  const [limoResult,    setLimoResult]    = useState<LimoOffer | null>(null);
+  const [limoError,     setLimoError]     = useState<string | null>(null);
+  const [limoOverlayPos, setLimoOverlayPos] = useState({ x: 0, y: 60 });
+
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
   const [broadcastCapturing, setBroadcastCapturing] = useState(false);
   const [broadcastResult, setBroadcastResult] = useState<BroadcastEval | null>(null);
@@ -1289,6 +1311,41 @@ export default function App() {
   }, [trips, currentTime]);
 
   const weeklyTotal = useMemo(() => weeklyTrips.reduce((a, b) => a + b.grandTotal, 0), [weeklyTrips]);
+
+  // ── AI Assistant metrics for selected period ──────────────────────────────
+  const aiMetrics = useMemo(() => {
+    const todayYMD = toYYYYMMDD(currentTime);
+    const cutoff = aiPeriod === "day" ? todayYMD : (() => {
+      const d = new Date(currentTime);
+      if (aiPeriod === "week") d.setDate(d.getDate() - 7);
+      else d.setMonth(d.getMonth() - 1);
+      return toYYYYMMDD(d);
+    })();
+    const periodTrips    = trips.filter(t => (t.date || (t.timestamp ?? "").slice(0,10) || "") >= cutoff || aiPeriod === "day" && (t.date || (t.timestamp ?? "").slice(0,10)) === todayYMD);
+    const filteredTrips  = aiPeriod === "day" ? trips.filter(t => (t.date || (t.timestamp ?? "").slice(0,10)) === todayYMD) : trips.filter(t => (t.date || (t.timestamp ?? "").slice(0,10)) >= cutoff);
+    const filteredExp    = aiPeriod === "day" ? expenses.filter(e => e.date === todayYMD) : expenses.filter(e => e.date >= cutoff);
+    const filteredHours  = aiPeriod === "day" ? hoursLog.filter(h => h.date === todayYMD) : hoursLog.filter(h => h.date >= cutoff);
+    void periodTrips;
+    const gross  = filteredTrips.reduce((s, t) => s + t.earnings + t.tips + (t.extra ?? 0) + (t.otherCash ?? 0) + t.toll, 0);
+    const costs  = filteredExp.reduce((s, e) => s + e.amount, 0);
+    const net    = gross - costs;
+    const margin = gross > 0 ? (net / gross * 100) : 0;
+    const hours  = filteredHours.reduce((s, h) => s + h.hours, 0);
+    const miles  = filteredHours.reduce((s, h) => s + (h.miles ?? 0), 0);
+    const simFactor = 1 + aiSimPercent / 100;
+    return {
+      gross, costs, net, margin, hours, miles,
+      tripCount: filteredTrips.length,
+      earningsPerMile: miles > 0 ? gross / miles : 0,
+      costPerMile:     miles > 0 ? costs / miles : 0,
+      earningsPerHour: hours > 0 ? gross / hours : 0,
+      costPerHour:     hours > 0 ? costs / hours : 0,
+      simGross: gross * simFactor,
+      simNet:   gross * simFactor - costs,
+      simEarningsPerMile: miles > 0 ? gross * simFactor / miles : 0,
+      simEarningsPerHour: hours > 0 ? gross * simFactor / hours : 0,
+    };
+  }, [trips, expenses, hoursLog, aiPeriod, currentTime, aiSimPercent]);
 
   const cumulative = useMemo(() => {
     const todayYMD = toYYYYMMDD(currentTime);
@@ -1898,6 +1955,49 @@ export default function App() {
       }
     });
   };
+
+  // ── LimoSys capture + drag handlers ─────────────────────────────────────
+  const handleLimoCapture = async (file: File) => {
+    setLimoCapturing(true); setLimoError(null);
+    try {
+      const bitmap = await createImageBitmap(file);
+      const canvas = document.createElement("canvas");
+      const max = 1024;
+      const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
+      canvas.width = Math.round(bitmap.width * scale);
+      canvas.height = Math.round(bitmap.height * scale);
+      canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const base64 = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
+      const res = await fetch("/api/limosys-eval", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: base64, mimeType: "image/jpeg", minHourly: limoMinHourly, minPerMile: limoMinPerMile }),
+      });
+      const data = await res.json() as { offers?: LimoOffer[]; error?: string };
+      if (data.error) throw new Error(data.error);
+      const offer = data.offers?.[0];
+      if (!offer) throw new Error("No offers detected");
+      setLimoResult(offer);
+      setLimoOverlayOn(true);
+    } catch (err: unknown) {
+      setLimoError(err instanceof Error ? err.message : "Error evaluando oferta");
+    } finally {
+      setLimoCapturing(false);
+    }
+  };
+
+  const onLimoDragStart = (e: React.PointerEvent) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    limoDragRef.current = { startX: e.clientX, startY: e.clientY, px: limoOverlayPos.x, py: limoOverlayPos.y };
+  };
+  const onLimoDragMove = (e: React.PointerEvent) => {
+    if (!limoDragRef.current) return;
+    setLimoOverlayPos({
+      x: limoDragRef.current.px + e.clientX - limoDragRef.current.startX,
+      y: Math.max(10, limoDragRef.current.py + e.clientY - limoDragRef.current.startY),
+    });
+  };
+  const onLimoDragEnd = () => { limoDragRef.current = null; };
 
   const resetVoiceTripFlow = () => {
     if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
@@ -5693,6 +5793,144 @@ export default function App() {
     </div>
   );
 
+  // ─── AI Assistant content ─────────────────────────────────────
+  const AIAssistantContent = (
+    <div className="space-y-3">
+      {/* Period selector */}
+      <div className="flex gap-2">
+        {(["day","week","month"] as const).map(p => (
+          <button key={p} onClick={() => setAiPeriod(p)}
+            className={`flex-1 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
+              aiPeriod === p
+                ? "bg-[#1a1200] border border-[#d9b64f]/50 text-[#f6dd8c]"
+                : "bg-[#0a0a0a] border border-[#1e1e1e] text-neutral-500"
+            }`}>
+            {p === "day" ? "DAY" : p === "week" ? "WEEK" : "MONTH"}
+          </button>
+        ))}
+      </div>
+
+      {/* Net earnings header */}
+      <div className="bg-[#0a0a0a] border border-[#1e1e1e] rounded-2xl p-4">
+        <p className="text-[10px] text-neutral-500 uppercase tracking-widest mb-1">
+          Ganancia Neta · {aiPeriod === "day" ? "Hoy" : aiPeriod === "week" ? "Última Semana" : "Último Mes"}
+        </p>
+        <div className="flex items-baseline gap-3">
+          <span className="font-mono-jet text-[32px] font-black" style={goldGradientStyle}>${aiMetrics.net.toFixed(2)}</span>
+          <span className={`text-[15px] font-bold ${aiMetrics.margin >= 0 ? "text-[#4ade80]" : "text-red-400"}`}>{aiMetrics.margin.toFixed(1)}%</span>
+        </div>
+        <p className="text-[11px] text-neutral-500 mt-1">${aiMetrics.gross.toFixed(2)} bruto − ${aiMetrics.costs.toFixed(2)} costos</p>
+        <p className="text-[10px] text-neutral-600 mt-0.5">{aiMetrics.tripCount} viajes · {aiMetrics.hours.toFixed(1)} hrs · {aiMetrics.miles.toFixed(1)} mi GPS</p>
+      </div>
+
+      {/* 4 metric cards */}
+      <div className="grid grid-cols-2 gap-2">
+        {([
+          { label: "Earnings / mi", value: aiMetrics.earningsPerMile, sim: aiMetrics.simEarningsPerMile, color: "#4ade80" },
+          { label: "Cost / mi",     value: aiMetrics.costPerMile,     sim: null,                         color: "#f87171" },
+          { label: "Earnings / hr", value: aiMetrics.earningsPerHour, sim: aiMetrics.simEarningsPerHour, color: "#4ade80" },
+          { label: "Cost / hr",     value: aiMetrics.costPerHour,     sim: null,                         color: "#f87171" },
+        ] as { label: string; value: number; sim: number | null; color: string }[]).map(card => (
+          <div key={card.label} className="bg-[#0a0a0a] border border-[#1e1e1e] rounded-xl p-3">
+            <p className="text-[9px] text-neutral-500 uppercase tracking-wider mb-1">{card.label}</p>
+            <p className="font-mono-jet text-[24px] font-black leading-none" style={{ color: card.color }}>
+              {card.value > 0 ? `$${card.value.toFixed(2)}` : "—"}
+            </p>
+            {card.sim !== null && aiSimPercent > 0 && card.value > 0 && (
+              <p className="text-[9px] text-[#facc15] mt-1">+{aiSimPercent}% → ${card.sim.toFixed(2)}</p>
+            )}
+            <p className="text-[9px] text-neutral-600 mt-0.5">{card.label.includes("mi") ? "$/mi" : "$/hr"}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Simulation slider */}
+      <div className="bg-[#0a0a0a] border border-[#1e1e1e] rounded-xl p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <p className="text-[12px] font-bold text-white">Simulate Higher Earnings</p>
+            <p className="text-[9px] text-neutral-500">¿Y si ganara X% más este período?</p>
+          </div>
+          <span className="font-mono-jet text-[18px] font-black text-[#facc15]">+{aiSimPercent}%</span>
+        </div>
+        <input type="range" min={0} max={50} step={1} value={aiSimPercent}
+          onChange={e => setAiSimPercent(parseInt(e.target.value))} className="w-full" />
+        {aiSimPercent > 0 && (
+          <div className="mt-3 flex justify-between text-[11px]">
+            <div><p className="text-neutral-500">Gross simulado</p><p className="font-mono-jet font-bold text-[#facc15]">${aiMetrics.simGross.toFixed(2)}</p></div>
+            <div className="text-right"><p className="text-neutral-500">Net simulado</p><p className="font-mono-jet font-bold text-[#4ade80]">${aiMetrics.simNet.toFixed(2)}</p></div>
+          </div>
+        )}
+      </div>
+
+      {/* LimoSys Evaluator */}
+      <div className="bg-[#0a0a0a] border border-[#1e1e1e] rounded-2xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[14px] font-black text-white">LimoSys Evaluator</p>
+            <p className="text-[9px] text-neutral-500">Umbrales mínimos para aceptar ofertas</p>
+          </div>
+          <button onClick={() => setLimoOverlayOn(v => !v)}
+            className="relative w-11 h-6 rounded-full transition-colors shrink-0"
+            style={{ background: limoOverlayOn ? "#00cc44" : "#2a2a2a" }}>
+            <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${limoOverlayOn ? "left-[22px]" : "left-0.5"}`} />
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-[9px] text-neutral-500 uppercase tracking-wider block mb-1">Mín $/hr</label>
+            <input type="number" min={0} step={1} value={limoMinHourly}
+              onChange={e => setLimoMinHourly(parseFloat(e.target.value) || 0)}
+              className="w-full bg-[#111] border border-[#2a2a2a] rounded-lg px-3 py-2.5 font-mono-jet text-[20px] font-bold text-[#FFFF00] text-center outline-none focus:border-[#FFFF00]/40" />
+          </div>
+          <div>
+            <label className="text-[9px] text-neutral-500 uppercase tracking-wider block mb-1">Mín $/mi</label>
+            <input type="number" min={0} step={0.1} value={limoMinPerMile}
+              onChange={e => setLimoMinPerMile(parseFloat(e.target.value) || 0)}
+              className="w-full bg-[#111] border border-[#2a2a2a] rounded-lg px-3 py-2.5 font-mono-jet text-[20px] font-bold text-[#FFFF00] text-center outline-none focus:border-[#FFFF00]/40" />
+          </div>
+        </div>
+        <button
+          onClick={() => {
+            try { localStorage.setItem("ic-limo-min-hr", String(limoMinHourly)); localStorage.setItem("ic-limo-min-mi", String(limoMinPerMile)); } catch {}
+            showToast("✓ Parámetros LimoSys guardados");
+          }}
+          className="w-full py-2.5 rounded-xl text-[12px] font-black tracking-wider text-black"
+          style={{ background: "linear-gradient(90deg,#f6dd8c,#d9b64f)" }}
+        >Apply $/mi and $/hr to Trip Filters</button>
+
+        <div className="h-px bg-[#1e1e1e]" />
+
+        <button onClick={() => limoInputRef.current?.click()} disabled={limoCapturing}
+          className="w-full py-3 rounded-xl text-[13px] font-black tracking-wide flex items-center justify-center gap-2 active:scale-95 transition-all"
+          style={{ background: "#000", border: "2px solid #00FF00", color: "#00FF00", boxShadow: "0 0 18px rgba(0,255,0,0.12)" }}>
+          {limoCapturing
+            ? <><div className="w-4 h-4 rounded-full border-2 border-[#00FF00] border-t-transparent animate-spin" />Analizando con Gemini…</>
+            : <>📸 Evaluar Oferta LimoSys</>}
+        </button>
+        {limoError && <p className="text-red-400 text-[11px] text-center">{limoError}</p>}
+
+        {limoResult && (
+          <div className="rounded-xl p-3" style={{ background: "#000", border: `1.5px solid ${limoResult.decision === "TOMAR" ? "#00FF00" : "#FF0000"}` }}>
+            <p className="text-[9px] text-neutral-500 mb-1.5">Última Evaluación</p>
+            <div className="flex items-center gap-3 mb-1">
+              <span className="text-[15px] font-black" style={{ color: limoResult.decision === "TOMAR" ? "#00FF00" : "#FF0000" }}>
+                {limoResult.decision === "TOMAR" ? "🟢 ¡TOMAR!" : "🔴 RECHAZAR"}
+              </span>
+              <span className="font-mono-jet text-[16px] font-black text-[#FFFF00]">${limoResult.price.toFixed(2)}</span>
+              <span className="font-mono-jet text-[13px] font-bold text-white ml-auto">💰 ${limoResult.hourlyRate.toFixed(2)}/hr</span>
+            </div>
+            <p className="text-[12px] font-bold text-white">📍 {limoResult.origin} ➔ {limoResult.destination}</p>
+            <p className="text-[10px] text-neutral-500 mt-0.5">⏱️ {limoResult.pickupTime} · {limoResult.company}</p>
+          </div>
+        )}
+      </div>
+
+      <input ref={limoInputRef} type="file" accept="image/*" capture="environment" className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleLimoCapture(f); if (limoInputRef.current) limoInputRef.current.value = ""; }} />
+    </div>
+  );
+
   // ─── Render ───────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-black text-white selection:bg-[#d9b64f]/30">
@@ -5766,6 +6004,7 @@ export default function App() {
           {activeTab === "TRIPS" && tripsTab === "LEDGER"   && LedgerContent}
           {activeTab === "EXPENSES"  && ExpensesContent}
           {activeTab === "REPORTS"   && ReportsContent}
+          {activeTab === "AI"        && AIAssistantContent}
         </div>
 
         {/* ── Broadcast Eval Modal ─────────────────────────────────────────── */}
@@ -6260,6 +6499,54 @@ export default function App() {
           </div>
         )}
 
+        {/* LimoSys Draggable Overlay */}
+        {limoOverlayOn && limoResult && (
+          <div
+            className="fixed z-[100] select-none"
+            style={{
+              left: `calc(50% + ${limoOverlayPos.x}px)`,
+              top: `${limoOverlayPos.y}px`,
+              transform: "translateX(-50%)",
+              width: "min(95vw, 440px)",
+              background: "#000000",
+              border: `2px solid ${limoResult.decision === "TOMAR" ? "#00FF00" : "#FF0000"}`,
+              borderRadius: "14px",
+              boxShadow: `0 0 32px ${limoResult.decision === "TOMAR" ? "rgba(0,255,0,0.28)" : "rgba(255,0,0,0.28)"}`,
+              cursor: "grab",
+            }}
+            onPointerDown={onLimoDragStart}
+            onPointerMove={onLimoDragMove}
+            onPointerUp={onLimoDragEnd}
+            onPointerCancel={onLimoDragEnd}
+          >
+            {/* Handle bar */}
+            <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#111]">
+              <span className="text-[9px] text-neutral-700 font-mono-jet tracking-widest">⠿⠿ LIMOSYS AI ⠿⠿</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] text-neutral-600 font-mono-jet">{limoResult.company}</span>
+                <button
+                  onPointerDown={e => e.stopPropagation()}
+                  onClick={() => setLimoOverlayOn(false)}
+                  className="text-neutral-600 text-[12px] active:text-white w-5 h-5 flex items-center justify-center"
+                >✕</button>
+              </div>
+            </div>
+            {/* Row 1: Decision | Price | $/hr | Pickup time */}
+            <div className="flex items-center justify-between px-3 py-2.5 gap-2">
+              <span className="text-[15px] font-black shrink-0" style={{ color: limoResult.decision === "TOMAR" ? "#00FF00" : "#FF0000" }}>
+                {limoResult.decision === "TOMAR" ? "🟢 ¡TOMAR!" : "🔴 RECHAZAR"}
+              </span>
+              <span className="font-mono-jet text-[18px] font-black text-[#FFFF00]">${limoResult.price.toFixed(2)}</span>
+              <span className="font-mono-jet text-[13px] font-bold text-white">💰 ${limoResult.hourlyRate.toFixed(2)}/hr</span>
+              <span className="font-mono-jet text-[12px] font-bold text-[#FFFF00] shrink-0">⏱️ {limoResult.pickupTime}</span>
+            </div>
+            {/* Row 2: Route */}
+            <div className="px-3 pb-3">
+              <span className="text-[13px] font-bold text-white">📍 {limoResult.origin} ➔ {limoResult.destination}</span>
+            </div>
+          </div>
+        )}
+
         {/* ✨ Gemini Assistant button */}
         <button
           onClick={() => setShowGeminiChat(v => !v)}
@@ -6480,6 +6767,7 @@ export default function App() {
               { key: "EXPENSES"  as Tab, Icon: Receipt,   label: "EXPENSES", color: "#fb923c" },
               { key: "FINANCES"  as Tab, Icon: BarChart2, label: "FINANCE",  color: "#60a5fa" },
               { key: "REPORTS"   as Tab, Icon: FileText,  label: "REPORTS",  color: "#a78bfa" },
+              { key: "AI"        as Tab, Icon: Brain,     label: "AI",       color: "#4ade80" },
             ]).map(({ key, Icon, label, color }) => {
               const active  = activeTab === key;
               const badge   = key === "TRIPS" ? pendingTrips.length : 0;

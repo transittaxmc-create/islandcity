@@ -1,0 +1,33 @@
+PROMPT DE DESARROLLO COMPLETO: MÓDULO "AI ASSISTANT" Y OVERLAY LIMOSYS
+
+1. NUEVA SECCIÓN EN EL MENÚ PRINCIPAL ("AI Assistant"):
+   - Crear una pestaña/opción en el menú de navegación llamada "AI Assistant".
+   - Al entrar a esta pestaña, mostrar una vista de detalles con la siguiente estructura:
+     * Pestañas superiores de periodo: [ DAY ] | [ WEEK ] | [ MONTH ].
+     * Encabezado de Ganancia Neta: Muestra del cálculo en tiempo real:
+       [Ingresos Brutos] - [Costos Estimados] = [Ganancia Neta ($)] ([% Margen]).
+     * Cuadrícula de 4 tarjetas de métricas clave:
+       - Earnings per Mile ($/mi)
+       - Cost per Mile ($/mi)
+       - Earnings per Hour ($/hr)
+       - Cost per Hour ($/hr)
+     * Deslizador de simulación ("Simulate Higher Earnings"): Permite mover el porcentaje de incremento para simular nuevos escenarios de ganancias.
+     * Botón de acción inferior: "Apply $/mi and $/hr to Trip Filters", que guarde y aplique estos parámetros directamente como los criterios de evaluación para la tarjeta flotante de LimoSys.
+     * Switch ON/OFF en esta pantalla para activar/desactivar la tarjeta flotante (Overlay).
+
+2. LÓGICA DE EVALUACIÓN CON GEMINI API (ESPECIALIZADO EN LIMOSYS):
+   - Capturar y procesar la pantalla de LimoSys.
+   - Extraer datos clave por oferta: Empresa, tiempo de llegada/recogida, precio ($) y ruta.
+   - Calcular la tasa de ganancia por hora ($/hr) y por milla ($/mi) usando los parámetros configurados.
+   - Simplificar ubicaciones: Omitir nombres de calles largos y números para mostrar solo Ciudad/Sector (ej. "East Meadow ➔ Flushing").
+
+3. DISEÑO DE TARJETA FLOTANTE EN OVERLAY (IPHONE - ALTO CONTRASTE Y SIN SCROLL):
+   - Widget superpuesto arrastrable (Draggable) que permita interactuar con la app LimoSys de fondo.
+   - Altura fija adaptada a pantallas de iPhone, prohibiendo el scroll vertical u horizontal para visualización instantánea.
+   - Estilos visuales de alto contraste para luz solar:
+     * Fondo: Negro sólido (#000000).
+     * Texto: Blanco (#FFFFFF) y Amarillo Fósforo (#FFFF00) en negrita (Bold).
+     * Botones de decisión: Verde fósforo (#00FF00) para "¡TOMAR!" y Rojo intenso (#FF0000) para "RECHAZAR".
+   - Formato de 2 líneas por oferta:
+     * Fila 1: [🟢 ¡TOMAR! / 🔴 RECHAZAR] | [ $ Precio Total ] | [ 💰 $ Ganancia/hr ] | [ ⏱️ Tiempo Recogida ]
+     * Fila 2: [ 📍 Ciudad Origen ➔ Ciudad Destino ]
