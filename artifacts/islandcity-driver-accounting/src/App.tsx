@@ -282,18 +282,20 @@ const TAG_STYLES: Record<string, string> = {
 
 const platformMeta: Record<string, PlatformMeta> = {
   "EcoRide - 10% fee": { initial: "E", bg: "bg-[#22c55e]", tags: ["ACCESS-A-RIDE", "VOUCHER"] },
-  "EcoRide":           { initial: "E", bg: "bg-[#22c55e]", logoBg: "bg-white", tags: ["ACCESS-A-RIDE", "VOUCHER"], logo: "/logos/ecoride.png" },
-  "Uber":              { initial: "U", bg: "bg-white",     logoBg: "bg-white", tags: [], logo: "/logos/uber.png" },
-  "Lyft":              { initial: "L", bg: "bg-[#ff00bf]", logoBg: "bg-black", tags: [], logo: "/logos/lyft.png" },
+  "EcoRide":           { initial: "E", bg: "bg-[#22c55e]", logoBg: "bg-white", tags: ["ACCESS-A-RIDE", "VOUCHER"], logo: "/logos/ecoride.jpg" },
+  "Uber":              { initial: "U", bg: "bg-white",     logoBg: "bg-white", tags: [], logo: "/logos/uber.jpg" },
+  "Lyft":              { initial: "L", bg: "bg-[#ff00bf]", logoBg: "bg-[#ff00bf]", tags: [], logo: "/logos/lyft.jpg" },
   "Empower":           { initial: "E", bg: "bg-[#3b82f6]", logoBg: "bg-white", tags: [], logo: "/logos/empower.png" },
   "Gallant":           { initial: "G", bg: "bg-[#f97316]", logoBg: "bg-white", tags: ["VOUCHER"], logo: "/logos/gallant.png" },
-  "Aventus Ride":      { initial: "A", bg: "bg-[#8b5cf6]", logoBg: "bg-white", tags: ["VOUCHER"], logo: "/logos/aventus.png" },
+  "Aventus Ride":      { initial: "A", bg: "bg-[#1a3d25]", logoBg: "bg-[#1a3d25]", tags: ["VOUCHER"], logo: "/logos/aventus.jpg" },
   "Classic Ryde":      { initial: "CR", bg: "bg-[#14b8a6]", logoBg: "bg-white", tags: ["VOUCHER"], logo: "/logos/classicryde.png" },
   "Aki Technology":    { initial: "AKI", bg: "bg-[#0ea5e9]", logoBg: "bg-white", tags: ["ACCESS-A-RIDE", "VOUCHER"], note: "Medical", logo: "/logos/aki.png" },
   "Street Hail":       { initial: "SH", bg: "bg-[#6b7280]", tags: [], logo: "/logos/streethail.png" },
-  "Island City Transit": { initial: "ICT", bg: "bg-[#1f2937]", tags: ["PRIVATE"] },
-  "Transit Tax":       { initial: "TT", bg: "bg-[#374151]", tags: ["TAX"] },
-  "Throo":             { initial: "T",   bg: "bg-[#e11d48]", tags: [] },
+  "Island City Transit": { initial: "ICT", bg: "bg-[#0d1b2e]", logoBg: "bg-black", tags: ["PRIVATE"], logo: "/logos/islandcity.jpg" },
+  "Transit Tax":       { initial: "TT", bg: "bg-black",     logoBg: "bg-black", tags: ["TAX"], logo: "/logos/transittax.png" },
+  "Throo":             { initial: "T",  bg: "bg-[#0e1e30]", logoBg: "bg-white", tags: [], logo: "/logos/throo.jpg" },
+  "Brakha Group":      { initial: "BG", bg: "bg-[#1e2d6b]", logoBg: "bg-white", tags: ["TAX"], logo: "/logos/brakha.jpg" },
+  "TBZI Luxury":       { initial: "TB", bg: "bg-[#0d1b2e]", logoBg: "bg-white", tags: [], logo: "/logos/tbzi.jpg" },
   "Other":             { initial: "O",   bg: "bg-[#9ca3af]", tags: [] },
 };
 
@@ -378,7 +380,7 @@ function PlatformAvatar({
       <span
         className={`${dim} rounded-full ${meta.logoBg ?? "bg-white"} flex items-center justify-center shrink-0 overflow-hidden border border-white/10`}
       >
-        <img src={src} alt="" className="w-full h-full object-contain p-[2px]" />
+        <img src={src} alt="" className="w-full h-full object-contain" />
       </span>
     );
   }
@@ -2233,8 +2235,8 @@ export default function App() {
                   borderColor: isSel ? "#facc15" : "#2e2e2e",
                   boxShadow: isSel ? "0 0 12px rgba(250,204,21,0.22)" : "none",
                 }}>
-                <div className="w-7 h-7 rounded-lg bg-white flex items-center justify-center flex-shrink-0 overflow-hidden">
-                  {m.logo ? <img src={m.logo} alt={name} className="w-5 h-5 object-contain" />
+                <div className={`w-7 h-7 rounded-full ${m.logoBg ?? "bg-white"} flex items-center justify-center flex-shrink-0 overflow-hidden border border-white/10`}>
+                  {m.logo ? <img src={m.logo} alt={name} className="w-full h-full object-contain" />
                     : <span className="text-[9px] font-black text-black">{m.initial}</span>}
                 </div>
                 <span className="text-[11px] font-bold truncate leading-none" style={{ color: isSel ? "#facc15" : "#888" }}>{short}</span>
@@ -2257,8 +2259,8 @@ export default function App() {
             borderColor: showPlatformDropdown ? "#facc15" : "#333",
             boxShadow: showPlatformDropdown ? "0 0 14px rgba(250,204,21,0.14)" : "none",
           }}>
-          <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center flex-shrink-0 overflow-hidden">
-            {meta.logo ? <img src={meta.logo} alt={tripForm.platform} className="w-8 h-8 object-contain" />
+          <div className={`w-10 h-10 rounded-full ${meta.logoBg ?? "bg-white"} flex items-center justify-center flex-shrink-0 overflow-hidden border border-white/10`}>
+            {meta.logo ? <img src={meta.logo} alt={tripForm.platform} className="w-full h-full object-contain" />
               : <span className="text-[14px] font-black text-black">{meta.initial}</span>}
           </div>
           <div className="flex-1 text-left min-w-0">
@@ -2275,10 +2277,10 @@ export default function App() {
         {showPlatformDropdown && (
           <div className="mt-2 rounded-2xl border border-[#333] bg-[#0a0a0a] overflow-hidden">
             {([
-              { label: "RIDESHARE",      platforms: ["Uber", "Lyft", "Empower"] },
+              { label: "RIDESHARE",      platforms: ["Uber", "Lyft", "Empower", "TBZI Luxury"] },
               { label: "VOUCHER",        platforms: ["Gallant", "Aventus Ride", "Classic Ryde"] },
               { label: "ACCESS-A-RIDE",  platforms: ["EcoRide", "Aki Technology"] },
-              { label: "OTHER",          platforms: ["Island City Transit", "Transit Tax", "Throo", "Other"] },
+              { label: "OTHER",          platforms: ["Island City Transit", "Transit Tax", "Throo", "Brakha Group", "Other"] },
             ] as { label: string; platforms: string[] }[]).map(group => (
               <div key={group.label}>
                 <p className="px-4 pt-2.5 pb-1 text-[8px] tracking-[0.2em] text-neutral-600 font-bold uppercase">{group.label}</p>
@@ -2293,8 +2295,8 @@ export default function App() {
                         background: isSel ? "rgba(250,204,21,0.07)" : "transparent",
                         borderLeft: isSel ? "3px solid #facc15" : "3px solid transparent",
                       }}>
-                      <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center flex-shrink-0 overflow-hidden">
-                        {m2.logo ? <img src={m2.logo} alt={name} className="w-6 h-6 object-contain" />
+                      <div className={`w-8 h-8 rounded-full ${m2.logoBg ?? "bg-white"} flex items-center justify-center flex-shrink-0 overflow-hidden border border-white/10`}>
+                        {m2.logo ? <img src={m2.logo} alt={name} className="w-full h-full object-contain" />
                           : <span className="text-[11px] font-black text-black">{m2.initial}</span>}
                       </div>
                       <span className="flex-1 text-left text-[14px] font-semibold truncate" style={{ color: isSel ? "#facc15" : "#ccc" }}>{name}</span>
