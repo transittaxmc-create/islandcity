@@ -707,6 +707,16 @@ export default function App() {
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [showVoicePanel, setShowVoicePanel] = useState(false);
 
+  // ── Two-tap GPS trip flow ─────────────────────────────────────────────────
+  type VoiceTripStep = "idle" | "started" | "listening" | "confirm";
+  const [voiceTripStep, setVoiceTripStep] = useState<VoiceTripStep>("idle");
+  const [vtPickup,  setVtPickup]  = useState<{ lat: number; lng: number; addr: string } | null>(null);
+  const [vtDropoff, setVtDropoff] = useState<{ lat: number; lng: number; addr: string } | null>(null);
+  const [vtStartTime, setVtStartTime] = useState<Date | null>(null);
+  const [vtElapsed,   setVtElapsed]   = useState(0); // seconds while step==="started"
+  const [vtFare, setVtFare] = useState<{ earnings: string; tips: string; toll: string; platformFee: string; platform: string } | null>(null);
+  const [vtSaving, setVtSaving] = useState(false);
+
   // ── Broadcast eval ────────────────────────────────────────────────────────
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
   const [broadcastCapturing, setBroadcastCapturing] = useState(false);
@@ -857,6 +867,13 @@ export default function App() {
       if (raw) { setStorageBytes(new Blob([raw]).size); setStorageVerified(true); }
     } catch { setStorageVerified(false); }
   }, []);
+
+  // ── Voice trip flow — elapsed timer ──────────────────────────────────────
+  useEffect(() => {
+    if (voiceTripStep !== "started") return;
+    const id = setInterval(() => setVtElapsed(s => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [voiceTripStep]);
 
   // ── GPS toll geofencing ───────────────────────────────────────────────────
   useEffect(() => {
@@ -1552,9 +1569,23 @@ export default function App() {
   // ── Voice data entry ──────────────────────────────────────────────────────
   const applyVoiceResult = (result: VoiceResult) => {
     const f = result.fields;
-    setShowVoicePanel(false);
     setVoiceTranscript("");
     setVoiceParsing(false);
+
+    // ── Two-tap trip flow: capture fare and go to confirm ─────────────────
+    if (voiceTripStep === "listening") {
+      setVtFare({
+        earnings:    f.fare  !== undefined && f.fare  > 0 ? String(f.fare.toFixed(2))  : "0",
+        tips:        f.tips  !== undefined && f.tips  > 0 ? String(f.tips.toFixed(2))  : "0",
+        toll:        f.toll  !== undefined && f.toll  > 0 ? String(f.toll.toFixed(2))  : "0",
+        platformFee: f.fee   !== undefined && f.fee   > 0 ? String(f.fee.toFixed(2))   : "0",
+        platform:    f.platform || "Uber",
+      });
+      setVoiceTripStep("confirm");
+      return;
+    }
+
+    setShowVoicePanel(false);
 
     if (result.intent === "trip") {
       const today = new Date().toISOString().slice(0, 10);
@@ -1667,6 +1698,131 @@ export default function App() {
     voiceRecRef.current?.stop?.();
     setVoiceListening(false);
   };
+
+  // ── Two-tap GPS trip flow ─────────────────────────────────────────────────
+  const snapGPS = (): Promise<{ lat: number; lng: number; addr: string }> =>
+    new Promise(resolve => {
+      const doGeocode = async (lat: number, lng: number) => {
+        try {
+          const addr = await reverseGeocodeRich(lat, lng);
+          resolve({ lat, lng, addr: addr || `${lat.toFixed(4)},${lng.toFixed(4)}` });
+        } catch {
+          resolve({ lat, lng, addr: `${lat.toFixed(4)},${lng.toFixed(4)}` });
+        }
+      };
+      if (gps.lat && gps.lng) {
+        doGeocode(gps.lat, gps.lng);
+      } else {
+        navigator.geolocation.getCurrentPosition(
+          pos => doGeocode(pos.coords.latitude, pos.coords.longitude),
+          () => resolve({ lat: 0, lng: 0, addr: "GPS unavailable" }),
+          { timeout: 5000, enableHighAccuracy: true }
+        );
+      }
+    });
+
+  const resetVoiceTripFlow = () => {
+    setVoiceTripStep("idle");
+    setVtPickup(null);
+    setVtDropoff(null);
+    setVtStartTime(null);
+    setVtElapsed(0);
+    setVtFare(null);
+    setVtSaving(false);
+    setShowVoicePanel(false);
+    setVoiceListening(false);
+    setVoiceTranscript("");
+    setVoiceError(null);
+    voiceRecRef.current?.stop?.();
+  };
+
+  const startVoiceTripFlow = async () => {
+    setVoiceTripStep("started");
+    setVtStartTime(new Date());
+    setVtElapsed(0);
+    setVtPickup(null);
+    setVtDropoff(null);
+    setVtFare(null);
+    setShowVoicePanel(true);
+    const loc = await snapGPS();
+    setVtPickup(loc);
+  };
+
+  const startVoiceForFare = () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) { setVoiceError("Voice not supported — use Chrome or Safari"); return; }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rec: any = new SR();
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.lang = "en-US";
+    voiceRecRef.current = rec;
+    rec.onstart = () => { setVoiceListening(true); setVoiceTranscript(""); setVoiceError(null); };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onresult = (e: any) => {
+      let interim = "", final = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) final += t; else interim += t;
+      }
+      setVoiceTranscript(final || interim);
+      if (final) { setVoiceListening(false); handleVoiceInput(final); }
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onerror = (e: any) => {
+      setVoiceListening(false);
+      if (e.error === "no-speech") setVoiceError("No speech — tap mic to retry");
+      else if (e.error === "not-allowed") setVoiceError("Microphone denied — check settings");
+      else setVoiceError("Mic error: " + e.error);
+    };
+    rec.onend = () => setVoiceListening(false);
+    rec.start();
+  };
+
+  const endVoiceTripFlow = async () => {
+    setVoiceTripStep("listening");
+    setVoiceParsing(false);
+    const loc = await snapGPS();
+    setVtDropoff(loc);
+    startVoiceForFare();
+  };
+
+  const confirmAndSaveVoiceTrip = () => {
+    if (!vtFare) return;
+    setVtSaving(true);
+    const now = new Date();
+    const today = toYYYYMMDD(now);
+    const timeStr = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const e  = parseFloat(vtFare.earnings)    || 0;
+    const t  = parseFloat(vtFare.tips)        || 0;
+    const tl = parseFloat(vtFare.toll)        || 0;
+    const f  = parseFloat(vtFare.platformFee) || 0;
+    const durationMin = vtStartTime
+      ? Math.round((now.getTime() - vtStartTime.getTime()) / 60000)
+      : 0;
+    const newTrip: Trip = {
+      id: Date.now().toString(),
+      reference: "",
+      earnings: e, tips: t, extra: 0, otherCash: 0, toll: tl, fee: f,
+      platform: vtFare.platform || "Uber",
+      pickup:  vtPickup?.addr  || "",
+      dropoff: vtDropoff?.addr || "",
+      notes: durationMin > 0 ? `${durationMin} min trip · voice entry` : "Voice entry",
+      grandTotal: e + t + tl - f,
+      time: timeStr,
+      date: today,
+      timestamp: now.toISOString(),
+      gps: vtPickup?.lat ? { lat: vtPickup.lat, lng: vtPickup.lng } : undefined,
+      miles: undefined,
+      status: "pending" as const,
+      reviewed: false,
+    };
+    syncSaveTrips([newTrip, ...trips]);
+    showToast(`✓ Trip saved · $${newTrip.grandTotal.toFixed(2)}${durationMin ? ` · ${durationMin} min` : ""}`);
+    resetVoiceTripFlow();
+  };
+
 
   // ── Broadcast eval handlers ────────────────────────────────────────────────
   const handleBroadcastCapture = async (file: File) => {
@@ -5693,69 +5849,212 @@ export default function App() {
           );
         })()}
 
-        {/* ── Voice Entry Panel + Mic Button ─────────────────────────────── */}
+        {/* ── Voice / Trip-Flow Panel ──────────────────────────────────────── */}
         {showVoicePanel && (
           <div className="fixed bottom-[138px] left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-[440px] z-50"
             style={{ filter: "drop-shadow(0 0 24px rgba(0,0,0,0.9))" }}>
-            <div className="bg-[#0e0e0e] border border-[#facc15]/20 rounded-2xl p-4 overflow-hidden">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
-                  style={{
-                    background: voiceListening ? "#1a0606" : voiceParsing ? "#1a1400" : "#1a1a1a",
-                    border: voiceListening ? "1px solid rgba(239,68,68,0.4)" : voiceParsing ? "1px solid rgba(250,204,21,0.3)" : "1px solid #2e2e2e",
-                  }}>
-                  <span className="text-[15px]">
-                    {voiceListening ? "🔴" : voiceParsing ? "🤖" : voiceError ? "⚠️" : "🎤"}
-                  </span>
+            <div className="bg-[#0e0e0e] rounded-2xl overflow-hidden"
+              style={{ border: voiceTripStep === "started" ? "1px solid rgba(74,222,128,0.25)" : voiceTripStep === "listening" ? "1px solid rgba(239,68,68,0.3)" : voiceTripStep === "confirm" ? "1px solid rgba(250,204,21,0.35)" : "1px solid rgba(250,204,21,0.2)" }}>
+
+              {/* ── STEP 1: Trip in progress ── */}
+              {voiceTripStep === "started" && (
+                <div className="p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-[#4ade80] animate-pulse" />
+                      <span className="text-[11px] font-black text-[#4ade80] tracking-[0.12em]">TRIP IN PROGRESS</span>
+                    </div>
+                    <span className="text-[13px] font-mono-jet text-white font-bold">
+                      {String(Math.floor(vtElapsed / 60)).padStart(2,"0")}:{String(vtElapsed % 60).padStart(2,"0")}
+                    </span>
+                  </div>
+                  <div className="bg-[#0a1a0a] rounded-xl px-3 py-2.5 space-y-1">
+                    <p className="text-[9px] text-neutral-600 font-bold uppercase tracking-[0.1em]">📍 Pickup</p>
+                    {vtPickup ? (
+                      <p className="text-[12px] text-white leading-snug">{vtPickup.addr}</p>
+                    ) : (
+                      <p className="text-[11px] text-neutral-500 animate-pulse italic">Getting GPS…</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={endVoiceTripFlow}
+                    disabled={!vtPickup}
+                    className="w-full h-12 rounded-xl font-black text-[13px] tracking-[0.08em] transition-all active:scale-[0.98]"
+                    style={{
+                      background: vtPickup ? "#facc15" : "#1e1e1e",
+                      color: vtPickup ? "#000" : "#555",
+                    }}>
+                    🏁 END TRIP + SAY FARE
+                  </button>
+                  <button onClick={resetVoiceTripFlow} className="w-full text-[10px] text-neutral-600 py-0.5">Cancel trip</button>
                 </div>
-                <div className="flex-1 min-w-0">
-                  {voiceListening && (
-                    <>
-                      <p className="text-[11px] font-bold text-[#f87171] animate-pulse tracking-wide">LISTENING…</p>
-                      <p className="text-[14px] text-white mt-1 leading-snug min-h-[20px]">
+              )}
+
+              {/* ── STEP 2: Listening for fare ── */}
+              {voiceTripStep === "listening" && (
+                <div className="p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[#f87171] animate-pulse" />
+                    <span className="text-[11px] font-black text-[#f87171] tracking-[0.12em]">
+                      {voiceListening ? "LISTENING FOR FARE…" : voiceParsing ? "UNDERSTANDING…" : voiceError ? "TRY AGAIN" : "READY"}
+                    </span>
+                  </div>
+                  {vtDropoff && (
+                    <div className="bg-[#1a0f00] rounded-xl px-3 py-2 space-y-1">
+                      <p className="text-[9px] text-neutral-600 font-bold uppercase tracking-[0.1em]">🏁 Dropoff</p>
+                      <p className="text-[12px] text-white leading-snug">{vtDropoff.addr}</p>
+                    </div>
+                  )}
+                  <div className="bg-[#111] rounded-xl px-3 py-3 min-h-[48px] flex items-center">
+                    {voiceListening && (
+                      <p className="text-[14px] text-white leading-snug">
                         {voiceTranscript || <span className="text-neutral-500 italic text-[13px]">Speak now…</span>}
                       </p>
-                      <p className="text-[9px] text-neutral-600 mt-1.5">Tap ⏹ to stop early</p>
-                    </>
+                    )}
+                    {voiceParsing && !voiceListening && (
+                      <p className="text-[13px] text-neutral-300 italic truncate">"{voiceTranscript}"</p>
+                    )}
+                    {voiceError && <p className="text-[12px] text-[#f87171]">{voiceError}</p>}
+                    {!voiceListening && !voiceParsing && !voiceError && (
+                      <p className="text-[12px] text-neutral-500 italic">Say: "forty-five fifty, two tip, three toll"</p>
+                    )}
+                  </div>
+                  {voiceError && (
+                    <button onClick={() => { setVoiceError(null); startVoiceForFare(); }}
+                      className="w-full h-10 rounded-xl bg-[#1e1e1e] text-[#facc15] font-bold text-[12px]">
+                      🎤 Try again
+                    </button>
                   )}
-                  {voiceParsing && !voiceListening && (
-                    <>
-                      <p className="text-[11px] font-bold text-[#facc15] tracking-wide">UNDERSTANDING…</p>
-                      <p className="text-[13px] text-neutral-300 mt-1 leading-snug italic truncate">"{voiceTranscript}"</p>
-                    </>
-                  )}
-                  {voiceError && !voiceListening && !voiceParsing && (
-                    <>
-                      <p className="text-[11px] font-bold text-[#f87171]">Couldn't understand</p>
-                      <p className="text-[12px] text-neutral-400 mt-0.5 leading-snug">{voiceError}</p>
-                      <button onClick={() => { setVoiceError(null); startVoice(); }}
-                        className="mt-2 text-[11px] text-[#facc15] font-bold">
-                        Try again →
-                      </button>
-                    </>
-                  )}
-                  {!voiceListening && !voiceParsing && !voiceError && (
-                    <p className="text-[13px] text-neutral-400">Tap the mic and speak</p>
-                  )}
+                  <button onClick={resetVoiceTripFlow} className="w-full text-[10px] text-neutral-600 py-0.5">Cancel</button>
                 </div>
-                <button
-                  onClick={() => { stopVoice(); setShowVoicePanel(false); setVoiceError(null); setVoiceParsing(false); }}
-                  className="w-7 h-7 rounded-full bg-[#1e1e1e] flex items-center justify-center text-neutral-500 text-[11px] flex-shrink-0">
-                  ✕
-                </button>
-              </div>
+              )}
 
-              {/* Example phrases */}
-              {!voiceListening && !voiceParsing && !voiceError && (
-                <div className="mt-3 pt-3 border-t border-[#1e1e1e] space-y-1">
-                  <p className="text-[9px] text-neutral-600 font-bold uppercase tracking-[0.12em] mb-1.5">Try saying:</p>
-                  {[
-                    "\"Uber, JFK to midtown, forty-five dollars, three tip\"",
-                    "\"Spent sixty dollars on gas at BP\"",
-                    "\"Clock in\" · \"Clock out\" · \"Break\"",
-                  ].map((ex, i) => (
-                    <p key={i} className="text-[10px] text-neutral-500 leading-relaxed">{ex}</p>
-                  ))}
+              {/* ── STEP 3: Confirm & Save ── */}
+              {voiceTripStep === "confirm" && vtFare && (
+                <div className="p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black text-[#facc15] tracking-[0.12em]">CONFIRM TRIP</span>
+                    <span className="text-[18px] font-black font-mono-jet text-white">
+                      ${(parseFloat(vtFare.earnings || "0") + parseFloat(vtFare.tips || "0") + parseFloat(vtFare.toll || "0") - parseFloat(vtFare.platformFee || "0")).toFixed(2)}
+                    </span>
+                  </div>
+                  {/* Route */}
+                  <div className="bg-[#111] rounded-xl px-3 py-2.5 space-y-2">
+                    {vtPickup && (
+                      <div className="flex items-start gap-2">
+                        <span className="text-[11px] text-[#4ade80] mt-0.5 flex-shrink-0">📍</span>
+                        <p className="text-[11px] text-neutral-300 leading-snug">{vtPickup.addr}</p>
+                      </div>
+                    )}
+                    {vtDropoff && (
+                      <div className="flex items-start gap-2">
+                        <span className="text-[11px] text-[#facc15] mt-0.5 flex-shrink-0">🏁</span>
+                        <p className="text-[11px] text-neutral-300 leading-snug">{vtDropoff.addr}</p>
+                      </div>
+                    )}
+                    {vtStartTime && (
+                      <p className="text-[9px] text-neutral-600 font-mono-jet pl-5">
+                        {Math.round((Date.now() - vtStartTime.getTime()) / 60000)} min trip
+                      </p>
+                    )}
+                  </div>
+                  {/* Fare breakdown — editable */}
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {([
+                      { label: "Fare",         key: "earnings",    color: "#facc15" },
+                      { label: "Tips",         key: "tips",        color: "#4ade80" },
+                      { label: "Toll",         key: "toll",        color: "#818cf8" },
+                      { label: "Platform fee", key: "platformFee", color: "#f87171" },
+                    ] as const).map(({ label, key, color }) => (
+                      <div key={key} className="bg-[#111] rounded-xl px-2.5 py-2">
+                        <p className="text-[8px] font-bold uppercase tracking-[0.1em]" style={{ color }}>{label}</p>
+                        <input
+                          type="number" inputMode="decimal"
+                          value={vtFare[key]}
+                          onChange={e => setVtFare(prev => prev ? { ...prev, [key]: e.target.value } : prev)}
+                          className="w-full bg-transparent text-[14px] font-bold font-mono-jet text-white outline-none mt-0.5"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  {/* Platform */}
+                  <div className="bg-[#111] rounded-xl px-3 py-2">
+                    <p className="text-[8px] font-bold uppercase tracking-[0.1em] text-neutral-500 mb-1">Platform</p>
+                    <select
+                      value={vtFare.platform}
+                      onChange={e => setVtFare(prev => prev ? { ...prev, platform: e.target.value } : prev)}
+                      className="w-full bg-transparent text-[13px] text-white outline-none">
+                      {["Uber","Lyft","Via","Curb","Alto","Arro","HopSkipDrive","Revel","Other"].map(p => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    onClick={confirmAndSaveVoiceTrip}
+                    disabled={vtSaving}
+                    className="w-full rounded-xl font-black text-[14px] tracking-[0.06em] transition-all active:scale-[0.98]"
+                    style={{ background: "#facc15", color: "#000", height: "52px" }}>
+                    {vtSaving ? "Saving…" : "✓ SAVE TRIP"}
+                  </button>
+                  <button onClick={resetVoiceTripFlow} className="w-full text-[10px] text-neutral-600 py-0.5">Discard</button>
+                </div>
+              )}
+
+              {/* ── IDLE: legacy voice assistant (expense / clock commands) ── */}
+              {voiceTripStep === "idle" && (
+                <div className="p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                      style={{
+                        background: voiceListening ? "#1a0606" : voiceParsing ? "#1a1400" : "#1a1a1a",
+                        border: voiceListening ? "1px solid rgba(239,68,68,0.4)" : voiceParsing ? "1px solid rgba(250,204,21,0.3)" : "1px solid #2e2e2e",
+                      }}>
+                      <span className="text-[15px]">
+                        {voiceListening ? "🔴" : voiceParsing ? "🤖" : voiceError ? "⚠️" : "🎤"}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      {voiceListening && (
+                        <>
+                          <p className="text-[11px] font-bold text-[#f87171] animate-pulse tracking-wide">LISTENING…</p>
+                          <p className="text-[14px] text-white mt-1 leading-snug min-h-[20px]">
+                            {voiceTranscript || <span className="text-neutral-500 italic text-[13px]">Speak now…</span>}
+                          </p>
+                        </>
+                      )}
+                      {voiceParsing && !voiceListening && (
+                        <>
+                          <p className="text-[11px] font-bold text-[#facc15] tracking-wide">UNDERSTANDING…</p>
+                          <p className="text-[13px] text-neutral-300 mt-1 leading-snug italic truncate">"{voiceTranscript}"</p>
+                        </>
+                      )}
+                      {voiceError && !voiceListening && !voiceParsing && (
+                        <>
+                          <p className="text-[11px] font-bold text-[#f87171]">Couldn't understand</p>
+                          <p className="text-[12px] text-neutral-400 mt-0.5 leading-snug">{voiceError}</p>
+                          <button onClick={() => { setVoiceError(null); startVoice(); }}
+                            className="mt-2 text-[11px] text-[#facc15] font-bold">Try again →</button>
+                        </>
+                      )}
+                      {!voiceListening && !voiceParsing && !voiceError && (
+                        <p className="text-[13px] text-neutral-400">Voice commands</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => { stopVoice(); setShowVoicePanel(false); setVoiceError(null); setVoiceParsing(false); }}
+                      className="w-7 h-7 rounded-full bg-[#1e1e1e] flex items-center justify-center text-neutral-500 text-[11px] flex-shrink-0">
+                      ✕
+                    </button>
+                  </div>
+                  {!voiceListening && !voiceParsing && !voiceError && (
+                    <div className="mt-3 pt-3 border-t border-[#1e1e1e] space-y-1">
+                      <p className="text-[9px] text-neutral-600 font-bold uppercase tracking-[0.12em] mb-1.5">Say:</p>
+                      {[
+                        "\"Spent sixty on gas at BP\"",
+                        "\"Clock in\" · \"Clock out\" · \"Break\"",
+                      ].map((ex, i) => <p key={i} className="text-[10px] text-neutral-500 leading-relaxed">{ex}</p>)}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -5776,28 +6075,43 @@ export default function App() {
           <span className="text-[22px] select-none">📡</span>
         </button>
 
-        {/* Mic button */}
+        {/* ── Mic / Trip-flow button ── */}
         <button
-          onClick={voiceListening ? stopVoice : startVoice}
+          onClick={() => {
+            if (voiceTripStep === "started") { endVoiceTripFlow(); return; }
+            if (voiceTripStep === "listening") { voiceListening ? stopVoice() : startVoiceForFare(); return; }
+            if (voiceTripStep === "confirm") return; // locked during confirm
+            // Idle: tap = start two-tap GPS trip flow
+            startVoiceTripFlow();
+          }}
           className="fixed bottom-[76px] right-4 z-50 w-[52px] h-[52px] rounded-full flex items-center justify-center transition-all active:scale-90"
           style={{
-            background: voiceListening ? "#1a0505" : "#111111",
-            border: voiceListening ? "2px solid rgba(239,68,68,0.55)" : "2px solid rgba(250,204,21,0.28)",
-            boxShadow: voiceListening
-              ? "0 0 22px rgba(239,68,68,0.28), 0 4px 16px rgba(0,0,0,0.7)"
-              : "0 0 18px rgba(250,204,21,0.08), 0 4px 16px rgba(0,0,0,0.6)",
+            background: voiceTripStep === "started" ? "#061a06" : voiceTripStep === "listening" || voiceListening ? "#1a0505" : voiceTripStep === "confirm" ? "#1a1400" : "#111111",
+            border: voiceTripStep === "started" ? "2px solid rgba(74,222,128,0.55)" : voiceTripStep === "listening" || voiceListening ? "2px solid rgba(239,68,68,0.55)" : voiceTripStep === "confirm" ? "2px solid rgba(250,204,21,0.55)" : "2px solid rgba(250,204,21,0.28)",
+            boxShadow: voiceTripStep === "started"
+              ? "0 0 22px rgba(74,222,128,0.22), 0 4px 16px rgba(0,0,0,0.7)"
+              : voiceListening
+                ? "0 0 22px rgba(239,68,68,0.28), 0 4px 16px rgba(0,0,0,0.7)"
+                : "0 0 18px rgba(250,204,21,0.08), 0 4px 16px rgba(0,0,0,0.6)",
           }}>
-          {voiceParsing ? (
+          {voiceParsing && voiceTripStep !== "started" ? (
             <div className="flex gap-[3px] items-center">
-              {[0, 1, 2].map(i => (
+              {[0,1,2].map(i => (
                 <div key={i} className="w-1.5 h-1.5 rounded-full bg-[#facc15] animate-bounce"
                   style={{ animationDelay: i * 0.13 + "s" }} />
               ))}
             </div>
+          ) : voiceTripStep === "started" ? (
+            <span className="text-[20px] select-none">🏁</span>
+          ) : voiceTripStep === "confirm" ? (
+            <span className="text-[20px] select-none">✓</span>
           ) : (
             <span className="text-[22px] select-none">{voiceListening ? "⏹" : "🎤"}</span>
           )}
-          {voiceListening && (
+          {(voiceTripStep === "started") && (
+            <span className="absolute inset-[-4px] rounded-full border-2 border-[#4ade80]/35 animate-ping pointer-events-none" />
+          )}
+          {voiceListening && voiceTripStep === "listening" && (
             <span className="absolute inset-[-4px] rounded-full border-2 border-[#f87171]/35 animate-ping pointer-events-none" />
           )}
         </button>
