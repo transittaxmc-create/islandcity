@@ -513,6 +513,20 @@ export default function App() {
   const [showSettings,     setShowSettings]     = useState(false);
   const [resetStep,        setResetStep]        = useState<0|1|2>(0); // 0=idle 1=confirm 2=done
 
+  // Import-backup preview (parsed payload waits for user confirmation)
+  type ImportPreview = {
+    data: {
+      trips: Trip[]; expenses: Expense[]; hoursLog: HoursEntry[];
+      customExpenseTypes?: string[]; customExpenseCategories?: string[];
+      customVendors?: string[];
+      dailyGoal?: number; workDays?: number[];
+      dayTargets?: Record<number,number>;
+      bankBalance?: number; bankAdjHistory?: BankAdjEntry[];
+    };
+    tripCount: number; expenseCount: number; dayCount: number;
+  };
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+
   // Shift clock — persisted to localStorage so iOS Safari reloads don't kill the active timer
   const [clockInTime, setClockInTime] = useState<Date | null>(() => {
     try {
@@ -1171,23 +1185,65 @@ export default function App() {
     reader.onload = (ev) => {
       try {
         const data = JSON.parse(ev.target?.result as string);
-        if (!data.trips || !Array.isArray(data.trips)) { showToast("Invalid backup file ✗"); return; }
-        syncSaveTrips(data.trips);
-        if (data.expenses && Array.isArray(data.expenses))   syncSaveExpenses(data.expenses);
-        if (data.hoursLog && Array.isArray(data.hoursLog))   setHoursLog(data.hoursLog);
-        if (data.customExpenseTypes)   setCustomExpenseTypes(data.customExpenseTypes);
-        if (data.customExpenseCategories) setCustomExpenseCategories(data.customExpenseCategories);
-        if (data.customVendors)        setCustomVendors(data.customVendors);
-        if (typeof data.dailyGoal === 'number') setDailyGoal(data.dailyGoal);
-        if (data.workDays)             setWorkDays(data.workDays);
-        if (data.dayTargets)           setDayTargets(data.dayTargets);
-        if (typeof data.bankBalance === 'number') setBankBalance(data.bankBalance);
-        if (data.bankAdjHistory)       setBankAdjHistory(data.bankAdjHistory);
-        showToast(`✓ Restored · ${data.trips.length} trips · ${data.expenses?.length ?? 0} expenses`);
-      } catch { showToast("Could not read backup file ✗"); }
+        if (!data.trips || !Array.isArray(data.trips)) { showToast("Archivo de backup inválido ✗"); return; }
+        const uniqueDays = new Set((data.hoursLog ?? []).map((h: HoursEntry) => h.date)).size;
+        setImportPreview({
+          data,
+          tripCount: data.trips.length,
+          expenseCount: Array.isArray(data.expenses) ? data.expenses.length : 0,
+          dayCount: uniqueDays,
+        });
+      } catch { showToast("No se pudo leer el archivo ✗"); }
     };
     reader.readAsText(file);
     e.target.value = "";
+  };
+
+  // Applies the confirmed import (merge = add unique IDs; replace = overwrite)
+  const confirmImport = (mode: "merge" | "replace") => {
+    if (!importPreview) return;
+    const { data } = importPreview;
+
+    if (mode === "replace") {
+      syncSaveTrips(data.trips);
+      syncSaveExpenses(Array.isArray(data.expenses) ? data.expenses : []);
+      if (Array.isArray(data.hoursLog)) {
+        try { localStorage.setItem("ic-hours-log", JSON.stringify(data.hoursLog)); } catch {}
+        setHoursLog(data.hoursLog);
+      }
+    } else {
+      // merge — keep existing, add backup entries whose IDs don't already exist
+      const existingTripIds = new Set(trips.map(t => t.id));
+      const newTrips = [...trips, ...data.trips.filter((t: Trip) => !existingTripIds.has(t.id))];
+      syncSaveTrips(newTrips);
+
+      const existingExpIds = new Set(expenses.map(ex => ex.id));
+      const mergedExp = [...expenses, ...(data.expenses ?? []).filter((ex: Expense) => !existingExpIds.has(ex.id))];
+      syncSaveExpenses(mergedExp);
+
+      if (Array.isArray(data.hoursLog)) {
+        const existingDates = new Set(hoursLog.map(h => h.date));
+        const mergedHours = [...hoursLog, ...data.hoursLog.filter((h: HoursEntry) => !existingDates.has(h.date))];
+        try { localStorage.setItem("ic-hours-log", JSON.stringify(mergedHours)); } catch {}
+        setHoursLog(mergedHours);
+      }
+    }
+
+    // Restore settings / finance data regardless of mode
+    if (data.customExpenseTypes)      setCustomExpenseTypes(data.customExpenseTypes);
+    if (data.customExpenseCategories) setCustomExpenseCategories(data.customExpenseCategories);
+    if (data.customVendors)           setCustomVendors(data.customVendors);
+    if (typeof data.dailyGoal === "number") setDailyGoal(data.dailyGoal);
+    if (data.workDays)                setWorkDays(data.workDays);
+    if (data.dayTargets)              setDayTargets(data.dayTargets);
+    if (typeof data.bankBalance === "number") setBankBalance(data.bankBalance);
+    if (data.bankAdjHistory)          setBankAdjHistory(data.bankAdjHistory);
+
+    setImportPreview(null);
+    setShowSettings(false);
+    showToast("Datos restaurados ✓");
+    // Short delay lets React flush state before reload
+    setTimeout(() => window.location.reload(), 800);
   };
 
   const handleClockIn = () => {
@@ -7541,6 +7597,52 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {/* ── Import backup confirmation modal ────────────────────── */}
+      {importPreview && (
+        <div className="fixed inset-0 z-[60] flex items-end justify-center" style={{ background: "rgba(0,0,0,0.75)" }}
+          onClick={() => setImportPreview(null)}>
+          <div className="w-full max-w-md bg-[#141414] border border-[#2e2e2e] rounded-t-3xl p-6 space-y-5"
+            onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="text-center space-y-1">
+              <p className="text-[10px] tracking-[0.18em] text-[#facc15] font-semibold uppercase">📦 Restaurar backup</p>
+              <p className="text-white text-[14px] font-bold leading-snug">
+                {importPreview.tripCount} viajes · {importPreview.expenseCount} gastos · {importPreview.dayCount} días de horas
+              </p>
+              <p className="text-[11px] text-neutral-400">¿Cómo quieres importar estos datos?</p>
+            </div>
+
+            {/* Options */}
+            <div className="space-y-3">
+              <button
+                onClick={() => confirmImport("merge")}
+                className="w-full rounded-2xl border border-[#3a3a3a] p-4 text-left hover:border-[#facc15]/50 transition-colors active:bg-[#1e1e1e]">
+                <p className="text-white text-[13px] font-bold mb-0.5">➕ Añadir a lo existente</p>
+                <p className="text-neutral-400 text-[11px] leading-relaxed">
+                  Combina el backup con tus datos actuales. Los viajes y gastos duplicados se omiten.
+                </p>
+              </button>
+
+              <button
+                onClick={() => confirmImport("replace")}
+                className="w-full rounded-2xl border border-[#ff6b6b]/30 p-4 text-left hover:border-[#ff6b6b]/60 transition-colors active:bg-[#1e0808]">
+                <p className="text-[#ff6b6b] text-[13px] font-bold mb-0.5">🔄 Reemplazar todo</p>
+                <p className="text-neutral-400 text-[11px] leading-relaxed">
+                  Borra los datos actuales y los reemplaza con el backup. Esta acción no se puede deshacer.
+                </p>
+              </button>
+            </div>
+
+            {/* Cancel */}
+            <button
+              onClick={() => setImportPreview(null)}
+              className="w-full h-11 rounded-full border border-[#2e2e2e] text-neutral-400 text-[12px] font-bold hover:text-white transition-colors">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
