@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/islandcity-android/"
+title = "IslandCity Android"
+description = "Native Android companion app for NYC rideshare drivers. Features the LimoSys job evaluator (photo → Gemini AI → TOMAR/RECHAZAR verdict), earnings dashboard, and AI chat assistant. Connects to the IslandCity API backend."
+version = "1.0.0"
+id = "artifacts/islandcity-android"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/islandcity-android/" ]
+localPort = 21835
+
+[services.development]
+run = "pnpm --filter @workspace/islandcity-android run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/islandcity-android", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/islandcity-android", "run", "serve" ]
+
+[services.env]
+PORT = "21835"
+BASE_PATH = "/islandcity-android/"
