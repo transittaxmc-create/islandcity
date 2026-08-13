@@ -601,6 +601,10 @@ export default function App() {
   const [cloudBackupAt, setCloudBackupAt] = useState<Date | null>(() => {
     try { const r = localStorage.getItem("ic-last-cloud-backup"); return r ? new Date(r) : null; } catch { return null; }
   });
+  const [githubPushAt, setGithubPushAt] = useState<Date | null>(() => {
+    try { const r = localStorage.getItem("ic-last-github-push"); return r ? new Date(r) : null; } catch { return null; }
+  });
+  const [githubPushing, setGithubPushing] = useState(false);
   const [documents,    setDocuments]    = useState<DocEntry[]>([]);
   const [docsLoading,  setDocsLoading]  = useState(false);
   const [showDocuments, setShowDocuments] = useState(false);
@@ -1934,16 +1938,39 @@ export default function App() {
     } catch { /* silent — cloud backup is best-effort */ }
   }, []);
 
+  // Push latest code to GitHub (called at most once per day)
+  const saveGithubPush = useCallback(async () => {
+    try {
+      const res = await fetch("/api/git-push", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json() as { ok: boolean; skipped?: boolean; pushedAt?: string };
+        if (data.ok && !data.skipped && data.pushedAt) {
+          const now = new Date(data.pushedAt);
+          setGithubPushAt(now);
+          try { localStorage.setItem("ic-last-github-push", now.toISOString()); } catch {}
+        }
+      }
+    } catch { /* silent — GitHub push is best-effort */ }
+  }, []);
+
   // Auto-backup: every 60 min + whenever the app goes to background
+  // Also triggers a GitHub push once per day (if 24h have elapsed)
   useEffect(() => {
-    const interval = setInterval(() => { saveCloudBackup(); }, 60 * 60 * 1000);
-    const onHide = () => { if (document.visibilityState === "hidden") saveCloudBackup(); };
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const maybePushGithub = () => {
+      const last = githubPushAt ? githubPushAt.getTime() : 0;
+      if (Date.now() - last > DAY_MS) saveGithubPush();
+    };
+    const interval = setInterval(() => { saveCloudBackup(); maybePushGithub(); }, 60 * 60 * 1000);
+    const onHide = () => { if (document.visibilityState === "hidden") { saveCloudBackup(); maybePushGithub(); } };
     document.addEventListener("visibilitychange", onHide);
+    // Also push once on load if it's been more than a day
+    maybePushGithub();
     return () => {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", onHide);
     };
-  }, [saveCloudBackup]);
+  }, [saveCloudBackup, saveGithubPush, githubPushAt]);
 
   // Auto-backup: also 5 s after any trip or expense change (debounced)
   // Skips the initial mount so the restore-from-cloud on load doesn't trigger a redundant write.
@@ -6281,6 +6308,49 @@ export default function App() {
                   onClick={async () => { await saveCloudBackup(); showToast("☁️ Cloud backup saved ✓"); }}
                   className="w-full h-11 rounded-full bg-[#0d1f12] border border-[#4ade80]/30 text-[#4ade80] text-[12px] font-bold tracking-[0.1em] hover:bg-[#4ade80]/10 transition-colors">
                   ☁️ Save to cloud now
+                </button>
+              </div>
+
+              {/* ── GitHub code backup ── */}
+              <div className="bg-[#080d18] border border-[#818cf8]/20 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[9px] tracking-[0.16em] text-[#818cf8] font-semibold uppercase">🐙 GitHub Backup</p>
+                  <span className={`text-[9px] font-mono-jet ${githubPushAt ? "text-[#818cf8]" : "text-neutral-500"}`}>
+                    {githubPushAt
+                      ? `Last: ${githubPushAt.toLocaleDateString([], { month:"short", day:"numeric" })} · ${githubPushAt.toLocaleTimeString([], { hour:"numeric", minute:"2-digit" })}`
+                      : "Not yet pushed"}
+                  </span>
+                </div>
+                <p className="text-[11px] text-neutral-400 leading-relaxed">
+                  El código fuente se sube automáticamente a GitHub una vez al día. Si Replit tuviera algún problema, el código queda seguro en tu cuenta de GitHub.
+                </p>
+                <button
+                  disabled={githubPushing}
+                  onClick={async () => {
+                    setGithubPushing(true);
+                    try {
+                      const res = await fetch("/api/git-push", { method: "POST" });
+                      const data = await res.json() as { ok: boolean; skipped?: boolean; pushedAt?: string; error?: string };
+                      if (data.ok && data.pushedAt) {
+                        const now = new Date(data.pushedAt);
+                        setGithubPushAt(now);
+                        try { localStorage.setItem("ic-last-github-push", now.toISOString()); } catch {}
+                        showToast("🐙 Code pushed to GitHub ✓");
+                      } else if (data.skipped) {
+                        showToast("GitHub: pushed recently, try again in a few minutes");
+                      } else {
+                        showToast("GitHub push failed — check token");
+                      }
+                    } catch { showToast("GitHub push failed"); }
+                    setGithubPushing(false);
+                  }}
+                  className="w-full h-11 rounded-full border text-[12px] font-bold tracking-[0.1em] transition-colors"
+                  style={{
+                    background: githubPushing ? "#0d0d1a" : "#0d1020",
+                    borderColor: "rgba(129,140,248,0.3)",
+                    color: githubPushing ? "#555" : "#818cf8",
+                  }}>
+                  {githubPushing ? "Pushing…" : "🐙 Push to GitHub now"}
                 </button>
               </div>
 

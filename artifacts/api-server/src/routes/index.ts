@@ -6,6 +6,7 @@ import voiceParseRouter from "./voice-parse";
 import broadcastEvalRouter from "./broadcast-eval";
 import backupRouter from "./backup";
 import documentsRouter from "./documents";
+import gitPushRouter from "./git-push";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(voiceParseRouter);
 router.use(broadcastEvalRouter);
 router.use(backupRouter);
 router.use(documentsRouter);
+router.use(gitPushRouter);
 
 export default router;
