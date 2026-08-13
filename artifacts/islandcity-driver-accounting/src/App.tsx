@@ -627,7 +627,11 @@ export default function App() {
 
   // Expense form
   const [showExpenseForm, setShowExpenseForm] = useState(false);
-  const [expPeriod, setExpPeriod] = useState<'DAY'|'WEEK'|'MONTH'|'YEAR'|'ALL'>('ALL');
+  const [expPeriod, setExpPeriod] = useState<'DAY'|'WEEK'|'MONTH'|'YEAR'|'ALL'>('MONTH');
+  const [expBudgets, setExpBudgets] = useState<Record<string, number>>(() => {
+    try { return JSON.parse(localStorage.getItem("ic-exp-budgets") || "{}"); } catch { return {}; }
+  });
+  const [showBudgetEditor, setShowBudgetEditor] = useState(false);
   const [expenseForm, setExpenseForm] = useState({
     name: "", type: "Gasoline / Fuel", category: "Vehicle & Fuel",
     description: "", amount: "", date: new Date().toISOString().slice(0, 10),
@@ -848,6 +852,7 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("ic-hourly-goal", String(goal)); } catch {} }, [goal]);
   useEffect(() => { try { localStorage.setItem("ic-week-overrides", JSON.stringify(weekOverrides)); } catch {} }, [weekOverrides]);
   useEffect(() => { try { localStorage.setItem("ic-recurring-plan", JSON.stringify(recurringPlan)); } catch {} }, [recurringPlan]);
+  useEffect(() => { try { localStorage.setItem("ic-exp-budgets", JSON.stringify(expBudgets)); } catch {} }, [expBudgets]);
 
   // Keep refs in sync so the pagehide listener always has the latest state
   useEffect(() => { tripsRef.current    = trips;    }, [trips]);
@@ -3843,6 +3848,44 @@ export default function App() {
   const allExpenseCategories = useMemo(() => [...EXPENSE_CATEGORIES, ...customExpenseCategories], [customExpenseCategories]);
   const allVendors           = useMemo(() => [...NYC_DEFAULT_VENDORS, ...(customVendors.filter(v=>!NYC_DEFAULT_VENDORS.includes(v)))], [customVendors]);
 
+  // ── Expense summary by period and category (for budget overview) ─────────
+  const expSummary = useMemo(() => {
+    const today     = toYYYYMMDD(currentTime);
+    const wd        = currentTime.getDay();
+    const monOffset = wd === 0 ? -6 : 1 - wd;
+    const weekStart = toYYYYMMDD(new Date(currentTime.getFullYear(), currentTime.getMonth(), currentTime.getDate() + monOffset));
+    const monthStr  = today.slice(0, 7);
+    const yearStr   = today.slice(0, 4);
+    const logOnly   = expenses.filter(e => !e.frequency || e.frequency === 'none');
+    // Calendar-aligned trip date helper (same predicate style as expense filter)
+    const tripDate  = (t: Trip) => t.date || (t.timestamp ?? "").slice(0, 10);
+    const summarise = (subset: Expense[], tripSubset: Trip[]) => {
+      const total = subset.reduce((a, e) => a + e.amount, 0);
+      const byCategory: Record<string, number> = {};
+      subset.forEach(e => { byCategory[e.category] = (byCategory[e.category] || 0) + e.amount; });
+      const toll = tripSubset.reduce((a, t) => a + t.toll, 0);
+      return { total, byCategory, toll };
+    };
+    return {
+      day:   summarise(
+        logOnly.filter(e => e.date === today),
+        trips.filter(t => tripDate(t) === today),
+      ),
+      week:  summarise(
+        logOnly.filter(e => e.date >= weekStart && e.date <= today),
+        trips.filter(t => { const d = tripDate(t); return d >= weekStart && d <= today; }),
+      ),
+      month: summarise(
+        logOnly.filter(e => e.date.startsWith(monthStr)),
+        trips.filter(t => tripDate(t).startsWith(monthStr)),
+      ),
+      year:  summarise(
+        logOnly.filter(e => e.date.startsWith(yearStr)),
+        trips.filter(t => tripDate(t).startsWith(yearStr)),
+      ),
+    };
+  }, [expenses, trips, currentTime]);
+
   // Period-filtered expenses — EXPENSE LOG only (one-time, non-recurring entries)
   const expPeriodFiltered = useMemo(() => {
     const today     = toYYYYMMDD(currentTime);
@@ -4443,6 +4486,192 @@ export default function App() {
                 })}
               </div>
             )}
+          </div>
+        );
+      })()}
+
+      {/* ── BUDGET OVERVIEW ── */}
+      {(() => {
+        // Monthly budget → prorated target per period
+        // Week: monthly × 12 / 52  (annualise then divide by 52 weeks)
+        // Day:  monthly × 12 / 365 (annualise then divide by 365 days)
+        const budgetFor = (cat: string, periodId: 'DAY'|'WEEK'|'MONTH'|'YEAR') => {
+          const monthly = expBudgets[cat] || 0;
+          if (!monthly) return 0;
+          if (periodId === 'DAY')   return monthly * 12 / 365;
+          if (periodId === 'WEEK')  return monthly * 12 / 52;
+          if (periodId === 'YEAR')  return monthly * 12;
+          return monthly; // MONTH
+        };
+        const periodMap: { id: 'DAY'|'WEEK'|'MONTH'|'YEAR'; label: string; short: string; data: typeof expSummary.day }[] = [
+          { id: 'DAY',   label: 'Today',      short: 'Day',   data: expSummary.day   },
+          { id: 'WEEK',  label: 'This Week',  short: 'Week',  data: expSummary.week  },
+          { id: 'MONTH', label: 'This Month', short: 'Month', data: expSummary.month },
+          { id: 'YEAR',  label: 'This Year',  short: 'Year',  data: expSummary.year  },
+        ];
+        const selected  = periodMap.find(p => p.id === expPeriod) ?? periodMap[2];
+        const catData   = selected.data.byCategory;
+        const tripToll  = selected.data.toll;
+        // All expense categories (built-in + custom) that have spending or a budget set
+        const allCats   = allExpenseCategories.filter(c => (catData[c] || 0) > 0 || expBudgets[c]);
+        const hasBudget = allExpenseCategories.some(c => expBudgets[c]);
+        return (
+          <div className="bg-[#0d0d0d] border border-[#facc15]/20 rounded-2xl overflow-hidden">
+            {/* Gold top accent */}
+            <div className="h-[3px] bg-gradient-to-r from-[#facc15]/90 to-[#facc15]/10" />
+
+            {/* Period cards row */}
+            <div className="grid grid-cols-4 divide-x divide-[#1a1a1a] border-b border-[#1a1a1a]">
+              {periodMap.map(p => {
+                const isActive = expPeriod === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => setExpPeriod(p.id)}
+                    className="flex flex-col items-center py-3 px-1 transition-colors"
+                    style={{ background: isActive ? "rgba(250,204,21,0.07)" : "transparent" }}
+                  >
+                    <span className={`text-[8px] font-bold uppercase tracking-widest mb-1 ${isActive ? 'text-[#facc15]' : 'text-neutral-500'}`}>{p.short}</span>
+                    <span className={`font-mono-jet text-[13px] font-bold ${isActive ? 'text-[#ff6b6b]' : 'text-neutral-400'}`}>
+                      −${(p.data.total + p.data.toll).toFixed(0)}
+                    </span>
+                    {isActive && <div className="w-5 h-[2px] rounded-full bg-[#facc15] mt-1.5" />}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Section header */}
+            <div className="flex items-center justify-between px-4 pt-3 pb-2">
+              <div>
+                <p className="text-[10px] text-[#facc15] font-bold uppercase tracking-widest">📊 Budget Overview</p>
+                <p className="text-[10px] text-neutral-400 mt-0.5 font-mono-jet">{selected.label} · −${(selected.data.total + tripToll).toFixed(2)}</p>
+              </div>
+              <button
+                onClick={() => setShowBudgetEditor(s => !s)}
+                className="h-7 px-3 rounded-full border text-[9px] font-bold tracking-wide transition-colors"
+                style={{ background: showBudgetEditor ? "rgba(250,204,21,0.12)" : "rgba(30,30,30,0.8)", borderColor: showBudgetEditor ? "rgba(250,204,21,0.4)" : "#333", color: showBudgetEditor ? "#facc15" : "#888" }}
+              >
+                {showBudgetEditor ? "✕ Done" : "⚙ Set Budgets"}
+              </button>
+            </div>
+
+            {/* Budget editor — collapsible */}
+            {showBudgetEditor && (
+              <div className="px-4 pb-3 border-b border-[#1a1a1a] space-y-2">
+                <p className="text-[9px] text-neutral-500 mb-2">Set monthly budget targets per category. Leave blank = no limit.</p>
+                {allExpenseCategories.map(cat => (
+                  <div key={cat} className="flex items-center gap-3">
+                    <span className="flex-1 text-[11px] text-neutral-300 truncate">{cat}</span>
+                    <div className="relative w-[90px] flex-shrink-0">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400 text-[11px]">$</span>
+                      <input
+                        inputMode="decimal"
+                        value={expBudgets[cat] ? String(expBudgets[cat]) : ""}
+                        placeholder="—"
+                        onChange={e => {
+                          const v = parseFloat(e.target.value);
+                          setExpBudgets(prev => {
+                            const next = { ...prev };
+                            if (isNaN(v) || e.target.value === "") delete next[cat];
+                            else next[cat] = v;
+                            return next;
+                          });
+                        }}
+                        className="w-full h-8 rounded-lg bg-black border border-[#2a2a2a] pl-5 pr-2 text-white text-[12px] font-mono-jet focus:outline-none focus:border-[#facc15]/40"
+                      />
+                    </div>
+                    <span className="text-[9px] text-neutral-500 w-[22px] text-right">/mo</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Category breakdown */}
+            <div className="px-4 pt-3 pb-4 space-y-3">
+              {allCats.length === 0 && tripToll === 0 ? (
+                <p className="text-[11px] text-neutral-500 text-center py-4">No expenses recorded for {selected.label.toLowerCase()}</p>
+              ) : (
+                <>
+                  {allCats.map(cat => {
+                    const spent       = catData[cat] || 0;
+                    const periodBudget = budgetFor(cat, selected.id);
+                    const pct          = periodBudget > 0 ? Math.min((spent / periodBudget) * 100, 100) : 0;
+                    const over         = periodBudget > 0 && spent > periodBudget;
+                    const barColor     = over ? "#f87171" : pct > 75 ? "#fb923c" : "#facc15";
+                    return (
+                      <div key={cat}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[11px] text-neutral-300 truncate max-w-[55%]">{cat}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono-jet text-[12px] font-bold text-[#ff6b6b]">−${spent.toFixed(2)}</span>
+                            {periodBudget > 0 && (
+                              <span className={`text-[9px] font-mono-jet ${over ? 'text-[#f87171]' : 'text-neutral-500'}`}>
+                                / ${periodBudget.toFixed(0)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {periodBudget > 0 && (
+                          <div className="h-[4px] rounded-full bg-[#1e1e1e] overflow-hidden">
+                            <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: barColor }} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Trip-toll line — calendar-aligned, same period as expenses */}
+                  {tripToll > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[11px] text-neutral-300 flex items-center gap-1.5">
+                          🚗 Tolls (from trips)
+                          <span className="text-[8px] text-neutral-600 font-mono-jet">auto</span>
+                        </span>
+                        <span className="font-mono-jet text-[12px] font-bold text-[#ff6b6b]">−${tripToll.toFixed(2)}</span>
+                      </div>
+                      {(() => {
+                        const tollPeriodBudget = budgetFor("Tolls & Parking", selected.id);
+                        if (!tollPeriodBudget) return null;
+                        const combined = (catData["Tolls & Parking"] || 0) + tripToll;
+                        const ratio = combined / tollPeriodBudget; // unbounded — use for color
+                        const barW  = Math.min(ratio * 100, 100);  // clamped — use for width
+                        const barColor = ratio >= 1 ? "#f87171" : ratio >= 0.75 ? "#fb923c" : "#facc15";
+                        return (
+                          <div className="h-[4px] rounded-full bg-[#1e1e1e] overflow-hidden">
+                            <div className="h-full rounded-full transition-all"
+                              style={{ width: `${barW}%`, background: barColor }} />
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {/* Grand total */}
+                  <div className="pt-2 border-t border-[#1e1e1e] flex items-center justify-between">
+                    <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider">Total Spent</span>
+                    <span className="font-mono-jet text-[14px] font-bold text-[#ff6b6b]">
+                      −${(selected.data.total + tripToll).toFixed(2)}
+                    </span>
+                  </div>
+                  {hasBudget && (() => {
+                    // Total budget prorated to selected period
+                    const totalBudget = allExpenseCategories.reduce((a, c) => a + budgetFor(c, selected.id), 0);
+                    const totalSpent  = selected.data.total + tripToll;
+                    const remBudget   = totalBudget - totalSpent;
+                    return totalBudget > 0 ? (
+                      <div className="flex items-center justify-between -mt-1">
+                        <span className="text-[10px] text-neutral-500 uppercase tracking-wider">Remaining</span>
+                        <span className={`font-mono-jet text-[13px] font-bold ${remBudget < 0 ? 'text-[#f87171]' : 'text-[#4ade80]'}`}>
+                          {remBudget < 0 ? "−" : "+"}${Math.abs(remBudget).toFixed(2)}
+                        </span>
+                      </div>
+                    ) : null;
+                  })()}
+                </>
+              )}
+            </div>
           </div>
         );
       })()}
