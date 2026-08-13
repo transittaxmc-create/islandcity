@@ -698,6 +698,7 @@ export default function App() {
   const [statementDocId, setStatementDocId] = useState<number | null>(null);
   const [statementSelected, setStatementSelected] = useState<Record<number, boolean>>({});
   const [statementCategories, setStatementCategories] = useState<Record<number, string>>({});
+  const [statementPurpose, setStatementPurpose] = useState<Record<number, "business" | "personal">>({});
 
   // ── Voice entry ───────────────────────────────────────────────────────────
   const [voiceListening, setVoiceListening] = useState(false);
@@ -1510,8 +1511,11 @@ export default function App() {
           sel[i] = tx.txType === "debit" && !tx.matchedExpenseId;
           cats[i] = tx.category;
         });
+        const purps: Record<number, "business" | "personal"> = {};
+        txs.forEach((_, i) => { purps[i] = "business"; });
         setStatementSelected(sel);
         setStatementCategories(cats);
+        setStatementPurpose(purps);
       } catch (err: unknown) {
         setStatementScanError(err instanceof Error ? err.message : "Scan failed. Please try again.");
       } finally {
@@ -1533,7 +1537,7 @@ export default function App() {
         amount: tx.amount,
         note: tx.description,
         type: "Statement Import",
-        purpose: "business",
+        purpose: statementPurpose[i] ?? "business",
         ...(statementDocId !== null ? { receiptDocId: statementDocId } : {}),
       });
     });
@@ -3399,7 +3403,7 @@ export default function App() {
           {/* Header */}
           <div className="flex items-center gap-3 px-4 py-4 border-b border-[#1e1e1e] flex-shrink-0">
             <button
-              onClick={() => { setShowStatementImport(false); setStatementTransactions([]); setStatementScanError(null); setStatementScanning(false); }}
+              onClick={() => { setShowStatementImport(false); setStatementTransactions([]); setStatementScanError(null); setStatementScanning(false); setStatementPurpose({}); }}
               className="w-9 h-9 rounded-full bg-[#1e1e1e] flex items-center justify-center text-white text-[14px] flex-shrink-0">
               ✕
             </button>
@@ -3487,81 +3491,135 @@ export default function App() {
                 );
               })()}
 
-              {/* Transaction list */}
+              {/* Transaction list — grouped by Gemini-assigned category */}
               <div className="flex-1 overflow-y-auto pb-28">
-                <div className="p-3 space-y-2">
-                  {statementTransactions.map((tx, i) => {
-                    const isSelected = !!statementSelected[i];
-                    const isMatched = !!tx.matchedExpenseId;
-                    const isCredit = tx.txType === "credit";
+                <div className="p-3 space-y-4">
+                  {(() => {
+                    // Group by Gemini category (stable — doesn't shift when user edits)
+                    const groups: Record<string, number[]> = {};
+                    statementTransactions.forEach((tx, i) => {
+                      const cat = tx.category || "Other";
+                      if (!groups[cat]) groups[cat] = [];
+                      groups[cat].push(i);
+                    });
+                    const bizCount = Object.values(statementPurpose).filter(p => p === "business").length;
+                    const perCount = Object.values(statementPurpose).filter(p => p === "personal").length;
                     return (
-                      <div
-                        key={i}
-                        onClick={() => { if (!isMatched) setStatementSelected(s => ({ ...s, [i]: !s[i] })); }}
-                        className="rounded-xl border px-3 py-3 transition-all active:scale-[0.99]"
-                        style={{
-                          background: isMatched ? "#0a1a0a" : isSelected ? "#1a1500" : "#0f0f0f",
-                          borderColor: isMatched ? "rgba(74,222,128,0.2)" : isSelected ? "rgba(250,204,21,0.4)" : "#1e1e1e",
-                          opacity: isMatched ? 0.65 : 1,
-                        }}>
-                        <div className="flex items-start gap-3">
-                          {/* Checkbox */}
-                          <div className="mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0"
-                            style={{
-                              borderColor: isMatched ? "#4ade80" : isSelected ? "#facc15" : "#444",
-                              background: isMatched ? "rgba(74,222,128,0.15)" : isSelected ? "#facc15" : "transparent",
-                            }}>
-                            {(isMatched || isSelected) && (
-                              <span className="text-[10px] font-bold" style={{ color: isMatched ? "#4ade80" : "#000" }}>✓</span>
-                            )}
+                      <>
+                        {/* Biz / Personal summary pill */}
+                        {(bizCount + perCount) > 0 && (
+                          <div className="flex gap-2 px-1 -mt-1 mb-1">
+                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#4ade80]/10 text-[#4ade80] border border-[#4ade80]/20">🏢 {bizCount} business</span>
+                            {perCount > 0 && <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#818cf8]/10 text-[#818cf8] border border-[#818cf8]/20">👤 {perCount} personal</span>}
                           </div>
-
-                          {/* Info */}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[13px] font-semibold text-white leading-tight truncate">
-                              {tx.vendor || tx.description}
-                            </p>
-                            {tx.vendor && tx.description && tx.description !== tx.vendor && (
-                              <p className="text-[10px] text-neutral-500 truncate mt-0.5">{tx.description}</p>
-                            )}
-                            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                              <span className="text-[9px] text-neutral-600 font-mono-jet">{tx.date}</span>
-                              {isMatched && (
-                                <span className="text-[9px] text-[#4ade80] bg-[#4ade80]/10 px-1.5 py-0.5 rounded-full border border-[#4ade80]/20">
-                                  ✓ Already recorded
-                                </span>
-                              )}
-                              {isCredit && (
-                                <span className="text-[9px] text-[#818cf8] bg-[#818cf8]/10 px-1.5 py-0.5 rounded-full border border-[#818cf8]/20">
-                                  ↑ income
-                                </span>
-                              )}
-                              {!isMatched && (
-                                <select
-                                  value={statementCategories[i] || tx.category}
-                                  onClick={e => e.stopPropagation()}
-                                  onChange={e => { e.stopPropagation(); setStatementCategories(s => ({ ...s, [i]: e.target.value })); }}
-                                  className="text-[9px] bg-[#1e1e1e] border border-[#333] text-neutral-300 rounded-lg px-1.5 py-0.5 max-w-[120px]"
-                                >
-                                  {["Gas/Fuel","Car Wash","Tolls","EZ-Pass","Food & Drink","Vehicle Maintenance","Insurance","Phone","Parking","Supplies","Other"].map(c => (
-                                    <option key={c} value={c}>{c}</option>
-                                  ))}
-                                </select>
-                              )}
+                        )}
+                        {Object.entries(groups).map(([cat, indices]) => {
+                          const catDebitTotal = indices.reduce((s, i) => statementTransactions[i].txType === "debit" ? s + statementTransactions[i].amount : s, 0);
+                          const catSelCount = indices.filter(i => !!statementSelected[i]).length;
+                          return (
+                            <div key={cat}>
+                              {/* Category header */}
+                              <div className="flex items-center justify-between px-1 mb-1.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-bold text-neutral-400 tracking-[0.1em] uppercase">{cat}</span>
+                                  <span className="text-[8px] text-neutral-600">{indices.length} tx</span>
+                                  {catSelCount > 0 && (
+                                    <span className="text-[8px] font-bold bg-[#facc15]/15 text-[#f6dd8c] px-1.5 py-0.5 rounded-full">{catSelCount} ✓</span>
+                                  )}
+                                </div>
+                                {catDebitTotal > 0 && (
+                                  <span className="text-[10px] font-mono-jet text-neutral-500">−${catDebitTotal.toFixed(2)}</span>
+                                )}
+                              </div>
+                              {/* Transactions */}
+                              <div className="space-y-1.5">
+                                {indices.map(i => {
+                                  const tx = statementTransactions[i];
+                                  const isSelected = !!statementSelected[i];
+                                  const isMatched = !!tx.matchedExpenseId;
+                                  const isCredit = tx.txType === "credit";
+                                  const purpose = statementPurpose[i] ?? "business";
+                                  return (
+                                    <div key={i}
+                                      onClick={() => { if (!isMatched) setStatementSelected(s => ({ ...s, [i]: !s[i] })); }}
+                                      className="rounded-xl border px-3 py-2.5 transition-all active:scale-[0.99]"
+                                      style={{
+                                        background: isMatched ? "#0a1a0a" : isSelected ? "#1a1500" : "#0f0f0f",
+                                        borderColor: isMatched ? "rgba(74,222,128,0.2)" : isSelected ? "rgba(250,204,21,0.4)" : "#1e1e1e",
+                                        opacity: isMatched ? 0.65 : 1,
+                                      }}>
+                                      <div className="flex items-start gap-2.5">
+                                        {/* Checkbox */}
+                                        <div className="mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0"
+                                          style={{
+                                            borderColor: isMatched ? "#4ade80" : isSelected ? "#facc15" : "#444",
+                                            background: isMatched ? "rgba(74,222,128,0.15)" : isSelected ? "#facc15" : "transparent",
+                                          }}>
+                                          {(isMatched || isSelected) && (
+                                            <span className="text-[10px] font-bold" style={{ color: isMatched ? "#4ade80" : "#000" }}>✓</span>
+                                          )}
+                                        </div>
+                                        {/* Info */}
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-[12px] font-semibold text-white leading-tight truncate">
+                                            {tx.vendor || tx.description}
+                                          </p>
+                                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                            <span className="text-[9px] text-neutral-600 font-mono-jet">{tx.date}</span>
+                                            {isMatched && (
+                                              <span className="text-[8px] text-[#4ade80] bg-[#4ade80]/10 px-1.5 py-0.5 rounded-full border border-[#4ade80]/20">✓ Recorded</span>
+                                            )}
+                                            {isCredit && (
+                                              <span className="text-[8px] text-[#818cf8] bg-[#818cf8]/10 px-1.5 py-0.5 rounded-full border border-[#818cf8]/20">↑ income</span>
+                                            )}
+                                            {/* Category override dropdown */}
+                                            {!isMatched && !isCredit && (
+                                              <select
+                                                value={statementCategories[i] || tx.category}
+                                                onClick={e => e.stopPropagation()}
+                                                onChange={e => { e.stopPropagation(); setStatementCategories(s => ({ ...s, [i]: e.target.value })); }}
+                                                className="text-[8px] bg-[#1a1a1a] border border-[#2e2e2e] text-neutral-400 rounded-lg px-1.5 py-0.5 max-w-[110px]"
+                                              >
+                                                {["Gas/Fuel","Car Wash","Tolls","EZ-Pass","Food & Drink","Vehicle Maintenance","Insurance","Phone","Parking","Supplies","Other"].map(c => (
+                                                  <option key={c} value={c}>{c}</option>
+                                                ))}
+                                              </select>
+                                            )}
+                                          </div>
+                                        </div>
+                                        {/* Amount + Biz/Personal toggle */}
+                                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                                          <p className="text-[14px] font-bold font-mono-jet"
+                                            style={{ color: isCredit ? "#4ade80" : isSelected ? "#facc15" : "#888" }}>
+                                            {isCredit ? "+" : "−"}${tx.amount.toFixed(2)}
+                                          </p>
+                                          {!isMatched && !isCredit && (
+                                            <button
+                                              onClick={e => {
+                                                e.stopPropagation();
+                                                setStatementPurpose(prev => ({ ...prev, [i]: purpose === "business" ? "personal" : "business" }));
+                                              }}
+                                              className="text-[8px] font-bold px-1.5 py-0.5 rounded-full border transition-all"
+                                              style={{
+                                                background: purpose === "business" ? "rgba(74,222,128,0.1)" : "rgba(129,140,248,0.12)",
+                                                borderColor: purpose === "business" ? "rgba(74,222,128,0.3)" : "rgba(129,140,248,0.35)",
+                                                color: purpose === "business" ? "#4ade80" : "#818cf8",
+                                              }}>
+                                              {purpose === "business" ? "🏢 Biz" : "👤 Personal"}
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          </div>
-
-                          {/* Amount */}
-                          <div className="text-right flex-shrink-0 ml-1">
-                            <p className="text-[15px] font-bold font-mono-jet"
-                              style={{ color: isCredit ? "#4ade80" : isSelected ? "#facc15" : "#aaa" }}>
-                              {isCredit ? "+" : "−"}${tx.amount.toFixed(2)}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
+                          );
+                        })}
+                      </>
                     );
-                  })}
+                  })()}
                 </div>
               </div>
 
@@ -4167,6 +4225,24 @@ export default function App() {
       '<tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:bold">TOTAL EXPENSES</td>',
       '<td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:bold">$'+expensesAll.toFixed(2)+'</td></tr></table>',
 
+      // ── Bank Statement Verified ────────────────────────────────
+      (() => {
+        const stmtExps = bizExpenses.filter(e => e.type === "Statement Import");
+        if (stmtExps.length === 0) return '<p style="font-size:11px;color:#aaa;margin:4px 0">No bank statement imported. Import a statement to show verified expense reconciliation here.</p>';
+        const stmtTotal = stmtExps.reduce((a, e) => a + e.amount, 0);
+        const stmtByCat: Record<string,number> = {};
+        stmtExps.forEach(e => { stmtByCat[e.category] = (stmtByCat[e.category]||0) + e.amount; });
+        const stmtRows = Object.entries(stmtByCat).sort((a,b)=>b[1]-a[1])
+          .map(([c,a])=>'<tr><td style="padding:4px 12px;border-bottom:1px solid #eee;font-size:11px">'+c+'</td><td style="padding:4px 12px;text-align:right;font-family:monospace;font-size:11px">$'+a.toFixed(2)+'</td></tr>').join('');
+        const coveragePct = expensesAll > 0 ? Math.min((stmtTotal/expensesAll)*100, 100).toFixed(0) : "0";
+        return '<h2>Bank Statement Verified Expenses</h2>'
+          +'<p style="font-size:11px;color:#555;margin:0 0 8px">These expenses were imported directly from your bank statement and confirmed against your records. They are included in the Business Expenses total above.</p>'
+          +'<table><tr><th>Category</th><th style="text-align:right">Bank Verified</th></tr>'
+          +stmtRows
+          +'<tr style="background:#f0fff4"><td style="padding:6px 12px;font-weight:bold;color:#1a7a4a">VERIFIED TOTAL</td>'
+          +'<td style="padding:6px 12px;text-align:right;font-family:monospace;font-weight:bold;color:#1a7a4a">$'+stmtTotal.toFixed(2)+' ('+coveragePct+'% of total expenses)</td></tr></table>';
+      })(),
+
       // ── IRS Mileage Deduction ─────────────────────────────────
       mileageSection,
 
@@ -4276,6 +4352,48 @@ export default function App() {
             ))}
           </div>
         )}
+
+        {/* ── Bank Statement Reconciliation Status ── */}
+        {(() => {
+          const monthStr = toYYYYMMDD(currentTime).slice(0, 7);
+          const stmtThisMonth = expenses.filter(e => e.type === "Statement Import" && e.date.startsWith(monthStr));
+          const stmtTotal = stmtThisMonth.reduce((s, e) => s + e.amount, 0);
+          const stmtBiz = stmtThisMonth.filter(e => !e.purpose || e.purpose === "business").reduce((s, e) => s + e.amount, 0);
+          const stmtPer = stmtThisMonth.filter(e => e.purpose === "personal").reduce((s, e) => s + e.amount, 0);
+          const totalExpThisMonth = expenses.filter(e => e.date.startsWith(monthStr) && (!e.frequency || e.frequency === "none")).reduce((s, e) => s + e.amount, 0);
+          const coveragePct = totalExpThisMonth > 0 ? Math.min((stmtTotal / totalExpThisMonth) * 100, 100) : 0;
+          const isReconciled = stmtThisMonth.length > 0;
+          return (
+            <div className={`rounded-xl border p-3.5 space-y-2.5 ${isReconciled ? "bg-[#081408] border-[#4ade80]/20" : "bg-[#111] border-[#2a2a2a]"}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] font-black tracking-[0.14em] ${isReconciled ? "text-[#4ade80]" : "text-neutral-500"}`}>
+                    {isReconciled ? "✓ RECONCILED" : "○ NOT RECONCILED"}
+                  </span>
+                </div>
+                <span className="text-[9px] text-neutral-600 font-mono-jet">{monthStr}</span>
+              </div>
+              {isReconciled ? (
+                <>
+                  <div className="flex gap-3 flex-wrap">
+                    <div><p className="text-[13px] font-bold text-white">{stmtThisMonth.length}</p><p className="text-[9px] text-neutral-500">verified tx</p></div>
+                    <div><p className="text-[13px] font-bold text-[#4ade80]">−${stmtBiz.toFixed(2)}</p><p className="text-[9px] text-neutral-500">🏢 deductible</p></div>
+                    {stmtPer > 0 && <div><p className="text-[13px] font-bold text-[#818cf8]">−${stmtPer.toFixed(2)}</p><p className="text-[9px] text-neutral-500">👤 personal</p></div>}
+                    <div><p className="text-[13px] font-bold text-neutral-300">{coveragePct.toFixed(0)}%</p><p className="text-[9px] text-neutral-500">of month exp</p></div>
+                  </div>
+                  {/* Coverage bar */}
+                  <div className="h-1 bg-[#1a1a1a] rounded-full overflow-hidden">
+                    <div className="h-full bg-[#4ade80] rounded-full transition-all" style={{ width: coveragePct + "%" }} />
+                  </div>
+                </>
+              ) : (
+                <p className="text-[11px] text-neutral-500 leading-relaxed">
+                  Import a bank statement to verify and reconcile this month's expenses.
+                </p>
+              )}
+            </div>
+          );
+        })()}
 
         {/* IRS Print Button — #1 */}
         <button onClick={handlePrintIRSStatement}
