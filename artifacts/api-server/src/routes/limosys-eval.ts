@@ -80,48 +80,106 @@ If this is NOT a LimoSys screenshot or no offers are visible, return:
     });
 
     const rawText = response.text ?? "";
-    const cleaned = rawText
+
+    // Strip markdown fences and extract the first JSON object/array found
+    let cleaned = rawText
       .replace(/```json\s*/gi, "")
       .replace(/```\s*/gi, "")
       .trim();
 
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(cleaned);
-    } catch {
-      res.status(422).json({ error: "Could not parse AI response", raw: rawText.slice(0, 300) });
-      return;
+    // If response contains extra prose, extract the JSON block
+    const jsonStart = cleaned.indexOf("{");
+    const jsonEnd   = cleaned.lastIndexOf("}");
+    if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+      cleaned = cleaned.slice(jsonStart, jsonEnd + 1);
     }
-
-    const p = parsed as Record<string, unknown>;
-    const rawOffers = Array.isArray(p.offers) ? p.offers : [];
 
     const safeNum = (v: unknown) =>
       typeof v === "number" && isFinite(v) && v >= 0 ? Math.round(v * 100) / 100 : 0;
     const safeStr = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 
-    const offers = (rawOffers as Record<string, unknown>[]).map(o => ({
-      decision: ["TOMAR","RECHAZAR"].includes(safeStr(o.decision)) ? safeStr(o.decision) : "RECHAZAR",
-      company: safeStr(o.company) || "LimoSys",
-      price: safeNum(o.price),
-      pickupTime: safeStr(o.pickupTime) || "?",
-      origin: safeStr(o.origin) || "?",
-      destination: safeStr(o.destination) || "?",
-      distance: safeNum(o.distance),
-      estimatedMinutes: safeNum(o.estimatedMinutes),
-      hourlyRate: safeNum(o.hourlyRate),
-      perMileRate: safeNum(o.perMileRate),
-    }));
+    const buildOffers = (rawOffers: Record<string, unknown>[]) =>
+      rawOffers.map(o => ({
+        decision: ["TOMAR","RECHAZAR"].includes(safeStr(o.decision)) ? safeStr(o.decision) : "RECHAZAR",
+        company: safeStr(o.company) || "LimoSys",
+        price: safeNum(o.price),
+        pickupTime: safeStr(o.pickupTime) || "?",
+        origin: safeStr(o.origin) || "?",
+        destination: safeStr(o.destination) || "?",
+        distance: safeNum(o.distance),
+        estimatedMinutes: safeNum(o.estimatedMinutes),
+        hourlyRate: safeNum(o.hourlyRate),
+        perMileRate: safeNum(o.perMileRate),
+      }));
 
-    if (offers.length === 0 && p.error) {
-      res.status(422).json({ error: safeStr(p.error) });
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      // Fallback: return a clearly-labeled test offer so the overlay always renders
+      console.warn("LimoSys: could not parse AI response, returning fallback offer. Raw:", rawText.slice(0, 200));
+      const fallbackRate = minHourly * 0.8; // below threshold → RECHAZAR so driver knows it's a fallback
+      res.json({
+        offers: [{
+          decision: "RECHAZAR",
+          company: "LimoSys [DEMO]",
+          price: 0,
+          pickupTime: "—",
+          origin: "No legible",
+          destination: "Reintenta",
+          distance: 0,
+          estimatedMinutes: 0,
+          hourlyRate: fallbackRate,
+          perMileRate: 0,
+        }],
+        warning: "No se pudo leer la oferta — sube una imagen más clara.",
+      });
+      return;
+    }
+
+    const p = parsed as Record<string, unknown>;
+    const rawOffers = Array.isArray(p.offers) ? p.offers : [];
+    const offers = buildOffers(rawOffers as Record<string, unknown>[]);
+
+    if (offers.length === 0) {
+      // Return fallback offer so UI always shows the overlay
+      res.json({
+        offers: [{
+          decision: "RECHAZAR",
+          company: "LimoSys [DEMO]",
+          price: 0,
+          pickupTime: "—",
+          origin: "Sin oferta visible",
+          destination: "Intenta otra imagen",
+          distance: 0,
+          estimatedMinutes: 0,
+          hourlyRate: 0,
+          perMileRate: 0,
+        }],
+        warning: safeStr(p.error) || "No se detectaron ofertas en la imagen.",
+      });
       return;
     }
 
     res.json({ offers });
   } catch (err: unknown) {
     console.error("LimoSys eval error:", err);
-    res.status(500).json({ error: "AI processing failed. Try again." });
+    // Fallback so the overlay always renders even on total API failure
+    res.json({
+      offers: [{
+        decision: "RECHAZAR",
+        company: "LimoSys [ERROR]",
+        price: 0,
+        pickupTime: "—",
+        origin: "Error de API",
+        destination: "Reintenta",
+        distance: 0,
+        estimatedMinutes: 0,
+        hourlyRate: 0,
+        perMileRate: 0,
+      }],
+      warning: "Error al contactar Gemini. Verifica tu conexión.",
+    });
   }
 });
 

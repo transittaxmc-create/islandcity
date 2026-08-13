@@ -5926,7 +5926,7 @@ export default function App() {
         )}
       </div>
 
-      <input ref={limoInputRef} type="file" accept="image/*" capture="environment" className="hidden"
+      <input ref={limoInputRef} type="file" accept="image/*,image/heic,image/heif" className="hidden"
         onChange={e => { const f = e.target.files?.[0]; if (f) handleLimoCapture(f); if (limoInputRef.current) limoInputRef.current.value = ""; }} />
     </div>
   );
