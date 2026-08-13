@@ -15,7 +15,8 @@ voiceParseRouter.post("/voice-parse", async (req, res) => {
 Parse the driver's spoken command and return structured data.
 Respond ONLY with a valid JSON object — no markdown, no explanation.
 
-The driver may speak in English or Spanish.
+The driver speaks Spanish and English — often mixed in the same sentence.
+Accept any combination of Spanish and English words.
 
 Return this exact shape:
 {
@@ -46,9 +47,14 @@ Intent classification rules:
 - "break": taking a break (e.g. "break", "descanso", "taking a break", "pause")
 - "unknown": cannot determine intent
 
-Amount/number rules:
-- Convert spoken numbers to digits: "forty-five" → 45, "three fifty" → 3.50, "a dollar eighty" → 1.80
-- "twenty" alone = 20.00
+Amount/number rules (English and Spanish):
+- English: "forty-five" → 45, "three fifty" → 3.50, "a dollar eighty" → 1.80, "twenty" → 20.00
+- Spanish: "cuarenta y cinco" → 45, "tres con cincuenta" → 3.50, "veinte" → 20.00, "cien" → 100, "ciento veinte" → 120
+- Mixed: "forty-five dos de propina" → fare 45, tips 2
+- "propina" or "tip" = tips field
+- "peaje" or "toll" = toll field
+- "cargo" or "fee" = fee field
+- "millas" or "miles" = miles field
 - Do NOT convert miles to km
 
 Platform name rules:

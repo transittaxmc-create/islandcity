@@ -1666,7 +1666,8 @@ export default function App() {
     const rec: any = new SR();
     rec.continuous     = false;
     rec.interimResults = true;
-    rec.lang           = "en-US";
+    rec.lang           = "es-US";
+    rec.maxAlternatives = 3;
     voiceRecRef.current = rec;
 
     rec.onstart = () => {
@@ -1690,9 +1691,9 @@ export default function App() {
     rec.onerror = (e: any) => {
       setVoiceListening(false);
       setVoiceParsing(false);
-      if (e.error === "no-speech")    setVoiceError("No speech detected — tap mic and try again");
-      else if (e.error === "not-allowed") setVoiceError("Microphone access denied — check browser settings");
-      else setVoiceError("Mic error: " + e.error);
+      if (e.error === "no-speech")    setVoiceError("No escuché nada — aprieta el micrófono y habla");
+      else if (e.error === "not-allowed") setVoiceError("Acceso al micrófono denegado — revisa los permisos");
+      else setVoiceError("Error de micrófono: " + e.error);
     };
     rec.onend = () => setVoiceListening(false);
     rec.start();
@@ -1760,7 +1761,8 @@ export default function App() {
     const rec: any = new SR();
     rec.continuous = false;
     rec.interimResults = true;
-    rec.lang = "en-US";
+    rec.lang = "es-US";
+    rec.maxAlternatives = 3;
     voiceRecRef.current = rec;
     rec.onstart = () => { setVoiceListening(true); setVoiceTranscript(""); setVoiceError(null); };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1776,9 +1778,9 @@ export default function App() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     rec.onerror = (e: any) => {
       setVoiceListening(false);
-      if (e.error === "no-speech") setVoiceError("No speech — tap mic to retry");
-      else if (e.error === "not-allowed") setVoiceError("Microphone denied — check settings");
-      else setVoiceError("Mic error: " + e.error);
+      if (e.error === "no-speech") setVoiceError("No escuché nada — aprieta el micrófono y habla");
+      else if (e.error === "not-allowed") setVoiceError("Acceso al micrófono denegado — revisa los permisos");
+      else setVoiceError("Error de micrófono: " + e.error);
     };
     rec.onend = () => setVoiceListening(false);
     rec.start();
