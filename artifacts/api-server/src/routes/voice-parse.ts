@@ -3,24 +3,15 @@ import { ai } from "@workspace/integrations-gemini-ai";
 
 const voiceParseRouter = Router();
 
-voiceParseRouter.post("/voice-parse", async (req, res) => {
-  const { transcript } = req.body as { transcript?: string };
-
-  if (!transcript || typeof transcript !== "string" || !transcript.trim()) {
-    res.status(400).json({ error: "transcript is required" });
-    return;
-  }
-
-  const prompt = `You are a voice command parser for a NYC rideshare driver accounting app.
-Parse the driver's spoken command and return structured data.
-Respond ONLY with a valid JSON object — no markdown, no explanation.
-
+const SYSTEM_PROMPT = `You are a voice command parser for a NYC rideshare driver accounting app.
 The driver speaks Spanish and English — often mixed in the same sentence.
-Accept any combination of Spanish and English words.
+Listen carefully to the audio or read the text and return structured data.
+Respond ONLY with a valid JSON object — no markdown, no explanation.
 
 Return this exact shape:
 {
-  "intent": "trip" | "expense" | "clockIn" | "clockOut" | "break" | "unknown",
+  "transcript": "<verbatim transcription of what you heard or the text provided>",
+  "intent": "trip" | "expense" | "clockIn" | "clockOut" | "break" | "cancel" | "unknown",
   "confidence": "high" | "medium" | "low",
   "fields": {
     "platform": "<one of: Uber, Lyft, Empower, EcoRide, Gallant, Aventus Ride, Classic Ryde, Aki Technology, Island City Transit, Transit Tax, Throo, TBZI Luxury, Brakha Group, Other — or empty string>",
@@ -40,17 +31,18 @@ Return this exact shape:
 }
 
 Intent classification rules:
-- "trip": driver completed or is logging a rideshare trip (mentions platform, pickup/dropoff, fare, passengers)
-- "expense": driver spent money on something (gas, food, car wash, etc.)
-- "clockIn": starting work / clocking in (e.g. "clock in", "empezar", "start shift", "starting now")
-- "clockOut": ending work (e.g. "clock out", "done", "terminar", "end shift", "going home")
-- "break": taking a break (e.g. "break", "descanso", "taking a break", "pause")
+- "trip": driver completed or is logging a rideshare trip (mentions fare, passengers, platform, pickup/dropoff)
+- "expense": driver spent money on something (gas, food, car wash, maintenance, etc.)
+- "clockIn": starting work (e.g. "clock in", "empezar", "start shift", "iniciando", "empezando el día")
+- "clockOut": ending work (e.g. "clock out", "done", "terminar", "end shift", "cerrando el día")
+- "break": taking a break (e.g. "break", "descanso", "pause", "tomar un descanso")
+- "cancel": driver wants to cancel, dismiss, or stop (e.g. "cancelar", "cancela", "no", "para", "stop", "salir", "olvídalo", "forget it")
 - "unknown": cannot determine intent
 
 Amount/number rules (English and Spanish):
 - English: "forty-five" → 45, "three fifty" → 3.50, "a dollar eighty" → 1.80, "twenty" → 20.00
-- Spanish: "cuarenta y cinco" → 45, "tres con cincuenta" → 3.50, "veinte" → 20.00, "cien" → 100, "ciento veinte" → 120
-- Mixed: "forty-five dos de propina" → fare 45, tips 2
+- Spanish: "cuarenta y cinco" → 45, "tres con cincuenta" → 3.50, "veinte" → 20.00, "cien" → 100, "ciento veinte" → 120, "diez" → 10
+- Mixed: "forty-five dos de propina tres de peaje" → fare 45, tips 2, toll 3
 - "propina" or "tip" = tips field
 - "peaje" or "toll" = toll field
 - "cargo" or "fee" = fee field
@@ -62,14 +54,40 @@ Platform name rules:
 - "island city" / "isla city" → "Island City Transit"
 - "transit tax" → "Transit Tax"
 - "classic ride" / "classic ryde" → "Classic Ryde"
-- "aventus" → "Aventus Ride"
+- "aventus" → "Aventus Ride"`;
 
-Driver's voice command: "${transcript.trim().replace(/"/g, "'")}"`;
+voiceParseRouter.post("/voice-parse", async (req, res) => {
+  const { transcript, audioBase64, mimeType } = req.body as {
+    transcript?: string;
+    audioBase64?: string;
+    mimeType?: string;
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let contents: any;
+
+  if (audioBase64 && mimeType) {
+    // Audio input — Gemini transcribes AND parses in one step
+    contents = [{
+      role: "user",
+      parts: [
+        { inlineData: { mimeType, data: audioBase64 } },
+        { text: SYSTEM_PROMPT }
+      ]
+    }];
+  } else if (transcript && typeof transcript === "string" && transcript.trim()) {
+    // Text transcript fallback
+    const textPrompt = SYSTEM_PROMPT + `\n\nDriver's voice command: "${transcript.trim().replace(/"/g, "'")}"`;
+    contents = [{ role: "user", parts: [{ text: textPrompt }] }];
+  } else {
+    res.status(400).json({ error: "Either audioBase64+mimeType or transcript is required" });
+    return;
+  }
 
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      contents,
       config: { maxOutputTokens: 1024 },
     });
 
@@ -94,13 +112,14 @@ Driver's voice command: "${transcript.trim().replace(/"/g, "'")}"`;
       typeof v === "number" && isFinite(v) && v >= 0 ? Math.round(v * 100) / 100 : 0;
     const safeStr = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 
-    const validIntents = ["trip", "expense", "clockIn", "clockOut", "break", "unknown"];
+    const validIntents = ["trip", "expense", "clockIn", "clockOut", "break", "cancel", "unknown"];
     const intent = validIntents.includes(safeStr(p.intent)) ? safeStr(p.intent) : "unknown";
     const confidence = ["high", "medium", "low"].includes(safeStr(p.confidence))
       ? safeStr(p.confidence)
       : "medium";
 
     res.json({
+      transcript: safeStr(p.transcript),
       intent,
       confidence,
       fields: {

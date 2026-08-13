@@ -88,8 +88,9 @@ type StatementTx = {
   category: string;
   matchedExpenseId?: string;
 };
-type VoiceIntent = "trip" | "expense" | "clockIn" | "clockOut" | "break" | "unknown";
+type VoiceIntent = "trip" | "expense" | "clockIn" | "clockOut" | "break" | "cancel" | "unknown";
 type VoiceResult = {
+  transcript?: string;
   intent: VoiceIntent;
   confidence: "high" | "medium" | "low";
   fields: {
@@ -627,8 +628,8 @@ export default function App() {
   const [pendingReceiptDocId, setPendingReceiptDocId] = useState<number | null>(null);
   const receiptInputRef = useRef<HTMLInputElement>(null);
   const statementInputRef = useRef<HTMLInputElement>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const voiceRecRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaChunksRef   = useRef<BlobPart[]>([]);
   const broadcastInputRef = useRef<HTMLInputElement>(null);
 
   // Custom expense types & categories (user-added items, persisted)
@@ -1629,8 +1630,12 @@ export default function App() {
       handleClockOut();
     } else if (result.intent === "break")    {
       handleBreakToggle();
+    } else if (result.intent === "cancel") {
+      resetVoiceTripFlow();
+      setShowVoicePanel(false);
+      showToast("Cancelado");
     } else {
-      setVoiceError("Couldn't understand — try again");
+      setVoiceError("No entendí — di un viaje, gasto, o \"cancelar\"");
       setShowVoicePanel(true);
     }
   };
@@ -1654,53 +1659,82 @@ export default function App() {
     }
   };
 
-  const startVoice = () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) {
-      setVoiceError("Voice not supported. Use Chrome or Safari.");
+  const handleVoiceAudio = async (audioBase64: string, mimeType: string) => {
+    setVoiceParsing(true);
+    setVoiceError(null);
+    setVoiceTranscript("⏳ Gemini está escuchando...");
+    try {
+      const res = await fetch("/api/voice-parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audioBase64, mimeType }),
+      });
+      const data = await res.json() as VoiceResult & { error?: string };
+      if (!res.ok) throw new Error(data.error || "Parse failed");
+      if (data.transcript) setVoiceTranscript(data.transcript);
+      applyVoiceResult(data);
+    } catch (err: unknown) {
+      setVoiceError(err instanceof Error ? err.message : "Error procesando — intenta de nuevo");
+      setVoiceParsing(false);
+      setVoiceTranscript("");
+    }
+  };
+
+  const startMediaRecording = (onAudio: (base64: string, mimeType: string) => void) => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setVoiceError("Micrófono no disponible — usa Safari o Chrome");
       setShowVoicePanel(true);
       return;
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rec: any = new SR();
-    rec.continuous     = false;
-    rec.interimResults = true;
-    rec.lang           = "es-US";
-    rec.maxAlternatives = 3;
-    voiceRecRef.current = rec;
+    const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm"
+      : MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4"
+      : "audio/ogg";
 
-    rec.onstart = () => {
-      setVoiceListening(true);
-      setVoiceTranscript("");
-      setVoiceError(null);
-      setVoiceParsing(false);
-      setShowVoicePanel(true);
-    };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rec.onresult = (e: any) => {
-      let interim = "", final = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) final += t; else interim += t;
-      }
-      setVoiceTranscript(final || interim);
-      if (final) { setVoiceListening(false); handleVoiceInput(final); }
-    };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rec.onerror = (e: any) => {
-      setVoiceListening(false);
-      setVoiceParsing(false);
-      if (e.error === "no-speech")    setVoiceError("No escuché nada — aprieta el micrófono y habla");
-      else if (e.error === "not-allowed") setVoiceError("Acceso al micrófono denegado — revisa los permisos");
-      else setVoiceError("Error de micrófono: " + e.error);
-    };
-    rec.onend = () => setVoiceListening(false);
-    rec.start();
+    navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      .then(stream => {
+        mediaChunksRef.current = [];
+        const recorder = new MediaRecorder(stream, { mimeType });
+        recorder.ondataavailable = (e) => { if (e.data.size > 0) mediaChunksRef.current.push(e.data); };
+        recorder.onstop = () => {
+          stream.getTracks().forEach(t => t.stop());
+          setVoiceListening(false);
+          if (mediaChunksRef.current.length === 0) {
+            setVoiceError("No escuché nada — aprieta el micrófono y habla");
+            return;
+          }
+          const blob = new Blob(mediaChunksRef.current, { type: mimeType });
+          const reader = new FileReader();
+          reader.onload = () => {
+            const base64 = (reader.result as string).split(",")[1];
+            onAudio(base64, mimeType);
+          };
+          reader.readAsDataURL(blob);
+        };
+        recorder.start(250);
+        mediaRecorderRef.current = recorder;
+        setVoiceListening(true);
+        // Auto-stop after 30 seconds
+        setTimeout(() => { if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop(); }, 30000);
+      })
+      .catch(() => {
+        setVoiceListening(false);
+        setVoiceError("Acceso al micrófono denegado — ve a Configuración y actívalo");
+        setShowVoicePanel(true);
+      });
+  };
+
+  const startVoice = () => {
+    setVoiceTranscript("🎙️ Grabando... toca el micrófono para parar");
+    setVoiceError(null);
+    setVoiceParsing(false);
+    setShowVoicePanel(true);
+    startMediaRecording(handleVoiceAudio);
   };
 
   const stopVoice = () => {
-    voiceRecRef.current?.stop?.();
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
     setVoiceListening(false);
   };
 
@@ -1727,6 +1761,9 @@ export default function App() {
     });
 
   const resetVoiceTripFlow = () => {
+    if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
+    mediaRecorderRef.current = null;
+    mediaChunksRef.current = [];
     setVoiceTripStep("idle");
     setVtPickup(null);
     setVtDropoff(null);
@@ -1738,7 +1775,6 @@ export default function App() {
     setVoiceListening(false);
     setVoiceTranscript("");
     setVoiceError(null);
-    voiceRecRef.current?.stop?.();
   };
 
   const startVoiceTripFlow = async () => {
@@ -1754,36 +1790,9 @@ export default function App() {
   };
 
   const startVoiceForFare = () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) { setVoiceError("Voice not supported — use Chrome or Safari"); return; }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rec: any = new SR();
-    rec.continuous = false;
-    rec.interimResults = true;
-    rec.lang = "es-US";
-    rec.maxAlternatives = 3;
-    voiceRecRef.current = rec;
-    rec.onstart = () => { setVoiceListening(true); setVoiceTranscript(""); setVoiceError(null); };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rec.onresult = (e: any) => {
-      let interim = "", final = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) final += t; else interim += t;
-      }
-      setVoiceTranscript(final || interim);
-      if (final) { setVoiceListening(false); handleVoiceInput(final); }
-    };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rec.onerror = (e: any) => {
-      setVoiceListening(false);
-      if (e.error === "no-speech") setVoiceError("No escuché nada — aprieta el micrófono y habla");
-      else if (e.error === "not-allowed") setVoiceError("Acceso al micrófono denegado — revisa los permisos");
-      else setVoiceError("Error de micrófono: " + e.error);
-    };
-    rec.onend = () => setVoiceListening(false);
-    rec.start();
+    setVoiceTranscript("🎙️ Di el monto del viaje... toca para parar");
+    setVoiceError(null);
+    startMediaRecording(handleVoiceAudio);
   };
 
   const endVoiceTripFlow = async () => {
