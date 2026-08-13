@@ -160,6 +160,17 @@ const AIRPORTS = [
   { name: "ISP Airport", lat: 40.7952, lng: -73.1002 },
 ] as const;
 
+// IRS standard mileage rates by confirmed tax year — verify each year at irs.gov before filing.
+// 2022 is intentionally excluded: IRS used two rates that year ($0.585 Jan–Jun, $0.625 Jul–Dec)
+// and cannot be represented as a single per-mile constant without split-period mileage records.
+const IRS_MILEAGE_RATES: Record<number, number> = {
+  2023: 0.655,
+  2024: 0.670,
+  2025: 0.700,
+};
+// Sorted confirmed years (newest first) for the year selector — all rendered
+const IRS_CONFIRMED_YEARS = Object.keys(IRS_MILEAGE_RATES).map(Number).sort((a, b) => b - a);
+
 // IRS Schedule C–aligned categories for rideshare drivers
 const EXPENSE_CATEGORIES = [
   "Vehicle & Fuel",
@@ -470,7 +481,9 @@ export default function App() {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0)
           return parsed.map((t: Trip) => ({
-            status: "pending" as const, reviewed: false, ...t,
+            ...t,
+            status: t.status ?? ("pending" as const),
+            reviewed: t.reviewed ?? false,
           }));
       }
     } catch {}
@@ -697,6 +710,10 @@ export default function App() {
     name: "", amount: "", frequency: "monthly" as "daily" | "weekly" | "monthly",
     category: "Vehicle & Fuel", dueDate: "", repeatEnabled: false, repeatUntil: "",
   });
+
+  // ── IRS Statement print controls ────────────────────────────────────────────
+  const [stmtYear,   setStmtYear]   = useState<number>(IRS_CONFIRMED_YEARS[0]);
+  const [stmtMethod, setStmtMethod] = useState<"mileage" | "actual">("mileage");
 
   // ── Bank statement import ─────────────────────────────────────────────────
   const [showStatementImport, setShowStatementImport] = useState(false);
@@ -4132,7 +4149,7 @@ export default function App() {
           <button
             onClick={() => {
               setShowExpenseForm(true); setEditingExpenseId(null);
-              setExpenseForm({ name: "", type: "Gasoline / Fuel", category: "Vehicle & Fuel", description: "", amount: "", date: new Date().toISOString().slice(0,10), frequency: "monthly", dueDate: "" });
+              setExpenseForm({ name: "", type: "Gasoline / Fuel", category: "Vehicle & Fuel", description: "", amount: "", date: new Date().toISOString().slice(0,10), frequency: "monthly", dueDate: "", purpose: "business" });
               setAddingCustomType(false); setAddingCustomCat(false); setAddingCustomVendor(false);
             }}
             className="h-10 px-4 rounded-full bg-[#1e1e1e] border border-[#333] text-white text-[12px] font-bold tracking-wide hover:bg-[#2a2a2a] transition-colors">
@@ -4374,7 +4391,7 @@ export default function App() {
               </div>
               <button onClick={() => {
                 setShowExpenseForm(true); setEditingExpenseId(null);
-                setExpenseForm({ name: "", type: "Gasoline / Fuel", category: "Vehicle & Fuel", description: "", amount: "", date: new Date().toISOString().slice(0,10), frequency: "monthly", dueDate: "" });
+                setExpenseForm({ name: "", type: "Gasoline / Fuel", category: "Vehicle & Fuel", description: "", amount: "", date: new Date().toISOString().slice(0,10), frequency: "monthly", dueDate: "", purpose: "business" });
                 setAddingCustomType(false); setAddingCustomCat(false); setAddingCustomVendor(false);
               }} className="h-8 px-3 rounded-full bg-orange-400/10 border border-orange-400/30 text-orange-300 text-[10px] font-bold tracking-wide hover:bg-orange-400/20 transition-colors">
                 + Add Bill
@@ -4416,7 +4433,7 @@ export default function App() {
                       </div>
                       <div className="flex-shrink-0 flex items-center gap-2">
                         <span className="font-mono-jet text-[15px] font-bold text-orange-400">−${b.amount.toFixed(2)}</span>
-                        <button onClick={() => { setEditingExpenseId(b.id); setExpenseForm({ name: b.vendor, type: b.type||"Other", category: b.category, description: b.note, amount: String(b.amount), date: b.date, frequency: b.frequency||"none", dueDate: b.dueDate||"" }); setShowExpenseForm(true); setAddingCustomType(false); setAddingCustomCat(false); setAddingCustomVendor(false); }}
+                        <button onClick={() => { setEditingExpenseId(b.id); setExpenseForm({ name: b.vendor, type: b.type||"Other", category: b.category, description: b.note, amount: String(b.amount), date: b.date, frequency: b.frequency||"none", dueDate: b.dueDate||"", purpose: b.purpose ?? "business" }); setShowExpenseForm(true); setAddingCustomType(false); setAddingCustomCat(false); setAddingCustomVendor(false); }}
                           className="w-7 h-7 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-neutral-400 text-[10px] flex items-center justify-center">✏️</button>
                         <button onClick={() => handleDeleteExpense(b.id)}
                           className="w-7 h-7 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] text-[#f87171] text-[10px] flex items-center justify-center">✕</button>
@@ -4601,148 +4618,224 @@ export default function App() {
   const expensesAll = bizExpenses.reduce((a, b) => a + b.amount, 0);
   const netAll      = grossAll - expensesAll;
 
-  // ── #1 — IRS-ready Financial Statement (string concat avoids nested backtick TSX issue)
+  // ── IRS-ready Financial Statement — fixed: year filter, deduction exclusivity, HTML escaping
   const handlePrintIRSStatement = () => {
-    const yr = currentTime.getFullYear();
-    const byCat: Record<string,number> = {};
-    bizExpenses.forEach(e => { byCat[e.category] = (byCat[e.category]||0) + e.amount; });
-    const catRows = Object.entries(byCat).sort((a,b)=>b[1]-a[1])
-      .map(([c,a])=>['<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">',c,'</td>',
-        '<td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right;font-family:monospace">$',a.toFixed(2),'</td></tr>'].join('')).join('');
-    const tripRows = [...postedTrips].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,50)
-      .map(t=>['<tr><td style="padding:4px 8px;border-bottom:1px solid #f0f0f0;font-size:11px">',t.date,'</td>',
-        '<td style="padding:4px 8px;font-size:11px">',t.platform||'','</td>',
-        '<td style="padding:4px 8px;font-size:11px">',t.pickup||'',' → ',t.dropoff||'','</td>',
-        '<td style="padding:4px 8px;text-align:right;font-family:monospace;font-size:11px">$',t.grandTotal.toFixed(2),'</td></tr>'].join('')).join('');
-    const hrsTotal    = hoursLog.reduce((a,h)=>a+h.hours,0);
-    const gEarn = postedTrips.reduce((a,t)=>a+(t.earnings||0),0);
-    const gTips = postedTrips.reduce((a,t)=>a+(t.tips||0),0);
-    const gExt  = postedTrips.reduce((a,t)=>a+(t.extra||0),0);
-    const gOther= postedTrips.reduce((a,t)=>a+(t.otherCash||0),0);
-    const gToll = postedTrips.reduce((a,t)=>a+(t.toll||0),0);
-    // Total gross: sum of all income components (same as grandTotal basis)
+    // ── 0. HTML-escape helper (prevents XSS from user-entered data) ──────────
+    const esc = (v: unknown): string =>
+      String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]!));
+
+    // ── 1. Date-range: only the selected tax year ────────────────────────────
+    const yrStr = String(stmtYear);
+    const yearStart = yrStr + "-01-01";
+    const yearEnd   = yrStr + "-12-31";
+    const inYear = (date: string) => date >= yearStart && date <= yearEnd;
+
+    const yrTrips    = postedTrips.filter(t => inYear(t.date));
+    const yrBizExp   = expenses.filter(e => inYear(e.date) && (!e.purpose || e.purpose === "business"));
+    const yrHours    = hoursLog.filter(h => (h.date || "").startsWith(yrStr));
+
+    // ── 2. Year-keyed mileage rate ───────────────────────────────────────────
+    const yrRate    = IRS_MILEAGE_RATES[stmtYear];   // undefined if year not in map
+    const rateKnown = yrRate !== undefined;
+
+    // ── 3. Deduction method exclusivity ─────────────────────────────────────
+    // Standard mileage: exclude actual vehicle-operating expense categories
+    // (fuel, maintenance, insurance) — tolls/parking remain deductible either way.
+    // Actual expenses: include all categories, no mileage deduction.
+    const VEHICLE_ONLY_CATS = new Set(["Vehicle & Fuel", "Maintenance & Repairs", "Insurance"]);
+    const usingMileage = stmtMethod === "mileage" && rateKnown;
+
+    const deductibleExp    = usingMileage
+      ? yrBizExp.filter(e => !VEHICLE_ONLY_CATS.has(e.category))
+      : yrBizExp;
+    const vehicleOnlyExp   = usingMileage
+      ? yrBizExp.filter(e => VEHICLE_ONLY_CATS.has(e.category))
+      : [];
+
+    // ── 4. Platform fees — deductible as commissions (Schedule C Line 10) ───
+    const gFees      = yrTrips.reduce((a, t) => a + (t.fee || 0), 0);
+
+    const expTotal   = deductibleExp.reduce((a, e) => a + e.amount, 0) + gFees;
+    const vehicleTotal = vehicleOnlyExp.reduce((a, e) => a + e.amount, 0);
+    const milesTotal = usingMileage ? yrHours.reduce((a, h) => a + (h.miles || 0), 0) : 0;
+    const mileageDed = rateKnown ? +(milesTotal * yrRate).toFixed(2) : 0;
+
+    // ── 5. Income components (gross, before platform fee deduction) ────────────
+    const gEarn  = yrTrips.reduce((a, t) => a + (t.earnings || 0), 0);
+    const gTips  = yrTrips.reduce((a, t) => a + (t.tips || 0), 0);
+    const gExt   = yrTrips.reduce((a, t) => a + (t.extra || 0), 0);
+    const gOther = yrTrips.reduce((a, t) => a + (t.otherCash || 0), 0);
+    const gToll  = yrTrips.reduce((a, t) => a + (t.toll || 0), 0);
     const gTotal = gEarn + gTips + gExt + gOther + gToll;
-    // Mileage deduction — GPS miles tracked per shift (stored since this build)
-    const milesTotal       = hoursLog.reduce((a,h)=>a+(h.miles||0),0);
-    const mileageDeduction = +(milesTotal * IRS_RATE_PER_MILE).toFixed(2);
-    // Net after expenses then mileage (Schedule C)
-    const netAfterExp      = gTotal - expensesAll;
-    const netAfterMileage  = +(netAfterExp - mileageDeduction).toFixed(2);
-    const netCls           = netAfterMileage>=0?'net-pos':'net-neg';
-    const tripSection = postedTrips.length>0
-      ? '<h2>Trip Detail (Most Recent 50 of '+postedTrips.length+')</h2>'
-        +'<table><tr><th>Date</th><th>Platform</th><th>Route</th><th style="text-align:right">Total</th></tr>'
-        +tripRows+'</table>'
-      : '';
-    // Other Cash Income row — shown only when non-zero
-    const otherCashRow = gOther>0
+
+    const hrsTotal = yrHours.reduce((a, h) => a + h.hours, 0);
+
+    const netAfterExp     = gTotal - expTotal;
+    const netAfterMileage = usingMileage ? +(netAfterExp - mileageDed).toFixed(2) : +netAfterExp.toFixed(2);
+    const netCls          = netAfterMileage >= 0 ? "net-pos" : "net-neg";
+
+    // ── 6. Build HTML rows (all user values HTML-escaped) ───────────────────
+    const byCat: Record<string, number> = {};
+    deductibleExp.forEach(e => { byCat[esc(e.category)] = (byCat[esc(e.category)] || 0) + e.amount; });
+    const catRows = [
+      // Platform fees always shown first (Schedule C Line 10 — commissions)
+      ...(gFees > 0
+        ? ['<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Platform Commissions &amp; Fees (Schedule C Line 10)</td>'
+          + '<td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right;font-family:monospace">$' + gFees.toFixed(2) + '</td></tr>']
+        : []),
+      ...Object.entries(byCat).sort((a, b) => b[1] - a[1])
+        .map(([c, a]) => '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">' + c + '</td>'
+          + '<td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right;font-family:monospace">$' + a.toFixed(2) + '</td></tr>'),
+    ].join('');
+
+    const tripRows = [...yrTrips].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 50)
+      .map(t => '<tr>'
+        + '<td style="padding:4px 8px;border-bottom:1px solid #f0f0f0;font-size:11px">' + esc(t.date) + '</td>'
+        + '<td style="padding:4px 8px;font-size:11px">' + esc(t.platform) + '</td>'
+        + '<td style="padding:4px 8px;font-size:11px">' + esc(t.pickup) + ' → ' + esc(t.dropoff) + '</td>'
+        + '<td style="padding:4px 8px;text-align:right;font-family:monospace;font-size:11px">$' + t.grandTotal.toFixed(2) + '</td>'
+        + '</tr>').join('');
+
+    const otherCashRow = gOther > 0
       ? '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Other Cash Income</td>'
-        +'<td style="padding:6px 12px;text-align:right;font-family:monospace">$'+gOther.toFixed(2)+'</td></tr>'
+        + '<td style="padding:6px 12px;text-align:right;font-family:monospace">$' + gOther.toFixed(2) + '</td></tr>'
       : '';
-    // Mileage section — shown only when miles tracked
-    const mileageSection = milesTotal>0
-      ? '<h2>IRS Standard Mileage Deduction (Schedule C, Part II Line 9)</h2>'
-        +'<table><tr><th>Description</th><th style="text-align:right">Amount</th></tr>'
-        +'<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">GPS Miles Tracked</td>'
-        +'<td style="padding:6px 12px;text-align:right;font-family:monospace">'+milesTotal.toFixed(1)+' mi</td></tr>'
-        +'<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">IRS Standard Rate (2025 — verify at irs.gov)</td>'
-        +'<td style="padding:6px 12px;text-align:right;font-family:monospace">$'+IRS_RATE_PER_MILE.toFixed(2)+'/mi</td></tr>'
-        +'<tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:bold">MILEAGE DEDUCTION</td>'
-        +'<td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:bold;color:#c0392b">−$'+mileageDeduction.toFixed(2)+'</td></tr></table>'
-        +'<p style="font-size:11px;color:#777;margin:6px 0 0">⚠ Use the standard mileage rate <em>or</em> actual vehicle expenses — not both. Consult a licensed tax professional.</p>'
-      : '<p style="font-size:11px;color:#aaa;margin:4px 0">No GPS miles recorded yet. Miles are tracked starting from this app build when a shift is clocked out.</p>';
+
+    const tripSection = yrTrips.length > 0
+      ? '<h2>Trip Detail — ' + yrStr + ' (Most Recent 50 of ' + yrTrips.length + ')</h2>'
+        + '<table><tr><th>Date</th><th>Platform</th><th>Route</th><th style="text-align:right">Total</th></tr>'
+        + tripRows + '</table>'
+      : '';
+
+    // Vehicle-expense exclusion notice (standard mileage method only)
+    const vehicleExclusionSection = (usingMileage && vehicleTotal > 0)
+      ? '<h2>Vehicle Operating Expenses — Excluded (Standard Mileage Method)</h2>'
+        + '<p style="font-size:11px;color:#555;margin:0 0 8px">Because you are using the Standard Mileage Rate, actual vehicle operating expenses (fuel, maintenance, insurance) cannot also be deducted. They are listed here for reference only and are <strong>not</strong> included in the expense total above.</p>'
+        + '<table><tr><th>Category</th><th style="text-align:right">Amount</th></tr>'
+        + (() => {
+            const vByCat: Record<string, number> = {};
+            vehicleOnlyExp.forEach(e => { vByCat[esc(e.category)] = (vByCat[esc(e.category)] || 0) + e.amount; });
+            return Object.entries(vByCat).sort((a, b) => b[1] - a[1])
+              .map(([c, a]) => '<tr><td style="padding:4px 12px;border-bottom:1px solid #eee;font-size:11px">' + c + '</td>'
+                + '<td style="padding:4px 12px;text-align:right;font-family:monospace;font-size:11px">$' + a.toFixed(2) + '</td></tr>').join('');
+          })()
+        + '<tr style="background:#fff8e7"><td style="padding:6px 12px;font-size:11px;color:#a07000">EXCLUDED TOTAL</td>'
+        + '<td style="padding:6px 12px;text-align:right;font-family:monospace;font-size:11px;color:#a07000">$' + vehicleTotal.toFixed(2) + ' (not deducted)</td></tr></table>'
+      : '';
+
+    const mileageSection = !rateKnown
+      ? '<p style="font-size:11px;color:#c0392b;background:#fff8f8;border:1px solid #f5c6c6;border-radius:4px;padding:8px 12px;margin:4px 0">⚠ The IRS standard mileage rate for ' + yrStr + ' is not yet confirmed in this app. Switch to Actual Expenses method, or verify the ' + yrStr + ' rate at <strong>irs.gov</strong> and consult your tax professional before claiming a mileage deduction.</p>'
+      : (usingMileage && milesTotal > 0)
+        ? '<h2>IRS Standard Mileage Deduction (Schedule C, Part II Line 9)</h2>'
+          + '<table><tr><th>Description</th><th style="text-align:right">Amount</th></tr>'
+          + '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">GPS Miles Tracked (' + yrStr + ')</td>'
+          + '<td style="padding:6px 12px;text-align:right;font-family:monospace">' + milesTotal.toFixed(1) + ' mi</td></tr>'
+          + '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">IRS Standard Rate — ' + yrStr + ' (source: irs.gov)</td>'
+          + '<td style="padding:6px 12px;text-align:right;font-family:monospace">$' + yrRate.toFixed(2) + '/mi</td></tr>'
+          + '<tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:bold">MILEAGE DEDUCTION</td>'
+          + '<td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:bold;color:#c0392b">−$' + mileageDed.toFixed(2) + '</td></tr></table>'
+          + '<p style="font-size:11px;color:#777;margin:6px 0 0">⚠ Standard mileage rate is used. Vehicle operating expenses (fuel, maintenance, insurance) are listed separately above and have been excluded from the deductible total.</p>'
+        : (usingMileage
+            ? '<p style="font-size:11px;color:#aaa;margin:4px 0">No GPS miles recorded in ' + yrStr + '. Miles are tracked when a shift is clocked out.</p>'
+            : '<p style="font-size:11px;color:#555;margin:4px 0">Using Actual Expenses method — standard mileage deduction not applied. All vehicle operating expenses are included in Business Expenses above.</p>');
+
+    const bankVerifiedSection = (() => {
+      const stmtExps = deductibleExp.filter(e => e.type === "Statement Import");
+      if (stmtExps.length === 0) return '<p style="font-size:11px;color:#aaa;margin:4px 0">No bank statement imported for ' + yrStr + '.</p>';
+      const stmtTotal = stmtExps.reduce((a, e) => a + e.amount, 0);
+      const stmtByCat: Record<string, number> = {};
+      stmtExps.forEach(e => { stmtByCat[esc(e.category)] = (stmtByCat[esc(e.category)] || 0) + e.amount; });
+      const stmtRows = Object.entries(stmtByCat).sort((a, b) => b[1] - a[1])
+        .map(([c, a]) => '<tr><td style="padding:4px 12px;border-bottom:1px solid #eee;font-size:11px">' + c + '</td>'
+          + '<td style="padding:4px 12px;text-align:right;font-family:monospace;font-size:11px">$' + a.toFixed(2) + '</td></tr>').join('');
+      const coveragePct = expTotal > 0 ? Math.min((stmtTotal / expTotal) * 100, 100).toFixed(0) : "0";
+      return '<h2>Bank Statement Verified Expenses</h2>'
+        + '<p style="font-size:11px;color:#555;margin:0 0 8px">Expenses imported from your bank statement and confirmed against records. Included in Business Expenses total above.</p>'
+        + '<table><tr><th>Category</th><th style="text-align:right">Bank Verified</th></tr>'
+        + stmtRows
+        + '<tr style="background:#f0fff4"><td style="padding:6px 12px;font-weight:bold;color:#1a7a4a">VERIFIED TOTAL</td>'
+        + '<td style="padding:6px 12px;text-align:right;font-family:monospace;font-weight:bold;color:#1a7a4a">$' + stmtTotal.toFixed(2) + ' (' + coveragePct + '% of deductible expenses)</td></tr></table>';
+    })();
+
+    const methodLabel = usingMileage ? "Standard Mileage Method (§ 1.274-5)" : "Actual Expenses Method";
+
     const html = [
       '<!DOCTYPE html><html><head><meta charset="utf-8">',
-      '<title>IslandCity · IRS Financial Statement '+yr+'</title>',
-      '<style>body{font-family:Georgia,serif;max-width:720px;margin:40px auto;color:#111;font-size:13px;line-height:1.6}',
+      '<title>IslandCity · IRS Schedule C Statement · ' + yrStr + '</title>',
+      '<style>',
+      'body{font-family:Georgia,serif;max-width:720px;margin:40px auto;color:#111;font-size:13px;line-height:1.6}',
       'h1{font-size:22px;margin:0 0 4px}',
-      'h2{font-size:14px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;margin:28px 0 8px;border-bottom:2px solid #111;padding-bottom:4px}',
+      'h2{font-size:13px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;margin:28px 0 8px;border-bottom:2px solid #111;padding-bottom:4px}',
       'table{width:100%;border-collapse:collapse}',
       'th{text-align:left;padding:6px 12px;background:#f5f5f5;font-size:11px;text-transform:uppercase;letter-spacing:.06em}',
       '.total{font-weight:bold;font-size:16px}.net-pos{color:#1a7a4a}.net-neg{color:#c0392b}',
       '.footer{margin-top:40px;font-size:10px;color:#777;border-top:1px solid #ddd;padding-top:12px}',
-      '@media print{body{margin:20px}}</style></head><body>',
+      '.method-badge{display:inline-block;padding:3px 8px;border-radius:4px;background:#f0f8ff;border:1px solid #b8d4ee;font-size:11px;color:#1a4a7a;margin:4px 0 16px}',
+      '@media print{body{margin:20px}}',
+      '</style></head><body>',
       '<h1>IslandCity Driver Accounting</h1>',
-      '<p style="color:#555;margin:0 0 20px">Schedule C Financial Statement · Tax Year '+yr+' · Printed '+new Date().toLocaleDateString()+'</p>',
+      '<p style="color:#555;margin:0 4px 2px 0"><strong>Schedule C Financial Statement · Tax Year ' + yrStr + '</strong></p>',
+      '<p class="method-badge">Deduction method: ' + methodLabel + '</p>',
+      '<p style="color:#777;font-size:11px;margin:0 0 20px">Printed ' + new Date().toLocaleDateString() + ' · ' + yrTrips.length + ' posted trips in ' + yrStr + ' · pending trips excluded</p>',
 
-      // ── Income Summary ────────────────────────────────────────
-      '<h2>Gross Income (Posted Trips Only)</h2>',
+      '<h2>Gross Income — ' + yrStr + ' (Posted Trips Only)</h2>',
       '<table><tr><th>Description</th><th style="text-align:right">Amount</th></tr>',
-      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Rideshare Fare Earnings</td><td style="padding:6px 12px;text-align:right;font-family:monospace">$'+gEarn.toFixed(2)+'</td></tr>',
-      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Tips / Gratuity</td><td style="padding:6px 12px;text-align:right;font-family:monospace">$'+gTips.toFixed(2)+'</td></tr>',
-      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Extras / Bonuses</td><td style="padding:6px 12px;text-align:right;font-family:monospace">$'+gExt.toFixed(2)+'</td></tr>',
+      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Rideshare Fare Earnings</td><td style="padding:6px 12px;text-align:right;font-family:monospace">$' + gEarn.toFixed(2) + '</td></tr>',
+      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Tips / Gratuity</td><td style="padding:6px 12px;text-align:right;font-family:monospace">$' + gTips.toFixed(2) + '</td></tr>',
+      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Extras / Bonuses</td><td style="padding:6px 12px;text-align:right;font-family:monospace">$' + gExt.toFixed(2) + '</td></tr>',
       otherCashRow,
-      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Toll Reimbursements</td><td style="padding:6px 12px;text-align:right;font-family:monospace">$'+gToll.toFixed(2)+'</td></tr>',
+      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Toll Reimbursements</td><td style="padding:6px 12px;text-align:right;font-family:monospace">$' + gToll.toFixed(2) + '</td></tr>',
       '<tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:bold">TOTAL GROSS INCOME</td>',
-      '<td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:bold" class="total">$'+gTotal.toFixed(2)+'</td></tr></table>',
+      '<td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:bold" class="total">$' + gTotal.toFixed(2) + '</td></tr></table>',
 
-      // ── Business Expenses ─────────────────────────────────────
-      '<h2>Business Expenses (Schedule C, Part II)</h2>',
+      '<h2>Business Expenses — ' + yrStr + ' (Schedule C, Part II)</h2>',
       '<table><tr><th>Category</th><th style="text-align:right">Total</th></tr>',
-      catRows,
-      '<tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:bold">TOTAL EXPENSES</td>',
-      '<td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:bold">$'+expensesAll.toFixed(2)+'</td></tr></table>',
+      catRows || '<tr><td style="padding:6px 12px;color:#999" colspan="2">No deductible expenses recorded for ' + yrStr + '</td></tr>',
+      '<tr style="background:#f9f9f9"><td style="padding:8px 12px;font-weight:bold">TOTAL DEDUCTIBLE EXPENSES</td>',
+      '<td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:bold">$' + expTotal.toFixed(2) + '</td></tr></table>',
 
-      // ── Bank Statement Verified ────────────────────────────────
-      (() => {
-        const stmtExps = bizExpenses.filter(e => e.type === "Statement Import");
-        if (stmtExps.length === 0) return '<p style="font-size:11px;color:#aaa;margin:4px 0">No bank statement imported. Import a statement to show verified expense reconciliation here.</p>';
-        const stmtTotal = stmtExps.reduce((a, e) => a + e.amount, 0);
-        const stmtByCat: Record<string,number> = {};
-        stmtExps.forEach(e => { stmtByCat[e.category] = (stmtByCat[e.category]||0) + e.amount; });
-        const stmtRows = Object.entries(stmtByCat).sort((a,b)=>b[1]-a[1])
-          .map(([c,a])=>'<tr><td style="padding:4px 12px;border-bottom:1px solid #eee;font-size:11px">'+c+'</td><td style="padding:4px 12px;text-align:right;font-family:monospace;font-size:11px">$'+a.toFixed(2)+'</td></tr>').join('');
-        const coveragePct = expensesAll > 0 ? Math.min((stmtTotal/expensesAll)*100, 100).toFixed(0) : "0";
-        return '<h2>Bank Statement Verified Expenses</h2>'
-          +'<p style="font-size:11px;color:#555;margin:0 0 8px">These expenses were imported directly from your bank statement and confirmed against your records. They are included in the Business Expenses total above.</p>'
-          +'<table><tr><th>Category</th><th style="text-align:right">Bank Verified</th></tr>'
-          +stmtRows
-          +'<tr style="background:#f0fff4"><td style="padding:6px 12px;font-weight:bold;color:#1a7a4a">VERIFIED TOTAL</td>'
-          +'<td style="padding:6px 12px;text-align:right;font-family:monospace;font-weight:bold;color:#1a7a4a">$'+stmtTotal.toFixed(2)+' ('+coveragePct+'% of total expenses)</td></tr></table>';
-      })(),
-
-      // ── IRS Mileage Deduction ─────────────────────────────────
+      vehicleExclusionSection,
+      bankVerifiedSection,
       mileageSection,
 
-      // ── Net Taxable Income ────────────────────────────────────
-      '<h2>Net Taxable Income (Schedule C)</h2>',
+      '<h2>Net Taxable Income — ' + yrStr + ' (Schedule C)</h2>',
       '<table><tr><th>Description</th><th style="text-align:right">Amount</th></tr>',
       '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Gross Income</td>',
-      '<td style="padding:6px 12px;text-align:right;font-family:monospace">$'+gTotal.toFixed(2)+'</td></tr>',
-      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Business Expenses</td>',
-      '<td style="padding:6px 12px;text-align:right;font-family:monospace">−$'+expensesAll.toFixed(2)+'</td></tr>',
-      (milesTotal>0
-        ? '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">IRS Mileage Deduction ('+milesTotal.toFixed(1)+' mi × $'+IRS_RATE_PER_MILE.toFixed(2)+')</td>'
-          +'<td style="padding:6px 12px;text-align:right;font-family:monospace">−$'+mileageDeduction.toFixed(2)+'</td></tr>'
+      '<td style="padding:6px 12px;text-align:right;font-family:monospace">$' + gTotal.toFixed(2) + '</td></tr>',
+      '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Deductible Business Expenses</td>',
+      '<td style="padding:6px 12px;text-align:right;font-family:monospace">−$' + expTotal.toFixed(2) + '</td></tr>',
+      (usingMileage && milesTotal > 0 && rateKnown
+        ? '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">IRS Standard Mileage Deduction (' + milesTotal.toFixed(1) + ' mi × $' + yrRate.toFixed(2) + ')</td>'
+          + '<td style="padding:6px 12px;text-align:right;font-family:monospace">−$' + mileageDed.toFixed(2) + '</td></tr>'
         : ''),
       '<tr style="background:#f0f0f0"><td style="padding:10px 12px;font-weight:bold;font-size:15px">NET PROFIT / LOSS</td>',
-      '<td style="padding:10px 12px;text-align:right;font-family:monospace;font-size:18px;font-weight:bold" class="'+netCls+'">',
-      (netAfterMileage>=0?'$'+netAfterMileage.toFixed(2):'−$'+Math.abs(netAfterMileage).toFixed(2)),
+      '<td style="padding:10px 12px;text-align:right;font-family:monospace;font-size:18px;font-weight:bold" class="' + netCls + '">',
+      (netAfterMileage >= 0 ? '$' + netAfterMileage.toFixed(2) : '−$' + Math.abs(netAfterMileage).toFixed(2)),
       '</td></tr></table>',
 
-      // ── Hours & Activity Log ──────────────────────────────────
-      '<h2>Hours &amp; Activity Log</h2>',
+      '<h2>Hours &amp; Activity — ' + yrStr + '</h2>',
       '<table><tr><th>Metric</th><th style="text-align:right">Value</th></tr>',
       '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Total Driving Hours</td>',
-      '<td style="padding:6px 12px;text-align:right;font-family:monospace">'+hrsTotal.toFixed(1)+' hrs</td></tr>',
+      '<td style="padding:6px 12px;text-align:right;font-family:monospace">' + hrsTotal.toFixed(1) + ' hrs</td></tr>',
       '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Total Miles Tracked (GPS)</td>',
-      '<td style="padding:6px 12px;text-align:right;font-family:monospace">'+milesTotal.toFixed(1)+' mi</td></tr>',
+      '<td style="padding:6px 12px;text-align:right;font-family:monospace">' + yrHours.reduce((a, h) => a + (h.miles || 0), 0).toFixed(1) + ' mi</td></tr>',
       '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Total Shifts Logged</td>',
-      '<td style="padding:6px 12px;text-align:right;font-family:monospace">'+hoursLog.length+'</td></tr>',
+      '<td style="padding:6px 12px;text-align:right;font-family:monospace">' + yrHours.length + '</td></tr>',
       '<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">Total Trips Posted</td>',
-      '<td style="padding:6px 12px;text-align:right;font-family:monospace">'+postedTrips.length+'</td></tr>',
+      '<td style="padding:6px 12px;text-align:right;font-family:monospace">' + yrTrips.length + '</td></tr>',
       '<tr><td style="padding:6px 12px">Average Earnings / Hour</td>',
-      '<td style="padding:6px 12px;text-align:right;font-family:monospace">'+(hrsTotal>0?'$'+(gTotal/hrsTotal).toFixed(2):'-')+'/hr</td></tr></table>',
+      '<td style="padding:6px 12px;text-align:right;font-family:monospace">' + (hrsTotal > 0 ? '$' + (gTotal / hrsTotal).toFixed(2) : '—') + '/hr</td></tr></table>',
 
       tripSection,
+
       '<div class="footer">',
-      '<p><strong>IslandCity Driver Accounting</strong> · Generated '+new Date().toLocaleString()+'</p>',
-      '<p>Based on trips posted to the Ledger. Pending Register trips excluded. IRS mileage rate: $'+IRS_RATE_PER_MILE.toFixed(2)+'/mi (2025) — confirm current year rate at <strong>irs.gov</strong>.</p>',
-      '<p>Consult a licensed tax professional before filing. This document does not constitute tax advice.</p>',
+      '<p><strong>IslandCity Driver Accounting</strong> · Generated ' + new Date().toLocaleString() + '</p>',
+      '<p>Tax year: <strong>' + yrStr + '</strong> · Deduction method: <strong>' + methodLabel + '</strong>' + (rateKnown ? ' · IRS mileage rate: $' + yrRate.toFixed(2) + '/mi (' + yrStr + ')' : ' · ' + yrStr + ' mileage rate: verify at irs.gov') + ' — always confirm at <strong>irs.gov</strong> before filing.</p>',
+      '<p>Based on trips posted to the Ledger. Pending Register trips are excluded. Consult a licensed tax professional before filing. This document does not constitute tax advice.</p>',
       '</div></body></html>',
     ].join('\n');
-    const win = window.open('','_blank');
-    if (win) { win.document.write(html); win.document.close(); setTimeout(()=>win.print(),400); }
+    const win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 400); }
   };
 
   const ReportsContent = (
@@ -4853,11 +4946,55 @@ export default function App() {
           );
         })()}
 
-        {/* IRS Print Button — #1 */}
-        <button onClick={handlePrintIRSStatement}
-          className="w-full h-12 rounded-full bg-[#1e1e1e] border border-[#facc15]/30 text-[#facc15] text-[12px] font-bold tracking-[0.1em] hover:bg-[#facc15]/10 transition-colors flex items-center justify-center gap-2">
-          🖨 Print IRS Financial Statement
-        </button>
+        {/* IRS Statement Controls — year + method + print */}
+        <div className="space-y-3 bg-[#0d0d0d] border border-[#2a2a2a] rounded-2xl p-4">
+          <p className="text-[10px] tracking-[0.16em] text-neutral-500 font-semibold uppercase">IRS Financial Statement</p>
+
+          {/* Tax year selector — only years with confirmed IRS rates */}
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[12px] text-neutral-400">Tax Year</span>
+            <div className="flex gap-1.5 flex-wrap justify-end">
+              {IRS_CONFIRMED_YEARS.map(yr => (
+                <button key={yr} onClick={() => setStmtYear(yr)}
+                  className={`h-7 px-3 rounded-full text-[10px] font-bold border transition-colors ${stmtYear === yr ? "bg-[#facc15] text-black border-[#facc15]" : "bg-transparent text-neutral-400 border-[#333] hover:border-[#facc15]/40"}`}>
+                  {yr}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Deduction method selector */}
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <span className="text-[12px] text-neutral-400">Deduction Method</span>
+              <p className="text-[9px] text-neutral-600 mt-0.5">Choose one — IRS does not allow both</p>
+            </div>
+            <div className="flex gap-1.5 shrink-0">
+              <button onClick={() => setStmtMethod("mileage")}
+                className={`h-7 px-2.5 rounded-full text-[10px] font-bold border transition-colors ${stmtMethod === "mileage" ? "bg-[#facc15] text-black border-[#facc15]" : "bg-transparent text-neutral-400 border-[#333] hover:border-[#facc15]/40"}`}>
+                Mileage
+              </button>
+              <button onClick={() => setStmtMethod("actual")}
+                className={`h-7 px-2.5 rounded-full text-[10px] font-bold border transition-colors ${stmtMethod === "actual" ? "bg-[#facc15] text-black border-[#facc15]" : "bg-transparent text-neutral-400 border-[#333] hover:border-[#facc15]/40"}`}>
+                Actual Exp.
+              </button>
+            </div>
+          </div>
+
+          {/* Method note */}
+          <p className="text-[10px] text-neutral-600 leading-relaxed">
+            {stmtMethod === "mileage"
+              ? (IRS_MILEAGE_RATES[stmtYear]
+                  ? "Standard mileage ($" + IRS_MILEAGE_RATES[stmtYear].toFixed(2) + "/mi for " + stmtYear + "): vehicle fuel, maintenance & insurance are excluded and shown separately."
+                  : "Standard mileage: " + stmtYear + " rate not yet confirmed — verify at irs.gov before selecting this method.")
+              : "Actual expenses: all operating costs included; no mileage deduction applied."}
+          </p>
+
+          <button onClick={handlePrintIRSStatement}
+            className="w-full h-11 rounded-full bg-[#1e1e1e] border border-[#facc15]/30 text-[#facc15] text-[12px] font-bold tracking-[0.1em] hover:bg-[#facc15]/10 transition-colors flex items-center justify-center gap-2">
+            🖨 Print {stmtYear} IRS Statement
+          </button>
+        </div>
 
         {/* Toll deduction note */}
         <div className="rounded-xl bg-[#1a1625] border-l-[3px] border-l-[#8b5cf6] border border-[#2a2340] p-3.5">
@@ -6250,7 +6387,7 @@ export default function App() {
                           return (
                             <div key={plat}
                               className="bg-[#0c0c0c] border border-[#1e1e1e] rounded-xl px-3 py-2.5 flex items-center gap-3">
-                              <PlatformBadge platform={plat} size={30} />
+                              <div className="w-[30px] h-[30px] rounded-full bg-[#1e1e1e] border border-[#333] flex items-center justify-center text-[11px] font-bold text-neutral-400 shrink-0">{plat.charAt(0)}</div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-[12px] font-bold text-white truncate">{plat}</p>
                                 <p className="text-[9px] text-neutral-500">
