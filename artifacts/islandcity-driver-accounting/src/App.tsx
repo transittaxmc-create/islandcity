@@ -828,6 +828,17 @@ export default function App() {
     };
   }, []); // set up once — refs always point to current state
 
+  // ── GPS one-shot on mount — show real location immediately, even before shift ─
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    setGps(s => ({ ...s, status: "searching" }));
+    navigator.geolocation.getCurrentPosition(
+      pos => setGps({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy ?? null, status: "active" }),
+      () => setGps(s => ({ ...s, status: "inactive" })),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 }
+    );
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Auto-restore from cloud if localStorage has no trips ─────────────────
   useEffect(() => {
     const tryRestore = async () => {
@@ -971,7 +982,7 @@ export default function App() {
         setGps({ lat: newLat, lng: newLng, acc: newAcc, status: "active" });
       },
       () => setGps(s => ({ ...s, status: "error" })),
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
     );
     watchIdRef.current = id as unknown as number;
   };
@@ -1015,7 +1026,7 @@ export default function App() {
         tripPrevGpsRef.current = { lat, lng };
       },
       () => showToast("GPS signal lost — tracking paused"),
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
     );
     tripWatchIdRef.current = id as unknown as number;
     setTripTracking(true);
@@ -1681,44 +1692,78 @@ export default function App() {
   };
 
   const startMediaRecording = (onAudio: (base64: string, mimeType: string) => void) => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setVoiceError("Micrófono no disponible — usa Safari o Chrome");
+    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setVoiceError("Grabación de audio no soportada — ve a Ajustes > Safari y activa el micrófono");
       setShowVoicePanel(true);
       return;
     }
-    const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm"
-      : MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4"
-      : "audio/ogg";
+
+    // Detect best supported format — iOS Safari only supports audio/mp4
+    const preferredTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"];
+    const supportedType = preferredTypes.find(t => {
+      try { return MediaRecorder.isTypeSupported(t); } catch { return false; }
+    }) ?? "";
+    // Normalize to base MIME (strip codec suffix for blob/Gemini)
+    const mimeType = supportedType.split(";")[0] || "audio/mp4";
 
     navigator.mediaDevices.getUserMedia({ audio: true, video: false })
       .then(stream => {
         mediaChunksRef.current = [];
-        const recorder = new MediaRecorder(stream, { mimeType });
-        recorder.ondataavailable = (e) => { if (e.data.size > 0) mediaChunksRef.current.push(e.data); };
+
+        // iOS Safari: constructor throws if mimeType unsupported — fall back to default
+        let recorder: MediaRecorder;
+        try {
+          recorder = supportedType
+            ? new MediaRecorder(stream, { mimeType: supportedType })
+            : new MediaRecorder(stream);
+        } catch {
+          recorder = new MediaRecorder(stream);
+        }
+
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) mediaChunksRef.current.push(e.data);
+        };
+
         recorder.onstop = () => {
           stream.getTracks().forEach(t => t.stop());
           setVoiceListening(false);
-          if (mediaChunksRef.current.length === 0) {
-            setVoiceError("No escuché nada — aprieta el micrófono y habla");
+          const chunks = mediaChunksRef.current;
+          if (chunks.length === 0) {
+            setVoiceError("No capturé audio — habla más cerca del micrófono e intenta de nuevo");
+            setVoiceParsing(false);
             return;
           }
-          const blob = new Blob(mediaChunksRef.current, { type: mimeType });
+          // Use the actual blob type if recorder assigned one, else our mimeType
+          const blob = new Blob(chunks, { type: mimeType });
+          const actualMime = blob.type || mimeType;
           const reader = new FileReader();
           reader.onload = () => {
             const base64 = (reader.result as string).split(",")[1];
-            onAudio(base64, mimeType);
+            onAudio(base64, actualMime);
+          };
+          reader.onerror = () => {
+            setVoiceError("Error leyendo el audio — intenta de nuevo");
+            setVoiceParsing(false);
           };
           reader.readAsDataURL(blob);
         };
-        recorder.start(250);
+
+        // NO timeslice — iOS Safari only delivers audio on stop(), not during recording
+        recorder.start();
         mediaRecorderRef.current = recorder;
         setVoiceListening(true);
+
         // Auto-stop after 30 seconds
-        setTimeout(() => { if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop(); }, 30000);
+        setTimeout(() => {
+          if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
+        }, 30000);
       })
-      .catch(() => {
+      .catch((err) => {
         setVoiceListening(false);
-        setVoiceError("Acceso al micrófono denegado — ve a Configuración y actívalo");
+        const msg = err?.name === "NotAllowedError"
+          ? "Permiso de micrófono denegado — ve a Configuración > Safari > Micrófono y actívalo"
+          : "No se pudo acceder al micrófono — intenta de nuevo";
+        setVoiceError(msg);
         setShowVoicePanel(true);
       });
   };
@@ -1749,15 +1794,16 @@ export default function App() {
           resolve({ lat, lng, addr: `${lat.toFixed(4)},${lng.toFixed(4)}` });
         }
       };
-      if (gps.lat && gps.lng) {
-        doGeocode(gps.lat, gps.lng);
-      } else {
-        navigator.geolocation.getCurrentPosition(
-          pos => doGeocode(pos.coords.latitude, pos.coords.longitude),
-          () => resolve({ lat: 0, lng: 0, addr: "GPS unavailable" }),
-          { timeout: 5000, enableHighAccuracy: true }
-        );
-      }
+      // Always get fresh GPS — never use potentially stale cached state
+      navigator.geolocation.getCurrentPosition(
+        pos => doGeocode(pos.coords.latitude, pos.coords.longitude),
+        () => {
+          // Fallback to cached state only if fresh fails
+          if (gps.lat && gps.lng) doGeocode(gps.lat, gps.lng);
+          else resolve({ lat: 0, lng: 0, addr: "GPS unavailable" });
+        },
+        { timeout: 8000, enableHighAccuracy: true, maximumAge: 0 }
+      );
     });
 
   const resetVoiceTripFlow = () => {
@@ -2317,10 +2363,22 @@ export default function App() {
           }`}>
             {shiftActive ? (isOnBreak ? "On break" : "On duty") : "Shift ended"}
           </span>
-          <span className="ml-auto text-[9px] text-neutral-400 font-mono-jet flex items-center gap-1">
-            <span className={`w-1 h-1 rounded-full ${gps.status === "active" ? "bg-[#4ade80]" : gps.status === "searching" ? "bg-yellow-400 animate-pulse" : "bg-neutral-600"}`} />
-            GPS {gpsStatusLabel}
-          </span>
+          <button
+            onClick={() => {
+              if (!navigator.geolocation) return;
+              setGps(s => ({ ...s, status: "searching" }));
+              navigator.geolocation.getCurrentPosition(
+                pos => setGps({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy ?? null, status: "active" }),
+                () => setGps(s => ({ ...s, status: "error" })),
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 }
+              );
+            }}
+            className="ml-auto text-[9px] text-neutral-400 font-mono-jet flex items-center gap-1 active:opacity-60"
+            title="Tap to refresh GPS"
+          >
+            <span className={`w-1 h-1 rounded-full ${gps.status === "active" ? "bg-[#4ade80]" : gps.status === "searching" ? "bg-yellow-400 animate-pulse" : gps.status === "error" ? "bg-red-500" : "bg-neutral-600"}`} />
+            GPS {gpsStatusLabel} {gps.status !== "searching" ? "↺" : ""}
+          </button>
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2">
           {(["START", "BREAK", "END"] as TurnStatus[]).map(s => {

@@ -67,11 +67,13 @@ voiceParseRouter.post("/voice-parse", async (req, res) => {
   let contents: any;
 
   if (audioBase64 && mimeType) {
+    // Normalize iOS audio/mp4 → audio/m4a which Gemini handles more reliably
+    const geminiMime = mimeType === "audio/mp4" ? "audio/m4a" : mimeType;
     // Audio input — Gemini transcribes AND parses in one step
     contents = [{
       role: "user",
       parts: [
-        { inlineData: { mimeType, data: audioBase64 } },
+        { inlineData: { mimeType: geminiMime, data: audioBase64 } },
         { text: SYSTEM_PROMPT }
       ]
     }];

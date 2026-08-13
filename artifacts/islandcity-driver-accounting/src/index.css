@@ -11,11 +11,26 @@
   box-sizing: border-box;
 }
 
-body {
+html, body {
   background: #000;
   color: #fff;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Prevent iOS bounce/overscroll and browser swipe-back interfering with app */
+  overscroll-behavior: none;
+  overflow: hidden;
+  height: 100%;
+  width: 100%;
+  position: fixed;
+}
+
+#root {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: none;
+  /* Allow only vertical pan — blocks iOS horizontal swipe-back gesture */
+  touch-action: pan-y;
 }
 
 input::-webkit-outer-spin-button,
