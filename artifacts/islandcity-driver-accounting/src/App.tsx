@@ -1297,6 +1297,10 @@ export default function App() {
     resetForm();
     showToast(editingId ? `Trip updated ✓` : `Trip saved ✓ $${newTrip.grandTotal.toFixed(2)}`);
     setActiveTab("TRIPS"); setTripsTab("REGISTER");
+    // ── Immediate cloud backup on every Register save ──────────────────────
+    // Runs in the background — does not block the UI. If offline, the
+    // 60-min auto-backup and the pagehide flush will catch it later.
+    setTimeout(() => saveCloudBackup(), 0);
   };
 
   const handleEditToEntry = (trip: Trip) => {
