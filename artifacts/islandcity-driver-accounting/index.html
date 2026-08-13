@@ -9,6 +9,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="IslandCity">
+  <!-- Force fresh HTML on every load so browser never serves a cached page
+       that points to old (deleted) JS bundle hashes after a redeploy -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="favicon.svg">
   <title>IslandCity Driver Accounting</title>

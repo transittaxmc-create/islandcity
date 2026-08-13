@@ -11,26 +11,32 @@
   box-sizing: border-box;
 }
 
-html, body {
+html {
+  height: 100%;
+  /* Prevent iOS rubber-band bounce on the root */
+  overflow: hidden;
+}
+
+body {
+  height: 100%;
   background: #000;
   color: #fff;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* Prevent iOS bounce/overscroll and browser swipe-back interfering with app */
-  overscroll-behavior: none;
   overflow: hidden;
-  height: 100%;
-  width: 100%;
-  position: fixed;
+  /* NO position:fixed — that causes white-screen on iOS reopen */
 }
 
 #root {
+  /* Fill the full viewport and scroll only vertically */
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
-  overscroll-behavior: none;
-  /* Allow only vertical pan — blocks iOS horizontal swipe-back gesture */
+  /* Modern iOS bounce prevention — no need for position:fixed */
+  overscroll-behavior-y: contain;
+  /* Block horizontal swipe-back gesture from browser */
   touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
 }
 
 input::-webkit-outer-spin-button,
