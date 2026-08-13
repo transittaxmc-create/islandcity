@@ -6454,12 +6454,31 @@ export default function App() {
 
         <div className="h-px bg-[#1e1e1e]" />
 
+        {/* How-to steps */}
+        <div className="bg-[#050f05] border border-[#00FF00]/20 rounded-xl p-3 space-y-1.5">
+          <p className="text-[10px] font-black text-[#00FF00]/70 uppercase tracking-widest mb-2">¿Cómo usar?</p>
+          {[
+            { n: "1", t: "En LimoSys, toma un screenshot", s: "Botón lateral + subir volumen en iPhone" },
+            { n: "2", t: "Toca el botón verde abajo", s: "Selecciona desde Fototeca / Photo Library" },
+            { n: "3", t: "Gemini analiza TODAS las ofertas", s: "Overlay flotante aparece con veredicto" },
+          ].map(step => (
+            <div key={step.n} className="flex items-start gap-2.5">
+              <span className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black shrink-0 mt-0.5"
+                style={{ background: "#00FF00", color: "#000" }}>{step.n}</span>
+              <div>
+                <p className="text-[11px] font-bold text-white">{step.t}</p>
+                <p className="text-[9px] text-neutral-500">{step.s}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
         <button onClick={() => limoInputRef.current?.click()} disabled={limoCapturing}
           className="w-full py-3 rounded-xl text-[13px] font-black tracking-wide flex items-center justify-center gap-2 active:scale-95 transition-all"
           style={{ background: "#000", border: "2px solid #00FF00", color: "#00FF00", boxShadow: "0 0 18px rgba(0,255,0,0.12)" }}>
           {limoCapturing
             ? <><div className="w-4 h-4 rounded-full border-2 border-[#00FF00] border-t-transparent animate-spin" />Analizando con Gemini…</>
-            : <>📸 Evaluar Oferta LimoSys</>}
+            : <>📸 Paso 2: Seleccionar Screenshot de LimoSys</>}
         </button>
         {limoError && <p className="text-red-400 text-[11px] text-center">{limoError}</p>}
 
