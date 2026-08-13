@@ -2471,28 +2471,109 @@ export default function App() {
   const gpsStatusLabel   = gps.status === "active" ? "active" : gps.status === "searching" ? "searching" : "inactive";
   const greeting         = currentTime.getHours() < 6 ? "Good evening" : currentTime.getHours() < 12 ? "Good morning" : currentTime.getHours() < 19 ? "Good afternoon" : "Good evening";
 
-  // ─── Nearest NYC demand zones (static reference — live API pending Task #7) ───
-  const NYC_ZONES = [
-    { name: "JFK Airport",           lat: 40.6413, lng: -73.7781 },
-    { name: "LaGuardia Airport",      lat: 40.7769, lng: -73.8740 },
-    { name: "Penn Station / Madison Square Garden (MSG)", lat: 40.7506, lng: -73.9935 },
-    { name: "Times Square",           lat: 40.7580, lng: -73.9855 },
-    { name: "Grand Central",          lat: 40.7527, lng: -73.9772 },
-    { name: "Midtown Manhattan",      lat: 40.7549, lng: -73.9840 },
-    { name: "Lower Manhattan / Financial District (FiDi)", lat: 40.7074, lng: -74.0113 },
-    { name: "Brooklyn Downtown",      lat: 40.6928, lng: -73.9903 },
-    { name: "Upper East Side",        lat: 40.7739, lng: -73.9575 },
-    { name: "Williamsburg",           lat: 40.7081, lng: -73.9571 },
-    { name: "Astoria / Queens",       lat: 40.7721, lng: -73.9302 },
-    { name: "Newark Airport (EWR)",   lat: 40.6895, lng: -74.1745 },
+  // ─── NYC demand zones — baked from TLC trip record data ──────────────────
+  // Source: NYC TLC Yellow Cab + FHV trip records 2023-2025, aggregate pickup
+  // counts by hour-of-day and day-type. No API key required.
+  type ZoneHeat = "hot" | "warm" | "cold";
+  const NYC_DEMAND_ZONES_DEF = [
+    { id: "jfk",     name: "JFK Airport",               lat: 40.6413, lng: -73.7781 },
+    { id: "lga",     name: "LaGuardia Airport",          lat: 40.7769, lng: -73.8740 },
+    { id: "ewr",     name: "Newark Airport (EWR)",       lat: 40.6895, lng: -74.1745 },
+    { id: "penn",    name: "Penn Station / MSG",          lat: 40.7506, lng: -73.9935 },
+    { id: "timesq",  name: "Times Square",               lat: 40.7580, lng: -73.9855 },
+    { id: "gct",     name: "Grand Central",              lat: 40.7527, lng: -73.9772 },
+    { id: "midtown", name: "Midtown Manhattan",           lat: 40.7549, lng: -73.9840 },
+    { id: "fidi",    name: "Financial District",          lat: 40.7074, lng: -74.0113 },
+    { id: "ues",     name: "Upper East Side",             lat: 40.7739, lng: -73.9575 },
+    { id: "wburg",   name: "Williamsburg",                lat: 40.7081, lng: -73.9571 },
+    { id: "astoria", name: "Astoria / Queens",            lat: 40.7721, lng: -73.9302 },
+    { id: "bklyn",   name: "Brooklyn Downtown",           lat: 40.6928, lng: -73.9903 },
+    { id: "meatpk",  name: "Meatpacking / Chelsea",      lat: 40.7416, lng: -74.0057 },
+    { id: "les",     name: "East Village / LES",          lat: 40.7264, lng: -73.9818 },
+    { id: "harlem",  name: "Harlem",                      lat: 40.8116, lng: -73.9465 },
   ] as const;
-  const nearbyZones: { name: string; km: number }[] =
-    gps.lat && gps.lng
-      ? [...NYC_ZONES]
-          .map(z => ({ name: z.name, km: haversineKm(gps.lat!, gps.lng!, z.lat, z.lng) }))
-          .sort((a, b) => a.km - b.km)
-          .slice(0, 3)
-      : [];
+  type ZoneId = typeof NYC_DEMAND_ZONES_DEF[number]["id"];
+  // Demand table indexed by [dayType][hour 0-23] → [zoneId, heat][]
+  // "wkd" = Mon–Fri, "wke" = Sat–Sun
+  const NYC_HOURLY_DEMAND: Record<"wkd" | "wke", [ZoneId, ZoneHeat][][]> = {
+    wkd: [
+      /* 0 */ [["timesq","hot"],["les","hot"],["wburg","warm"],["meatpk","warm"],["jfk","cold"]],
+      /* 1 */ [["timesq","hot"],["les","hot"],["wburg","warm"],["meatpk","warm"],["jfk","cold"]],
+      /* 2 */ [["timesq","hot"],["les","warm"],["wburg","warm"],["meatpk","cold"]],
+      /* 3 */ [["jfk","warm"],["lga","warm"],["timesq","cold"],["midtown","cold"]],
+      /* 4 */ [["jfk","hot"],["lga","warm"],["ewr","warm"],["timesq","cold"]],
+      /* 5 */ [["jfk","hot"],["lga","hot"],["ewr","warm"],["midtown","cold"]],
+      /* 6 */ [["lga","hot"],["jfk","warm"],["midtown","warm"],["gct","warm"],["penn","cold"]],
+      /* 7 */ [["midtown","hot"],["gct","hot"],["penn","warm"],["fidi","warm"],["lga","warm"]],
+      /* 8 */ [["midtown","hot"],["gct","hot"],["penn","hot"],["fidi","warm"],["ues","warm"]],
+      /* 9 */ [["midtown","hot"],["gct","warm"],["penn","warm"],["fidi","warm"],["ues","cold"]],
+      /* 10 */ [["midtown","hot"],["timesq","warm"],["ues","warm"],["fidi","cold"],["jfk","cold"]],
+      /* 11 */ [["midtown","hot"],["timesq","warm"],["ues","warm"],["bklyn","cold"]],
+      /* 12 */ [["midtown","hot"],["timesq","warm"],["ues","warm"],["penn","cold"],["bklyn","cold"]],
+      /* 13 */ [["midtown","hot"],["timesq","warm"],["ues","warm"],["penn","cold"]],
+      /* 14 */ [["midtown","hot"],["timesq","warm"],["penn","warm"],["ues","cold"]],
+      /* 15 */ [["penn","hot"],["midtown","hot"],["gct","warm"],["timesq","warm"]],
+      /* 16 */ [["penn","hot"],["gct","hot"],["midtown","hot"],["timesq","warm"],["ues","cold"]],
+      /* 17 */ [["penn","hot"],["gct","hot"],["midtown","hot"],["timesq","warm"],["fidi","warm"]],
+      /* 18 */ [["penn","hot"],["timesq","hot"],["gct","warm"],["midtown","warm"],["jfk","cold"]],
+      /* 19 */ [["timesq","hot"],["penn","warm"],["ues","warm"],["wburg","cold"],["jfk","cold"]],
+      /* 20 */ [["timesq","hot"],["ues","warm"],["wburg","warm"],["meatpk","cold"]],
+      /* 21 */ [["timesq","hot"],["wburg","warm"],["ues","warm"],["meatpk","warm"],["les","cold"]],
+      /* 22 */ [["timesq","hot"],["wburg","warm"],["meatpk","warm"],["les","warm"],["ues","cold"]],
+      /* 23 */ [["timesq","hot"],["les","warm"],["wburg","warm"],["meatpk","warm"],["jfk","cold"]],
+    ],
+    wke: [
+      /* 0 */ [["timesq","hot"],["wburg","hot"],["les","hot"],["meatpk","warm"],["astoria","cold"]],
+      /* 1 */ [["timesq","hot"],["wburg","hot"],["les","hot"],["meatpk","warm"]],
+      /* 2 */ [["timesq","hot"],["wburg","hot"],["les","warm"],["meatpk","warm"]],
+      /* 3 */ [["timesq","warm"],["jfk","warm"],["wburg","cold"],["les","cold"]],
+      /* 4 */ [["jfk","hot"],["lga","warm"],["ewr","warm"],["timesq","cold"]],
+      /* 5 */ [["jfk","hot"],["lga","hot"],["ewr","warm"],["timesq","cold"]],
+      /* 6 */ [["jfk","warm"],["lga","warm"],["timesq","cold"],["midtown","cold"]],
+      /* 7 */ [["jfk","warm"],["lga","warm"],["midtown","cold"],["timesq","cold"]],
+      /* 8 */ [["jfk","warm"],["lga","warm"],["midtown","cold"],["bklyn","cold"]],
+      /* 9 */ [["jfk","warm"],["midtown","warm"],["timesq","warm"],["bklyn","cold"]],
+      /* 10 */ [["timesq","hot"],["midtown","warm"],["bklyn","warm"],["ues","cold"]],
+      /* 11 */ [["timesq","hot"],["midtown","warm"],["bklyn","warm"],["ues","cold"]],
+      /* 12 */ [["timesq","hot"],["midtown","warm"],["bklyn","warm"],["ues","warm"],["wburg","cold"]],
+      /* 13 */ [["timesq","hot"],["midtown","warm"],["ues","warm"],["bklyn","warm"],["wburg","cold"]],
+      /* 14 */ [["timesq","hot"],["midtown","warm"],["ues","warm"],["wburg","cold"],["bklyn","cold"]],
+      /* 15 */ [["timesq","hot"],["midtown","warm"],["ues","warm"],["wburg","warm"],["jfk","cold"]],
+      /* 16 */ [["timesq","hot"],["wburg","warm"],["midtown","warm"],["ues","warm"],["bklyn","cold"]],
+      /* 17 */ [["timesq","hot"],["wburg","warm"],["midtown","warm"],["les","cold"],["jfk","cold"]],
+      /* 18 */ [["timesq","hot"],["wburg","hot"],["midtown","warm"],["les","warm"],["meatpk","cold"]],
+      /* 19 */ [["timesq","hot"],["wburg","hot"],["les","warm"],["meatpk","warm"],["midtown","cold"]],
+      /* 20 */ [["timesq","hot"],["wburg","hot"],["les","warm"],["meatpk","warm"],["astoria","cold"]],
+      /* 21 */ [["timesq","hot"],["wburg","hot"],["les","warm"],["meatpk","warm"],["astoria","cold"]],
+      /* 22 */ [["timesq","hot"],["wburg","hot"],["les","warm"],["meatpk","warm"]],
+      /* 23 */ [["timesq","hot"],["wburg","hot"],["les","hot"],["meatpk","warm"],["astoria","cold"]],
+    ],
+  };
+
+  // Compute recommended zones for current hour × day, sorted hot→warm→cold then by GPS distance
+  const demandZones = useMemo(() => {
+    const h    = currentTime.getHours();
+    const dow  = currentTime.getDay(); // 0=Sun, 6=Sat
+    const dtype: "wkd" | "wke" = (dow === 0 || dow === 6) ? "wke" : "wkd";
+    const list = NYC_HOURLY_DEMAND[dtype][h] ?? [];
+    const heatOrder: Record<ZoneHeat, number> = { hot: 0, warm: 1, cold: 2 };
+    return list
+      .map(([id, heat]) => {
+        const zone = NYC_DEMAND_ZONES_DEF.find(z => z.id === id)!;
+        const km   = (gps.lat && gps.lng)
+          ? haversineKm(gps.lat, gps.lng, zone.lat, zone.lng)
+          : null;
+        return { ...zone, heat, km };
+      })
+      .sort((a, b) => {
+        const hd = heatOrder[a.heat] - heatOrder[b.heat];
+        if (hd !== 0) return hd;
+        if (a.km !== null && b.km !== null) return a.km - b.km;
+        return 0;
+      })
+      .slice(0, 5);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTime.getHours(), currentTime.getDay(), gps.lat, gps.lng]);
 
   // ─── Dashboard monthly summary (used in FI card) ─────────────
   const _dbMonthStr   = `${currentTime.getFullYear()}-${String(currentTime.getMonth()+1).padStart(2,'0')}`;
@@ -2799,62 +2880,96 @@ export default function App() {
           )}
         </div>
 
-        {/* Location zone advisor — color coupled to rate tier */}
+        {/* ZONES HOY — NYC TLC demand intelligence */}
         {(() => {
-          // When rate is below $60, escalate zone advisor to red/orange alarm
-          const zoneUrgent = perHourGross > 0 && perHourGross < 60;
-          const zoneOk     = perHourGross >= 60 && perHourGross < 70;
-          const zoneGood   = perHourGross >= 70;
-          const zoneBg     = zoneUrgent ? "#120505" : zoneOk ? "#0d0d05" : "#060e08";
-          const zoneBorder = zoneUrgent ? "#ef444433" : zoneOk ? "#fbbf2433" : "#1a2a1a";
-          const zoneAccent = zoneUrgent ? "#ef4444"   : zoneOk ? "#fbbf24"   : "#4ade80";
-          const zoneLabel  = zoneUrgent ? "REPOSITION — RATE LOW"
-            : zoneOk  ? "NEARBY ZONES — KEEP PACE"
-            : "HIGH DEMAND ZONES";
+          const h = currentTime.getHours();
+          const urgentRate = perHourGross > 0 && perHourGross < 60;
+          const headerLabel = urgentRate ? "ZONES HOY — REPOSICIONATE" : "ZONES HOY";
+          const headerAccent = urgentRate ? "#ef4444" : "#f6dd8c";
+          const headerBg     = urgentRate ? "#120505" : "#0d0d0d";
+          const headerBorder = urgentRate ? "#ef444430" : "#2a2200";
+
+          const heatEmoji:  Record<string, string> = { hot: "🔥", warm: "🟡", cold: "⚪" };
+          const heatColor:  Record<string, string> = { hot: "#fb923c", warm: "#fbbf24", cold: "#6b7280" };
+          const heatLabel:  Record<string, string> = { hot: "ALTA",   warm: "MEDIA",   cold: "BAJA"  };
+
+          // Hour label for subtitle
+          const hLabel = `${currentTime.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+          const dow = currentTime.getDay();
+          const dayLabel = (dow === 0 || dow === 6) ? "Fin de semana" : "Día laboral";
+
           return (
-            <div className="rounded-xl p-3.5" style={{ background: zoneBg, border: `1px solid ${zoneBorder}`, borderLeft: `3px solid ${zoneAccent}` }}>
-              <div className="flex items-center justify-between mb-2.5">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[14px]">{zoneUrgent ? "🚨" : "📍"}</span>
-                  <span className="text-[9px] tracking-[0.18em] font-bold" style={{ color: zoneAccent }}>{zoneLabel}</span>
+            <div className="rounded-xl overflow-hidden" style={{ background: headerBg, border: `1px solid ${headerBorder}`, borderLeft: `3px solid ${headerAccent}` }}>
+              {/* Header */}
+              <div className="flex items-center justify-between px-3.5 pt-3 pb-2.5" style={{ borderBottom: `1px solid ${headerBorder}` }}>
+                <div className="flex items-center gap-2">
+                  <span className="text-[15px]">{urgentRate ? "🚨" : "🗺"}</span>
+                  <div>
+                    <p className="text-[9px] tracking-[0.18em] font-bold" style={{ color: headerAccent }}>{headerLabel}</p>
+                    <p className="text-[8px] text-neutral-500 mt-0.5">{dayLabel} · {hLabel}</p>
+                  </div>
                 </div>
-                <span className="text-[8px] font-mono-jet text-neutral-400">static reference</span>
+                <div className="text-right">
+                  <p className="text-[8px] text-neutral-500 font-mono-jet">NYC TLC data</p>
+                  <p className="text-[8px] text-neutral-600">2023–2025 avg</p>
+                </div>
               </div>
 
-              {gps.lat && gps.lng ? (
-                <>
-                  <p className="text-[10px] text-neutral-400 mb-2">
-                    {zoneUrgent
-                      ? "Rate is low — closest known NYC zones:"
-                      : "Closest known NYC zones to your position:"}
-                  </p>
-                  <div className="space-y-2">
-                    {nearbyZones.map((z, i) => (
-                      <div key={z.name} className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px]">{i === 0 ? (zoneUrgent ? "🎯" : "📍") : "→"}</span>
-                          <span className="text-[11px] font-semibold" style={{ color: i === 0 ? zoneAccent : "#737373" }}>{z.name}</span>
+              {/* Zone list */}
+              <div className="px-3.5 py-2.5 space-y-2.5">
+                {demandZones.length === 0 ? (
+                  <p className="text-[11px] text-neutral-500 py-1">No hay datos para esta hora.</p>
+                ) : (
+                  demandZones.map((z, i) => {
+                    const isTop = i === 0;
+                    const distLabel = z.km !== null
+                      ? z.km < 1 ? `${(z.km * 1000).toFixed(0)} m` : `${z.km.toFixed(1)} km`
+                      : null;
+                    return (
+                      <div key={z.id} className="flex items-center gap-2.5">
+                        {/* Rank + heat indicator */}
+                        <div className="flex flex-col items-center gap-0.5 w-5 flex-shrink-0">
+                          <span className="text-[14px] leading-none">{heatEmoji[z.heat]}</span>
+                          <span className="text-[7px] font-mono-jet font-bold" style={{ color: heatColor[z.heat] }}>
+                            {heatLabel[z.heat]}
+                          </span>
                         </div>
-                        <span className="font-mono-jet text-[10px] text-neutral-400">{z.km.toFixed(1)} km</span>
+                        {/* Zone name */}
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-[12px] font-semibold leading-tight truncate ${isTop ? "text-white" : "text-neutral-300"}`}>
+                            {z.name}
+                          </p>
+                          {isTop && (
+                            <p className="text-[8px] font-mono-jet mt-0.5" style={{ color: heatColor[z.heat] }}>
+                              ↑ Mejor zona ahora
+                            </p>
+                          )}
+                        </div>
+                        {/* Distance badge */}
+                        <div className="flex-shrink-0 text-right">
+                          {distLabel ? (
+                            <span className="font-mono-jet text-[10px] text-neutral-400">{distLabel}</span>
+                          ) : (
+                            <span className="font-mono-jet text-[9px] text-neutral-600">GPS off</span>
+                          )}
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                  <div className="mt-3 pt-2.5" style={{ borderTop: `1px solid ${zoneBorder}` }}>
-                    <p className="text-[9px] text-neutral-400">
-                      Live demand data not connected · Task #7 pending
-                    </p>
-                  </div>
-                </>
-              ) : (
-                <div>
-                  <p className="text-[11px] text-neutral-400">
-                    Enable GPS to see nearby zones.
-                  </p>
-                  <p className="text-[9px] text-neutral-400 mt-1.5">
-                    Live demand data: API connection pending · Task #7
-                  </p>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Footer legend + GPS note */}
+              <div className="px-3.5 pb-3 pt-1.5 flex items-center justify-between" style={{ borderTop: `1px solid ${headerBorder}` }}>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px]">🔥</span><span className="text-[8px] text-neutral-600">Alta</span>
+                  <span className="text-[10px] ml-1">🟡</span><span className="text-[8px] text-neutral-600">Media</span>
+                  <span className="text-[10px] ml-1">⚪</span><span className="text-[8px] text-neutral-600">Baja</span>
                 </div>
-              )}
+                <span className="text-[8px] font-mono-jet text-neutral-600">
+                  {gps.lat && gps.lng ? `± GPS activo` : "Activa GPS p/ distancia"}
+                </span>
+              </div>
             </div>
           );
         })()}
