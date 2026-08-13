@@ -88,6 +88,16 @@ type StatementTx = {
   category: string;
   matchedExpenseId?: string;
 };
+type VoiceIntent = "trip" | "expense" | "clockIn" | "clockOut" | "break" | "unknown";
+type VoiceResult = {
+  intent: VoiceIntent;
+  confidence: "high" | "medium" | "low";
+  fields: {
+    platform?: string; pickup?: string; dropoff?: string;
+    fare?: number; tips?: number; toll?: number; fee?: number; miles?: number; notes?: string;
+    vendor?: string; amount?: number; category?: string; description?: string;
+  };
+};
 type DocEntry = {
   id: number; type: string;
   fileDate: string | null; category: string | null; vendor: string | null; amount: string | null;
@@ -597,6 +607,8 @@ export default function App() {
   const [pendingReceiptDocId, setPendingReceiptDocId] = useState<number | null>(null);
   const receiptInputRef = useRef<HTMLInputElement>(null);
   const statementInputRef = useRef<HTMLInputElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const voiceRecRef = useRef<any>(null);
 
   // Custom expense types & categories (user-added items, persisted)
   const [customExpenseTypes, setCustomExpenseTypes] = useState<string[]>(() => {
@@ -669,6 +681,13 @@ export default function App() {
   const [statementDocId, setStatementDocId] = useState<number | null>(null);
   const [statementSelected, setStatementSelected] = useState<Record<number, boolean>>({});
   const [statementCategories, setStatementCategories] = useState<Record<number, string>>({});
+
+  // ── Voice entry ───────────────────────────────────────────────────────────
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState("");
+  const [voiceParsing, setVoiceParsing] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [showVoicePanel, setShowVoicePanel] = useState(false);
 
   // Live clock
   useEffect(() => {
@@ -1498,6 +1517,125 @@ export default function App() {
     setStatementTransactions([]);
     setStatementSelected({});
     showToast("✓ " + toImport.length + " transaction" + (toImport.length === 1 ? "" : "s") + " imported");
+  };
+
+  // ── Voice data entry ──────────────────────────────────────────────────────
+  const applyVoiceResult = (result: VoiceResult) => {
+    const f = result.fields;
+    setShowVoicePanel(false);
+    setVoiceTranscript("");
+    setVoiceParsing(false);
+
+    if (result.intent === "trip") {
+      const today = new Date().toISOString().slice(0, 10);
+      const now   = new Date().toTimeString().slice(0, 5);
+      setActiveTab("TRIPS");
+      setTripsTab("ENTRY");
+      setTripForm(prev => ({
+        ...prev,
+        tripDate: today, tripTime: now,
+        ...(f.platform ? { platform: f.platform } : {}),
+        ...(f.pickup   ? { pickup:   f.pickup   } : {}),
+        ...(f.dropoff  ? { dropoff:  f.dropoff  } : {}),
+        ...(f.fare   !== undefined && f.fare   > 0 ? { earnings:    String(f.fare.toFixed(2))   } : {}),
+        ...(f.tips   !== undefined && f.tips   > 0 ? { tips:        String(f.tips.toFixed(2))   } : {}),
+        ...(f.toll   !== undefined && f.toll   > 0 ? { toll:        String(f.toll.toFixed(2))   } : {}),
+        ...(f.fee    !== undefined && f.fee    > 0 ? { platformFee: String(f.fee.toFixed(2))    } : {}),
+        ...(f.miles  !== undefined && f.miles  > 0 ? { tripMiles:   String(f.miles.toFixed(2))  } : {}),
+        ...(f.notes  ? { notes: f.notes } : {}),
+      }));
+      showToast("🎤 Trip filled — review & save");
+    } else if (result.intent === "expense") {
+      setActiveTab("EXPENSES");
+      setShowExpenseForm(true);
+      setEditingExpenseId(null);
+      setExpenseForm(prev => ({
+        ...prev,
+        date: new Date().toISOString().slice(0, 10),
+        ...(f.vendor      ? { name:        f.vendor        } : {}),
+        ...(f.amount !== undefined && f.amount > 0 ? { amount: String(f.amount.toFixed(2)) } : {}),
+        ...(f.category    ? { category:    f.category      } : {}),
+        ...(f.description ? { description: f.description   } : {}),
+      }));
+      showToast("🎤 Expense filled — review & save");
+    } else if (result.intent === "clockIn")  {
+      handleClockIn();
+    } else if (result.intent === "clockOut") {
+      handleClockOut();
+    } else if (result.intent === "break")    {
+      handleBreakToggle();
+    } else {
+      setVoiceError("Couldn't understand — try again");
+      setShowVoicePanel(true);
+    }
+  };
+
+  const handleVoiceInput = async (transcript: string) => {
+    if (!transcript.trim()) return;
+    setVoiceParsing(true);
+    setVoiceError(null);
+    try {
+      const res = await fetch("/api/voice-parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcript: transcript.trim() }),
+      });
+      const data = await res.json() as VoiceResult & { error?: string };
+      if (!res.ok) throw new Error(data.error || "Parse failed");
+      applyVoiceResult(data);
+    } catch (err: unknown) {
+      setVoiceError(err instanceof Error ? err.message : "Voice parse failed");
+      setVoiceParsing(false);
+    }
+  };
+
+  const startVoice = () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      setVoiceError("Voice not supported. Use Chrome or Safari.");
+      setShowVoicePanel(true);
+      return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rec: any = new SR();
+    rec.continuous     = false;
+    rec.interimResults = true;
+    rec.lang           = "en-US";
+    voiceRecRef.current = rec;
+
+    rec.onstart = () => {
+      setVoiceListening(true);
+      setVoiceTranscript("");
+      setVoiceError(null);
+      setVoiceParsing(false);
+      setShowVoicePanel(true);
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onresult = (e: any) => {
+      let interim = "", final = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) final += t; else interim += t;
+      }
+      setVoiceTranscript(final || interim);
+      if (final) { setVoiceListening(false); handleVoiceInput(final); }
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onerror = (e: any) => {
+      setVoiceListening(false);
+      setVoiceParsing(false);
+      if (e.error === "no-speech")    setVoiceError("No speech detected — tap mic and try again");
+      else if (e.error === "not-allowed") setVoiceError("Microphone access denied — check browser settings");
+      else setVoiceError("Mic error: " + e.error);
+    };
+    rec.onend = () => setVoiceListening(false);
+    rec.start();
+  };
+
+  const stopVoice = () => {
+    voiceRecRef.current?.stop?.();
+    setVoiceListening(false);
   };
 
   // ── Cloud backup — sends full snapshot to the API server → PostgreSQL ─────
@@ -5053,6 +5191,101 @@ export default function App() {
           {activeTab === "EXPENSES"  && ExpensesContent}
           {activeTab === "REPORTS"   && ReportsContent}
         </div>
+
+        {/* ── Voice Entry Panel + Mic Button ─────────────────────────────── */}
+        {showVoicePanel && (
+          <div className="fixed bottom-[138px] left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-[440px] z-50"
+            style={{ filter: "drop-shadow(0 0 24px rgba(0,0,0,0.9))" }}>
+            <div className="bg-[#0e0e0e] border border-[#facc15]/20 rounded-2xl p-4 overflow-hidden">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                  style={{
+                    background: voiceListening ? "#1a0606" : voiceParsing ? "#1a1400" : "#1a1a1a",
+                    border: voiceListening ? "1px solid rgba(239,68,68,0.4)" : voiceParsing ? "1px solid rgba(250,204,21,0.3)" : "1px solid #2e2e2e",
+                  }}>
+                  <span className="text-[15px]">
+                    {voiceListening ? "🔴" : voiceParsing ? "🤖" : voiceError ? "⚠️" : "🎤"}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  {voiceListening && (
+                    <>
+                      <p className="text-[11px] font-bold text-[#f87171] animate-pulse tracking-wide">LISTENING…</p>
+                      <p className="text-[14px] text-white mt-1 leading-snug min-h-[20px]">
+                        {voiceTranscript || <span className="text-neutral-500 italic text-[13px]">Speak now…</span>}
+                      </p>
+                      <p className="text-[9px] text-neutral-600 mt-1.5">Tap ⏹ to stop early</p>
+                    </>
+                  )}
+                  {voiceParsing && !voiceListening && (
+                    <>
+                      <p className="text-[11px] font-bold text-[#facc15] tracking-wide">UNDERSTANDING…</p>
+                      <p className="text-[13px] text-neutral-300 mt-1 leading-snug italic truncate">"{voiceTranscript}"</p>
+                    </>
+                  )}
+                  {voiceError && !voiceListening && !voiceParsing && (
+                    <>
+                      <p className="text-[11px] font-bold text-[#f87171]">Couldn't understand</p>
+                      <p className="text-[12px] text-neutral-400 mt-0.5 leading-snug">{voiceError}</p>
+                      <button onClick={() => { setVoiceError(null); startVoice(); }}
+                        className="mt-2 text-[11px] text-[#facc15] font-bold">
+                        Try again →
+                      </button>
+                    </>
+                  )}
+                  {!voiceListening && !voiceParsing && !voiceError && (
+                    <p className="text-[13px] text-neutral-400">Tap the mic and speak</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => { stopVoice(); setShowVoicePanel(false); setVoiceError(null); setVoiceParsing(false); }}
+                  className="w-7 h-7 rounded-full bg-[#1e1e1e] flex items-center justify-center text-neutral-500 text-[11px] flex-shrink-0">
+                  ✕
+                </button>
+              </div>
+
+              {/* Example phrases */}
+              {!voiceListening && !voiceParsing && !voiceError && (
+                <div className="mt-3 pt-3 border-t border-[#1e1e1e] space-y-1">
+                  <p className="text-[9px] text-neutral-600 font-bold uppercase tracking-[0.12em] mb-1.5">Try saying:</p>
+                  {[
+                    "\"Uber, JFK to midtown, forty-five dollars, three tip\"",
+                    "\"Spent sixty dollars on gas at BP\"",
+                    "\"Clock in\" · \"Clock out\" · \"Break\"",
+                  ].map((ex, i) => (
+                    <p key={i} className="text-[10px] text-neutral-500 leading-relaxed">{ex}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Mic button */}
+        <button
+          onClick={voiceListening ? stopVoice : startVoice}
+          className="fixed bottom-[76px] right-4 z-50 w-[52px] h-[52px] rounded-full flex items-center justify-center transition-all active:scale-90"
+          style={{
+            background: voiceListening ? "#1a0505" : "#111111",
+            border: voiceListening ? "2px solid rgba(239,68,68,0.55)" : "2px solid rgba(250,204,21,0.28)",
+            boxShadow: voiceListening
+              ? "0 0 22px rgba(239,68,68,0.28), 0 4px 16px rgba(0,0,0,0.7)"
+              : "0 0 18px rgba(250,204,21,0.08), 0 4px 16px rgba(0,0,0,0.6)",
+          }}>
+          {voiceParsing ? (
+            <div className="flex gap-[3px] items-center">
+              {[0, 1, 2].map(i => (
+                <div key={i} className="w-1.5 h-1.5 rounded-full bg-[#facc15] animate-bounce"
+                  style={{ animationDelay: i * 0.13 + "s" }} />
+              ))}
+            </div>
+          ) : (
+            <span className="text-[22px] select-none">{voiceListening ? "⏹" : "🎤"}</span>
+          )}
+          {voiceListening && (
+            <span className="absolute inset-[-4px] rounded-full border-2 border-[#f87171]/35 animate-ping pointer-events-none" />
+          )}
+        </button>
 
         {/* Bottom tab bar */}
         <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] z-40 bg-[#030303] border-t border-[#1c1c1c]"
