@@ -19,6 +19,8 @@ export const modules: ModuleMap = {
   "./components/mockups/islandcity/PushNotifications.tsx": () => import("../components/mockups/islandcity/PushNotifications.tsx"),
   "./components/mockups/islandcity/ReceiptScanner.tsx": () => import("../components/mockups/islandcity/ReceiptScanner.tsx"),
   "./components/mockups/islandcity/Speedometer.tsx": () => import("../components/mockups/islandcity/Speedometer.tsx"),
+  "./components/mockups/theme-compare/DarkMode.tsx": () => import("../components/mockups/theme-compare/DarkMode.tsx"),
+  "./components/mockups/theme-compare/LightMode.tsx": () => import("../components/mockups/theme-compare/LightMode.tsx"),
   "./components/mockups/trip-entry/QuickStrike.tsx": () => import("../components/mockups/trip-entry/QuickStrike.tsx"),
   "./components/mockups/trip-entry/SpeedDial.tsx": () => import("../components/mockups/trip-entry/SpeedDial.tsx")
 };
