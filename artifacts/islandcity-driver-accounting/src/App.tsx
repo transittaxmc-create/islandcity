@@ -79,6 +79,15 @@ type Expense = {
   purpose?: "business" | "personal"; // business expense (IRS deductible) or personal
 };
 type BankAdjEntry = { id: string; date: string; time: string; prevBalance: number; newBalance: number; note: string; };
+type StatementTx = {
+  date: string;
+  description: string;
+  vendor: string;
+  amount: number;
+  txType: "debit" | "credit";
+  category: string;
+  matchedExpenseId?: string;
+};
 type DocEntry = {
   id: number; type: string;
   fileDate: string | null; category: string | null; vendor: string | null; amount: string | null;
@@ -587,6 +596,7 @@ export default function App() {
   const [receiptScanError,    setReceiptScanError]    = useState<string | null>(null);
   const [pendingReceiptDocId, setPendingReceiptDocId] = useState<number | null>(null);
   const receiptInputRef = useRef<HTMLInputElement>(null);
+  const statementInputRef = useRef<HTMLInputElement>(null);
 
   // Custom expense types & categories (user-added items, persisted)
   const [customExpenseTypes, setCustomExpenseTypes] = useState<string[]>(() => {
@@ -650,6 +660,15 @@ export default function App() {
     name: "", amount: "", frequency: "monthly" as "daily" | "weekly" | "monthly",
     category: "Vehicle & Fuel", dueDate: "", repeatEnabled: false, repeatUntil: "",
   });
+
+  // ── Bank statement import ─────────────────────────────────────────────────
+  const [showStatementImport, setShowStatementImport] = useState(false);
+  const [statementScanning, setStatementScanning] = useState(false);
+  const [statementScanError, setStatementScanError] = useState<string | null>(null);
+  const [statementTransactions, setStatementTransactions] = useState<StatementTx[]>([]);
+  const [statementDocId, setStatementDocId] = useState<number | null>(null);
+  const [statementSelected, setStatementSelected] = useState<Record<number, boolean>>({});
+  const [statementCategories, setStatementCategories] = useState<Record<number, string>>({});
 
   // Live clock
   useEffect(() => {
@@ -1408,6 +1427,77 @@ export default function App() {
   const syncSaveExpenses = (newExpenses: Expense[]) => {
     try { localStorage.setItem("island-city-expenses", JSON.stringify(newExpenses)); } catch {}
     setExpenses(newExpenses);
+  };
+
+  // ── Bank statement scan ───────────────────────────────────────────────────
+  const handleStatementScan = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setStatementScanning(true);
+    setStatementScanError(null);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = (reader.result as string).split(",")[1];
+      try {
+        const res = await fetch("/api/statement-scan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileBase64: base64, mimeType: file.type }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Scan failed");
+        const txs: StatementTx[] = (data.transactions || []).map(
+          (tx: Omit<StatementTx, "matchedExpenseId">) => ({
+            ...tx,
+            matchedExpenseId: expensesRef.current.find(
+              e =>
+                Math.abs(e.amount - tx.amount) < 0.02 &&
+                Math.abs(new Date(e.date).getTime() - new Date(tx.date).getTime()) < 4 * 86400000
+            )?.id,
+          })
+        );
+        setStatementTransactions(txs);
+        setStatementDocId(data.docId ?? null);
+        const sel: Record<number, boolean> = {};
+        const cats: Record<number, string> = {};
+        txs.forEach((tx, i) => {
+          sel[i] = tx.txType === "debit" && !tx.matchedExpenseId;
+          cats[i] = tx.category;
+        });
+        setStatementSelected(sel);
+        setStatementCategories(cats);
+      } catch (err: unknown) {
+        setStatementScanError(err instanceof Error ? err.message : "Scan failed. Please try again.");
+      } finally {
+        setStatementScanning(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleStatementImport = () => {
+    const toImport: Expense[] = [];
+    statementTransactions.forEach((tx, i) => {
+      if (!statementSelected[i]) return;
+      toImport.push({
+        id: "stmt-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+        date: tx.date,
+        category: statementCategories[i] || tx.category,
+        vendor: tx.vendor || tx.description.slice(0, 50),
+        amount: tx.amount,
+        note: tx.description,
+        type: "Statement Import",
+        purpose: "business",
+        ...(statementDocId !== null ? { receiptDocId: statementDocId } : {}),
+      });
+    });
+    const newExpenses = [...expenses, ...toImport];
+    syncSaveExpenses(newExpenses);
+    setShowStatementImport(false);
+    setStatementTransactions([]);
+    setStatementSelected({});
+    showToast("✓ " + toImport.length + " transaction" + (toImport.length === 1 ? "" : "s") + " imported");
   };
 
   // ── Cloud backup — sends full snapshot to the API server → PostgreSQL ─────
@@ -3053,6 +3143,213 @@ export default function App() {
   const ExpensesContent = (
     <div className="space-y-4">
 
+      {/* ── Bank Statement Import Modal ──────────────────────────────────────── */}
+      {showStatementImport && (
+        <div className="fixed inset-0 z-[60] bg-[#080808] flex flex-col">
+          {/* Hidden file input */}
+          <input
+            ref={statementInputRef}
+            type="file"
+            accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,.pdf"
+            className="hidden"
+            onChange={handleStatementScan}
+          />
+
+          {/* Header */}
+          <div className="flex items-center gap-3 px-4 py-4 border-b border-[#1e1e1e] flex-shrink-0">
+            <button
+              onClick={() => { setShowStatementImport(false); setStatementTransactions([]); setStatementScanError(null); setStatementScanning(false); }}
+              className="w-9 h-9 rounded-full bg-[#1e1e1e] flex items-center justify-center text-white text-[14px] flex-shrink-0">
+              ✕
+            </button>
+            <div>
+              <h2 className="text-[17px] font-bold text-white leading-tight">Import Bank Statement</h2>
+              <p className="text-[10px] text-neutral-500">PDF or photo · Chase · BofA · Credit Union · Any bank</p>
+            </div>
+          </div>
+
+          {/* Step 0: Upload */}
+          {!statementScanning && statementTransactions.length === 0 && (
+            <div className="flex-1 flex flex-col items-center justify-center p-8 gap-6">
+              <div className="text-[72px]">🏦</div>
+              <div className="text-center">
+                <h3 className="text-[18px] font-bold text-white mb-2">Upload your bank statement</h3>
+                <p className="text-[12px] text-neutral-400 leading-relaxed">Gemini AI reads every transaction<br/>and auto-categorizes them for you</p>
+              </div>
+              <button
+                onClick={() => { setStatementScanError(null); statementInputRef.current?.click(); }}
+                className="w-full max-w-xs h-[56px] rounded-2xl bg-[#facc15] text-black font-bold text-[15px] tracking-wide active:scale-95 transition-all">
+                📄 Choose File
+              </button>
+              <p className="text-[10px] text-neutral-600 text-center leading-relaxed">
+                PDF · JPEG · PNG · WEBP supported<br/>File is sent to AI for reading only
+              </p>
+              {statementScanError && (
+                <div className="w-full max-w-xs bg-[#2d1515] border border-[#f87171]/30 rounded-xl p-3 text-[12px] text-[#f87171] text-center">
+                  ⚠️ {statementScanError}
+                  <br/>
+                  <button
+                    onClick={() => { setStatementScanError(null); statementInputRef.current?.click(); }}
+                    className="mt-2 text-[#facc15] font-bold underline">
+                    Try again
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 1: Scanning */}
+          {statementScanning && (
+            <div className="flex-1 flex flex-col items-center justify-center gap-5">
+              <div className="text-[56px] animate-pulse">🤖</div>
+              <div className="text-center">
+                <p className="text-[18px] font-bold text-white mb-1">Reading your statement…</p>
+                <p className="text-[12px] text-neutral-400">Gemini AI is extracting all transactions</p>
+              </div>
+              <div className="flex gap-2 mt-2">
+                {[0,1,2].map(i => (
+                  <div key={i} className="w-2.5 h-2.5 rounded-full bg-[#facc15] animate-bounce"
+                    style={{ animationDelay: i * 0.15 + "s" }} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Review transactions */}
+          {!statementScanning && statementTransactions.length > 0 && (
+            <>
+              {/* Summary bar */}
+              {(() => {
+                const selectedCount = Object.values(statementSelected).filter(Boolean).length;
+                const matchedCount = statementTransactions.filter(tx => tx.matchedExpenseId).length;
+                const creditCount = statementTransactions.filter(tx => tx.txType === "credit").length;
+                return (
+                  <div className="flex items-center gap-2 px-4 py-2.5 bg-[#0d0d0d] border-b border-[#1e1e1e] flex-shrink-0">
+                    <span className="text-[11px] font-bold text-[#facc15]">{selectedCount} to import</span>
+                    <span className="text-neutral-700">·</span>
+                    <span className="text-[10px] text-neutral-500">{matchedCount} already recorded</span>
+                    <span className="text-neutral-700">·</span>
+                    <span className="text-[10px] text-neutral-500">{creditCount} credits</span>
+                    <div className="ml-auto flex gap-3">
+                      <button
+                        onClick={() => {
+                          const all: Record<number,boolean> = {};
+                          statementTransactions.forEach((tx, i) => { if (!tx.matchedExpenseId) all[i] = true; });
+                          setStatementSelected(all);
+                        }}
+                        className="text-[10px] text-[#facc15] font-bold">All</button>
+                      <button
+                        onClick={() => setStatementSelected({})}
+                        className="text-[10px] text-neutral-500 font-bold">None</button>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Transaction list */}
+              <div className="flex-1 overflow-y-auto pb-28">
+                <div className="p-3 space-y-2">
+                  {statementTransactions.map((tx, i) => {
+                    const isSelected = !!statementSelected[i];
+                    const isMatched = !!tx.matchedExpenseId;
+                    const isCredit = tx.txType === "credit";
+                    return (
+                      <div
+                        key={i}
+                        onClick={() => { if (!isMatched) setStatementSelected(s => ({ ...s, [i]: !s[i] })); }}
+                        className="rounded-xl border px-3 py-3 transition-all active:scale-[0.99]"
+                        style={{
+                          background: isMatched ? "#0a1a0a" : isSelected ? "#1a1500" : "#0f0f0f",
+                          borderColor: isMatched ? "rgba(74,222,128,0.2)" : isSelected ? "rgba(250,204,21,0.4)" : "#1e1e1e",
+                          opacity: isMatched ? 0.65 : 1,
+                        }}>
+                        <div className="flex items-start gap-3">
+                          {/* Checkbox */}
+                          <div className="mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0"
+                            style={{
+                              borderColor: isMatched ? "#4ade80" : isSelected ? "#facc15" : "#444",
+                              background: isMatched ? "rgba(74,222,128,0.15)" : isSelected ? "#facc15" : "transparent",
+                            }}>
+                            {(isMatched || isSelected) && (
+                              <span className="text-[10px] font-bold" style={{ color: isMatched ? "#4ade80" : "#000" }}>✓</span>
+                            )}
+                          </div>
+
+                          {/* Info */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[13px] font-semibold text-white leading-tight truncate">
+                              {tx.vendor || tx.description}
+                            </p>
+                            {tx.vendor && tx.description && tx.description !== tx.vendor && (
+                              <p className="text-[10px] text-neutral-500 truncate mt-0.5">{tx.description}</p>
+                            )}
+                            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                              <span className="text-[9px] text-neutral-600 font-mono-jet">{tx.date}</span>
+                              {isMatched && (
+                                <span className="text-[9px] text-[#4ade80] bg-[#4ade80]/10 px-1.5 py-0.5 rounded-full border border-[#4ade80]/20">
+                                  ✓ Already recorded
+                                </span>
+                              )}
+                              {isCredit && (
+                                <span className="text-[9px] text-[#818cf8] bg-[#818cf8]/10 px-1.5 py-0.5 rounded-full border border-[#818cf8]/20">
+                                  ↑ income
+                                </span>
+                              )}
+                              {!isMatched && (
+                                <select
+                                  value={statementCategories[i] || tx.category}
+                                  onClick={e => e.stopPropagation()}
+                                  onChange={e => { e.stopPropagation(); setStatementCategories(s => ({ ...s, [i]: e.target.value })); }}
+                                  className="text-[9px] bg-[#1e1e1e] border border-[#333] text-neutral-300 rounded-lg px-1.5 py-0.5 max-w-[120px]"
+                                >
+                                  {["Gas/Fuel","Car Wash","Tolls","EZ-Pass","Food & Drink","Vehicle Maintenance","Insurance","Phone","Parking","Supplies","Other"].map(c => (
+                                    <option key={c} value={c}>{c}</option>
+                                  ))}
+                                </select>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Amount */}
+                          <div className="text-right flex-shrink-0 ml-1">
+                            <p className="text-[15px] font-bold font-mono-jet"
+                              style={{ color: isCredit ? "#4ade80" : isSelected ? "#facc15" : "#aaa" }}>
+                              {isCredit ? "+" : "−"}${tx.amount.toFixed(2)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Import footer */}
+              <div className="absolute bottom-0 left-0 right-0 px-4 pb-8 pt-4"
+                style={{ background: "linear-gradient(to top, #080808 70%, transparent)" }}>
+                {(() => {
+                  const count = Object.values(statementSelected).filter(Boolean).length;
+                  const total = statementTransactions
+                    .filter((_, i) => statementSelected[i])
+                    .reduce((a, tx) => a + tx.amount, 0);
+                  return (
+                    <button
+                      onClick={handleStatementImport}
+                      disabled={count === 0}
+                      className="w-full h-[56px] rounded-2xl text-[15px] font-bold tracking-wide transition-all active:scale-95 disabled:opacity-40"
+                      style={{ background: count > 0 ? "#facc15" : "#1e1e1e", color: count > 0 ? "#000" : "#555" }}>
+                      {count === 0
+                        ? "Select transactions to import"
+                        : "Import " + count + " expense" + (count === 1 ? "" : "s") + " · $" + total.toFixed(2)}
+                    </button>
+                  );
+                })()}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -3070,6 +3367,11 @@ export default function App() {
           })()}
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setShowStatementImport(true); setStatementTransactions([]); setStatementScanError(null); }}
+            className="h-10 px-3 rounded-full bg-[#0d1f0d] border border-[#4ade80]/30 text-[#4ade80] text-[11px] font-bold tracking-wide hover:bg-[#4ade80]/10 transition-colors flex items-center gap-1.5">
+            📄 Import
+          </button>
           <button
             onClick={() => {
               setShowExpenseForm(true); setEditingExpenseId(null);
