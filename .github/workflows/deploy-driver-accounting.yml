@@ -34,6 +34,7 @@ jobs:
         working-directory: artifacts/islandcity-driver-accounting
         env:
           PORT: '3000'
+          BASE_PATH: '/islandcity/'
         run: npx vite build --config vite.config.ts --base=/islandcity/
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
