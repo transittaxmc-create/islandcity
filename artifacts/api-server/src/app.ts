@@ -6,26 +6,8 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
-app.use(
-  pinoHttp({
-    logger,
-    serializers: {
-      req(req) {
-        return {
-          id: req.id,
-          method: req.method,
-          url: req.url?.split("?")[0],
-        };
-      },
-      res(res) {
-        return {
-          statusCode: res.statusCode,
-        };
-      },
-    },
-  }),
-);
-app.use(cors({ origin: process.env["FRONTEND_ORIGIN"] }));
+app.use(pinoHttp({ logger }));
+app.use(cors({ origin: process.env["FRONTEND_ORIGIN"] || true }));
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 
