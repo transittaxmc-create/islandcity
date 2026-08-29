@@ -2,9 +2,10 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { Home, Banknote, ClipboardList, BarChart2, BookOpen, Receipt, FileText, Brain } from "lucide-react";
 import { useUser } from "@clerk/react";
+import MigrationInventory from "@/components/MigrationInventory";
 
 type TurnStatus = "START" | "BREAK" | "END";
-type Tab      = "DASHBOARD" | "TRIPS" | "EXPENSES" | "FINANCES" | "REPORTS" | "AI";
+type Tab      = "DASHBOARD" | "TRIPS" | "EXPENSES" | "FINANCES" | "REPORTS" | "AI" | "INVENTORY";
 type TripsTab = "ENTRY" | "REGISTER" | "LEDGER";
 
 type Trip = {
@@ -6671,6 +6672,7 @@ export default function App() {
           {activeTab === "EXPENSES"  && ExpensesContent}
           {activeTab === "REPORTS"   && ReportsContent}
           {activeTab === "AI"        && AIAssistantContent}
+          {activeTab === "INVENTORY" && <MigrationInventory userId={userId} />}
         </div>
 
         {/* ── Broadcast Eval Modal ─────────────────────────────────────────── */}
@@ -7454,6 +7456,7 @@ export default function App() {
               { key: "FINANCES"  as Tab, Icon: BarChart2, label: "FINANCE",  color: "#60a5fa" },
               { key: "REPORTS"   as Tab, Icon: FileText,  label: "REPORTS",  color: "#a78bfa" },
               { key: "AI"        as Tab, Icon: Brain,     label: "AI",       color: "#4ade80" },
+              { key: "INVENTORY" as Tab, Icon: ClipboardList, label: "DATA", color: "#f472b6" },
             ]).map(({ key, Icon, label, color }) => {
               const active  = activeTab === key;
               const badge   = key === "TRIPS" ? pendingTrips.length : 0;

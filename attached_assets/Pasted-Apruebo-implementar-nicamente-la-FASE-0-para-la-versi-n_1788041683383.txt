@@ -1,0 +1,34 @@
+Apruebo implementar únicamente la FASE 0 para la versión WEB/SAFARI: “Inventario de datos” y “Vista previa de migración”.
+
+La aprobación es limitada exclusivamente a los archivos que identificaste en tu diseño anterior. No agregues otros archivos sin pedirme otra aprobación.
+
+OBJETIVO:
+Construir una pantalla local de solo lectura para inventariar datos de localStorage del usuario autenticado. Esta fase corresponde solamente a la web/Safari; NO debe intentar leer ni modificar AsyncStorage de Android.
+
+REGLAS OBLIGATORIAS:
+- No ejecutes SQL ni migraciones.
+- No crees, modifiques ni consultes tablas o base de datos.
+- No hagas llamadas fetch, POST, PUT, PATCH, DELETE ni llamadas a APIs de servidor.
+- No subas ni envíes datos fuera del navegador.
+- No leas, modifiques ni borres sessionStorage.
+- No modifiques, elimines, limpies ni reemplaces ningún valor de localStorage.
+- No ejecutes localStorage.clear(), localStorage.removeItem() ni localStorage.setItem().
+- No publiques, despliegues ni modifiques producción o desarrollo.
+- No actives sincronización, importación, pagos, backups, reportes oficiales ni migraciones.
+- No leas ni mezcles datos de otros usuarios.
+- No incluyas datos globales, heredados o de ejemplo como si pertenecieran al usuario autenticado.
+
+FUNCIONES PERMITIDAS:
+- Leer localStorage de forma segura.
+- Calcular hashes locales usando crypto.subtle.
+- Mostrar inventario y advertencias en una pantalla.
+- Generar un manifiesto JSON mediante Blob/URL únicamente cuando el usuario lo solicite.
+- Copiar el manifiesto solo cuando el usuario presione el botón correspondiente.
+- Navegación visual dentro de la aplicación.
+
+ANTES DE TERMINAR:
+1. Muéstrame exactamente qué archivos modificaste.
+2. Confirma que no hubo llamadas de red ni acceso a servidor/base de datos.
+3. Confirma que no hubo escrituras, eliminaciones o limpiezas de Local Storage.
+4. Indica cómo probar manualmente que la pantalla es solo de lectura.
+5. No hagas deploy ni publish. Detente al terminar y espera instrucciones.
