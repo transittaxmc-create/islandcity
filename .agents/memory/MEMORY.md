@@ -11,3 +11,4 @@
 - [GitHub backup](github-backup.md) — PAT in GITHUB_PAT secret; POST /api/git-push endpoint; daily auto-trigger + manual button in REPORTS tab.
 - [AI Assistant tab + LimoSys Evaluator](ai-tab-limosys.md) — 6th nav tab "AI" (Brain icon, #4ade80); aiMetrics useMemo; /api/limosys-eval returns offers[]; draggable high-contrast overlay; Task #53 tracks multi-offer swipe.
 - [IslandCity Android app](android-app.md) — Expo app at artifacts/islandcity-android; 3 tabs: DASH (AsyncStorage trips), LIMOSYS (expo-image-picker → /api/limosys-eval), AI (→ /api/gemini-chat); pure black + gold theme; EXPO_PUBLIC_DOMAIN auto-injected by dev script.
+- [Financial data ownership](financial-data-ownership.md) — Clerk identity is server-authoritative; legacy unowned financial rows stay quarantined and invisible.

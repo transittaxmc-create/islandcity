@@ -1,10 +1,13 @@
 import { Router } from "express";
 import { ai } from "@workspace/integrations-gemini-ai";
 import { saveDocument } from "../lib/documentStorage";
+import { authenticatedUserId, requireAuth } from "../middlewares/requireAuth";
 
 const receiptScanRouter = Router();
+receiptScanRouter.use("/receipt-scan", requireAuth);
 
 receiptScanRouter.post("/receipt-scan", async (req, res) => {
+  const userId = authenticatedUserId(req);
   const { imageBase64, mimeType } = req.body as {
     imageBase64?: string;
     mimeType?: string;
@@ -99,6 +102,7 @@ Rules:
     let docId: number | null = null;
     try {
       const saved = await saveDocument({
+        userId,
         type:      "receipt",
         imageBase64,
         mimeType,

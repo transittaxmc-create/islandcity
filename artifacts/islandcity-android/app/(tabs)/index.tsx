@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { apiPost } from '@/utils/api';
+import { useAuth } from '@clerk/expo';
 
 interface Trip {
   id: string;
@@ -37,6 +38,9 @@ const CARD = '#0d0d0d';
 const TODAY = () => new Date().toISOString().slice(0, 10);
 
 export default function DashboardScreen() {
+  const { userId } = useAuth();
+  const tripsKey = `ic-user:${userId}:android-trips`;
+  const goalKey = `ic-user:${userId}:android-goal`;
   const insets = useSafeAreaInsets();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [fare, setFare] = useState('');
@@ -45,6 +49,7 @@ export default function DashboardScreen() {
   const [logging, setLogging] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
+  const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
 
   const todayStr = TODAY();
   const todayTrips = trips.filter(t => t.date === todayStr);
@@ -53,13 +58,20 @@ export default function DashboardScreen() {
   const progress = Math.min(totalToday / goalNum, 1);
 
   const load = useCallback(async () => {
+    if (!userId) return;
+    setTrips([]);
+    setLoadedUserId(null);
     try {
-      const raw = await AsyncStorage.getItem('ic-android-trips');
-      if (raw) setTrips(JSON.parse(raw));
-      const g = await AsyncStorage.getItem('ic-android-goal');
+      const raw = await AsyncStorage.getItem(tripsKey);
+      setTrips(raw ? JSON.parse(raw) : []);
+      const g = await AsyncStorage.getItem(goalKey);
       if (g) setGoal(g);
-    } catch {}
-  }, []);
+    } catch {
+      setTrips([]);
+    } finally {
+      setLoadedUserId(userId);
+    }
+  }, [goalKey, tripsKey, userId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -86,8 +98,8 @@ export default function DashboardScreen() {
   }, []);
 
   useEffect(() => {
-    if (trips.length > 0) void syncAllTrips(trips);
-  }, [trips, syncAllTrips]);
+    if (loadedUserId === userId && trips.length > 0) void syncAllTrips(trips);
+  }, [trips, syncAllTrips, loadedUserId, userId]);
 
   const logTrip = async () => {
     const f = parseFloat(fare) || 0;
@@ -103,7 +115,7 @@ export default function DashboardScreen() {
     };
     const updated = [newTrip, ...trips];
     setTrips(updated);
-    await AsyncStorage.setItem('ic-android-trips', JSON.stringify(updated));
+    await AsyncStorage.setItem(tripsKey, JSON.stringify(updated));
     const synced = await syncTrip(newTrip);
     setSyncMessage(synced ? 'Trip synced to web app' : 'Saved on phone — sync will retry');
     setFare(''); setTip('');
@@ -112,7 +124,7 @@ export default function DashboardScreen() {
 
   const saveGoal = async (v: string) => {
     setGoal(v);
-    await AsyncStorage.setItem('ic-android-goal', v);
+    await AsyncStorage.setItem(goalKey, v);
   };
 
   const now = new Date();

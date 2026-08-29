@@ -10,17 +10,20 @@ import { Router } from "express";
 import { db, scannedDocumentsTable } from "@workspace/db";
 import { desc, eq, and, gte, lt, sql } from "drizzle-orm";
 import { objectStorageClient } from "../lib/objectStorage";
+import { authenticatedUserId, requireAuth } from "../middlewares/requireAuth";
 
 const documentsRouter = Router();
+documentsRouter.use("/documents", requireAuth);
 
 const bucketId = () => process.env["DEFAULT_OBJECT_STORAGE_BUCKET_ID"] ?? "";
 
 // ── List ─────────────────────────────────────────────────────────────────────
 documentsRouter.get("/documents", async (req, res) => {
+  const userId = authenticatedUserId(req);
   try {
     const { type, month } = req.query as { type?: string; month?: string };
 
-    const conditions = [];
+    const conditions = [eq(scannedDocumentsTable.userId, userId)];
     if (type) conditions.push(eq(scannedDocumentsTable.type, type));
     if (month && /^\d{4}-\d{2}$/.test(month)) {
       const start = new Date(`${month}-01`);
@@ -55,6 +58,7 @@ documentsRouter.get("/documents", async (req, res) => {
 
 // ── Serve file ────────────────────────────────────────────────────────────────
 documentsRouter.get("/documents/:id/file", async (req, res) => {
+  const userId = authenticatedUserId(req);
   try {
     const id = Number(req.params["id"]);
     if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -62,7 +66,7 @@ documentsRouter.get("/documents/:id/file", async (req, res) => {
     const [doc] = await db
       .select()
       .from(scannedDocumentsTable)
-      .where(eq(scannedDocumentsTable.id, id))
+      .where(and(eq(scannedDocumentsTable.id, id), eq(scannedDocumentsTable.userId, userId)))
       .limit(1);
 
     if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
@@ -85,6 +89,7 @@ documentsRouter.get("/documents/:id/file", async (req, res) => {
 
 // ── Delete ────────────────────────────────────────────────────────────────────
 documentsRouter.delete("/documents/:id", async (req, res) => {
+  const userId = authenticatedUserId(req);
   try {
     const id = Number(req.params["id"]);
     if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -92,7 +97,7 @@ documentsRouter.delete("/documents/:id", async (req, res) => {
     const [doc] = await db
       .select({ id: scannedDocumentsTable.id, objectPath: scannedDocumentsTable.objectPath })
       .from(scannedDocumentsTable)
-      .where(eq(scannedDocumentsTable.id, id))
+      .where(and(eq(scannedDocumentsTable.id, id), eq(scannedDocumentsTable.userId, userId)))
       .limit(1);
 
     if (!doc) { res.status(404).json({ error: "Not found" }); return; }
@@ -103,7 +108,7 @@ documentsRouter.delete("/documents/:id", async (req, res) => {
       await bucket.file(doc.objectPath).delete();
     } catch { /* file may already be gone */ }
 
-    await db.delete(scannedDocumentsTable).where(eq(scannedDocumentsTable.id, id));
+    await db.delete(scannedDocumentsTable).where(and(eq(scannedDocumentsTable.id, id), eq(scannedDocumentsTable.userId, userId)));
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err) });

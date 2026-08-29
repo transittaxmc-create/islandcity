@@ -2,10 +2,20 @@ const BASE = process.env.EXPO_PUBLIC_DOMAIN
   ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
   : '';
 
+let authTokenGetter: (() => Promise<string | null>) | null = null;
+
+export function setApiAuthTokenGetter(getter: () => Promise<string | null>) {
+  authTokenGetter = getter;
+}
+
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
+  const token = await authTokenGetter?.();
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify(body),
   });
   const data = await res.json();

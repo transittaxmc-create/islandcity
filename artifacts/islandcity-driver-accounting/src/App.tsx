@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { Home, Banknote, ClipboardList, BarChart2, BookOpen, Receipt, FileText, Brain } from "lucide-react";
+import { useUser } from "@clerk/react";
 
 type TurnStatus = "START" | "BREAK" | "END";
 type Tab      = "DASHBOARD" | "TRIPS" | "EXPENSES" | "FINANCES" | "REPORTS" | "AI";
@@ -463,7 +464,39 @@ const CLEAN_SLATE_VERSION = "2026-08-12-v7";
   } catch {}
 })();
 
+function createUserStorage(userId: string): Storage {
+  const prefix = `ic-user:${userId}:`;
+  const scopedKeys = () => Object.keys(window.localStorage).filter(key => key.startsWith(prefix));
+  return {
+    get length() { return scopedKeys().length; },
+    clear() {
+      for (const key of scopedKeys()) window.localStorage.removeItem(key);
+    },
+    getItem(key: string) {
+      return window.localStorage.getItem(prefix + key);
+    },
+    key(index: number) {
+      const fullKey = scopedKeys()[index];
+      return fullKey ? fullKey.slice(prefix.length) : null;
+    },
+    removeItem(key: string) {
+      window.localStorage.removeItem(prefix + key);
+    },
+    setItem(key: string, value: string) {
+      window.localStorage.setItem(prefix + key, value);
+    },
+  };
+}
+
 export default function App() {
+  const { user } = useUser();
+  const userId = user!.id;
+  const localStorage = useMemo(() => createUserStorage(userId), [userId]);
+  const tripsStorageKey = "island-city-trips";
+  const expensesStorageKey = "island-city-expenses";
+  const hoursStorageKey = "island-city-hours";
+  const lastSavedStorageKey = "island-city-last-saved";
+  const tripsCountStorageKey = "island-city-trips-count";
   const [activeTab,  setActiveTab]  = useState<Tab>("DASHBOARD");
   const [tripsTab,   setTripsTab]   = useState<TripsTab>("ENTRY");
   const [goal, setGoal] = useState<number>(() => {
@@ -476,7 +509,7 @@ export default function App() {
 
   const [trips, setTrips] = useState<Trip[]>(() => {
     try {
-      const raw = localStorage.getItem("island-city-trips");
+      const raw = localStorage.getItem(tripsStorageKey);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0)
@@ -492,7 +525,7 @@ export default function App() {
 
   const [expenses, setExpenses] = useState<Expense[]>(() => {
     try {
-      const raw = localStorage.getItem("island-city-expenses");
+      const raw = localStorage.getItem(expensesStorageKey);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -503,7 +536,7 @@ export default function App() {
 
   const [hoursLog, setHoursLog] = useState<HoursEntry[]>(() => {
     try {
-      const raw = localStorage.getItem("island-city-hours");
+      const raw = localStorage.getItem(hoursStorageKey);
       if (raw) return JSON.parse(raw);
     } catch {}
     return [];
@@ -607,7 +640,7 @@ export default function App() {
 
   // Storage state
   const [lastSavedAt, setLastSavedAt] = useState<string>(() => {
-    try { return localStorage.getItem("island-city-last-saved") || "—"; } catch { return "—"; }
+    try { return localStorage.getItem(lastSavedStorageKey) || "—"; } catch { return "—"; }
   });
   const [storageVerified, setStorageVerified] = useState(false);
   const [storageBytes, setStorageBytes] = useState(0);
@@ -808,21 +841,21 @@ export default function App() {
   useEffect(() => {
     try {
       const payload = JSON.stringify(trips);
-      localStorage.setItem("island-city-trips", payload);
+      localStorage.setItem(tripsStorageKey, payload);
       const nowISO = new Date().toISOString();
-      localStorage.setItem("island-city-last-saved", nowISO);
-      localStorage.setItem("island-city-trips-count", String(trips.length));
+      localStorage.setItem(lastSavedStorageKey, nowISO);
+      localStorage.setItem(tripsCountStorageKey, String(trips.length));
       setLastSavedAt(nowISO);
       setStorageBytes(new Blob([payload]).size);
-      const check = localStorage.getItem("island-city-trips");
+      const check = localStorage.getItem(tripsStorageKey);
       setStorageVerified(!!check && check.length > 2);
     } catch { setStorageVerified(false); }
-  }, [trips]);
+  }, [trips, tripsStorageKey, lastSavedStorageKey, tripsCountStorageKey]);
 
   // Persist expenses
   useEffect(() => {
-    try { localStorage.setItem("island-city-expenses", JSON.stringify(expenses)); } catch {}
-  }, [expenses]);
+    try { localStorage.setItem(expensesStorageKey, JSON.stringify(expenses)); } catch {}
+  }, [expenses, expensesStorageKey]);
   useEffect(() => {
     try { localStorage.setItem("ic-custom-exp-types", JSON.stringify(customExpenseTypes)); } catch {}
   }, [customExpenseTypes]);
@@ -854,8 +887,8 @@ export default function App() {
 
   // Persist hours
   useEffect(() => {
-    try { localStorage.setItem("island-city-hours", JSON.stringify(hoursLog)); } catch {}
-  }, [hoursLog]);
+    try { localStorage.setItem(hoursStorageKey, JSON.stringify(hoursLog)); } catch {}
+  }, [hoursLog, hoursStorageKey]);
 
   // Persist FINANCES settings
   useEffect(() => { try { localStorage.setItem("ic-daily-goal", String(dailyGoal)); } catch {} }, [dailyGoal]);
@@ -883,8 +916,8 @@ export default function App() {
       // the page reloads, making the wipe appear to do nothing.
       if ((window as any).__ic_wiping) return;
       try {
-        localStorage.setItem("island-city-trips",    JSON.stringify(tripsRef.current));
-        localStorage.setItem("island-city-expenses", JSON.stringify(expensesRef.current));
+        localStorage.setItem(tripsStorageKey, JSON.stringify(tripsRef.current));
+        localStorage.setItem(expensesStorageKey, JSON.stringify(expensesRef.current));
       } catch {}
     };
     const onVisibility = () => { if (document.visibilityState === "hidden") flush(); };
@@ -894,7 +927,7 @@ export default function App() {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", flush);
     };
-  }, []); // set up once — refs always point to current state
+  }, [tripsStorageKey, expensesStorageKey]);
 
   // ── GPS one-shot on mount — show real location immediately, even before shift ─
   useEffect(() => {
@@ -911,7 +944,7 @@ export default function App() {
   useEffect(() => {
     const tryRestore = async () => {
       try {
-        const raw = localStorage.getItem("island-city-trips");
+        const raw = localStorage.getItem(tripsStorageKey);
         const localTrips: Trip[] = raw ? JSON.parse(raw) : [];
         if (localTrips.length > 0) return; // local data exists — skip restore
         const res = await fetch("/api/backup/latest");
@@ -923,9 +956,9 @@ export default function App() {
         }};
         if (!backup || !Array.isArray(backup.trips) || backup.trips.length === 0) return;
         // Restore data
-        try { localStorage.setItem("island-city-trips",    JSON.stringify(backup.trips));    } catch {}
-        try { localStorage.setItem("island-city-expenses", JSON.stringify(backup.expenses)); } catch {}
-        try { localStorage.setItem("island-city-hours",    JSON.stringify(backup.hoursLog)); } catch {}
+        try { localStorage.setItem(tripsStorageKey, JSON.stringify(backup.trips)); } catch {}
+        try { localStorage.setItem(expensesStorageKey, JSON.stringify(backup.expenses)); } catch {}
+        try { localStorage.setItem(hoursStorageKey, JSON.stringify(backup.hoursLog)); } catch {}
         setTrips(backup.trips);
         setExpenses(backup.expenses ?? []);
         setHoursLog(backup.hoursLog ?? []);
@@ -942,7 +975,7 @@ export default function App() {
       } catch { /* silent — restore is best-effort */ }
     };
     tryRestore();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tripsStorageKey, expensesStorageKey, hoursStorageKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Cross-device trip sync ───────────────────────────────────────────────
   // The Android app posts compact entries to the shared API. Merge the
@@ -956,7 +989,7 @@ export default function App() {
         if (!res.ok) return;
         const data = await res.json() as { trips?: unknown[] };
         const remoteTrips = Array.isArray(data.trips) ? data.trips as Trip[] : [];
-        const raw = localStorage.getItem("island-city-trips");
+        const raw = localStorage.getItem(tripsStorageKey);
         const localTrips: Trip[] = raw ? JSON.parse(raw) : [];
         const byId = new Map<string, Trip>();
         for (const trip of localTrips) if (trip?.id) byId.set(trip.id, trip);
@@ -982,15 +1015,15 @@ export default function App() {
     };
     void syncRemoteTrips();
     return () => { cancelled = true; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tripsStorageKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Initial storage check
   useEffect(() => {
     try {
-      const raw = localStorage.getItem("island-city-trips");
+      const raw = localStorage.getItem(tripsStorageKey);
       if (raw) { setStorageBytes(new Blob([raw]).size); setStorageVerified(true); }
     } catch { setStorageVerified(false); }
-  }, []);
+  }, [tripsStorageKey]);
 
   // ── Voice trip flow — elapsed timer ──────────────────────────────────────
   useEffect(() => {
@@ -1693,7 +1726,7 @@ export default function App() {
   // close, home button, phone call), before the async useEffect ever runs.
   // Writing synchronously here guarantees the data survives any timing window.
   const syncSaveTrips = (newTrips: Trip[]) => {
-    try { localStorage.setItem("island-city-trips", JSON.stringify(newTrips)); } catch {}
+    try { localStorage.setItem(tripsStorageKey, JSON.stringify(newTrips)); } catch {}
     setTrips(newTrips);
     // Keep the shared PostgreSQL collection current after every web save/edit.
     // Each upsert is idempotent by trip id, and localStorage remains available
@@ -1707,7 +1740,7 @@ export default function App() {
     }
   };
   const syncSaveExpenses = (newExpenses: Expense[]) => {
-    try { localStorage.setItem("island-city-expenses", JSON.stringify(newExpenses)); } catch {}
+    try { localStorage.setItem(expensesStorageKey, JSON.stringify(newExpenses)); } catch {}
     setExpenses(newExpenses);
   };
 

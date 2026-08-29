@@ -23,6 +23,7 @@ const extFor: Record<string, string> = {
 };
 
 export interface SaveDocumentInput {
+  userId:      string;
   /** 'receipt' | 'statement' */
   type:        string;
   /** raw base64 string (no data-URI prefix) */
@@ -44,7 +45,7 @@ export interface SavedDocument {
 }
 
 export async function saveDocument(input: SaveDocumentInput): Promise<SavedDocument> {
-  const { type, imageBase64, mimeType, fileDate, category, vendor, amount, metadata = {} } = input;
+  const { userId, type, imageBase64, mimeType, fileDate, category, vendor, amount, metadata = {} } = input;
 
   // Derive storage path: documents/{type}/{YYYY-MM}/{uuid}.ext
   const now    = new Date();
@@ -64,6 +65,7 @@ export async function saveDocument(input: SaveDocumentInput): Promise<SavedDocum
 
   // Store metadata in DB
   const [row] = await db.insert(scannedDocumentsTable).values({
+    userId,
     type,
     objectPath,
     fileDate:  fileDate   ?? null,

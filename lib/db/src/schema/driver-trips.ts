@@ -1,4 +1,4 @@
-import { jsonb, text, timestamp } from "drizzle-orm/pg-core";
+import { index, jsonb, text, timestamp } from "drizzle-orm/pg-core";
 import { pgTable } from "drizzle-orm/pg-core";
 
 /**
@@ -10,11 +10,14 @@ import { pgTable } from "drizzle-orm/pg-core";
  */
 export const driverTripsTable = pgTable("driver_trips", {
   id: text("id").primaryKey(),
+  userId: text("user_id"),
   trip: jsonb("trip").notNull(),
   source: text("source").notNull().default("web"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [
+  index("driver_trips_user_id_idx").on(table.userId),
+]);
 
 export type DriverTrip = typeof driverTripsTable.$inferSelect;
 export type InsertDriverTrip = typeof driverTripsTable.$inferInsert;

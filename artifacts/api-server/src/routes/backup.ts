@@ -1,11 +1,14 @@
 import { Router } from "express";
 import { db, driverBackupsTable } from "@workspace/db";
-import { desc, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
+import { authenticatedUserId, requireAuth } from "../middlewares/requireAuth";
 
 const backupRouter = Router();
+backupRouter.use("/backup", requireAuth);
 
 // POST /api/backup — save a full data snapshot
 backupRouter.post("/backup", async (req, res) => {
+  const userId = authenticatedUserId(req);
   const { trips = [], expenses = [], hoursLog = [], settings = {} } = req.body as {
     trips?: unknown[];
     expenses?: unknown[];
@@ -17,6 +20,7 @@ backupRouter.post("/backup", async (req, res) => {
     const [saved] = await db
       .insert(driverBackupsTable)
       .values({
+        userId,
         trips,
         expenses,
         hoursLog,
@@ -33,8 +37,8 @@ backupRouter.post("/backup", async (req, res) => {
 
     // Keep only the 48 most recent backups (rolling window)
     await db.execute(
-      sql`DELETE FROM driver_backups WHERE id NOT IN (
-        SELECT id FROM driver_backups ORDER BY saved_at DESC LIMIT 48
+      sql`DELETE FROM driver_backups WHERE user_id = ${userId} AND id NOT IN (
+        SELECT id FROM driver_backups WHERE user_id = ${userId} ORDER BY saved_at DESC LIMIT 48
       )`
     );
 
@@ -45,11 +49,13 @@ backupRouter.post("/backup", async (req, res) => {
 });
 
 // GET /api/backup/latest — retrieve the most recent backup
-backupRouter.get("/backup/latest", async (_req, res) => {
+backupRouter.get("/backup/latest", async (req, res) => {
+  const userId = authenticatedUserId(req);
   try {
     const [latest] = await db
       .select()
       .from(driverBackupsTable)
+      .where(eq(driverBackupsTable.userId, userId))
       .orderBy(desc(driverBackupsTable.savedAt))
       .limit(1);
 
@@ -60,7 +66,8 @@ backupRouter.get("/backup/latest", async (_req, res) => {
 });
 
 // GET /api/backup/list — last 10 backup timestamps (for settings panel display)
-backupRouter.get("/backup/list", async (_req, res) => {
+backupRouter.get("/backup/list", async (req, res) => {
+  const userId = authenticatedUserId(req);
   try {
     const rows = await db
       .select({
@@ -70,6 +77,7 @@ backupRouter.get("/backup/list", async (_req, res) => {
         expenseCount: driverBackupsTable.expenseCount,
       })
       .from(driverBackupsTable)
+      .where(eq(driverBackupsTable.userId, userId))
       .orderBy(desc(driverBackupsTable.savedAt))
       .limit(10);
 

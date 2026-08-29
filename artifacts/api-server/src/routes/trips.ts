@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { db, driverTripsTable } from "@workspace/db";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
+import { authenticatedUserId, requireAuth } from "../middlewares/requireAuth";
 
 const tripsRouter = Router();
+tripsRouter.use("/trips", requireAuth);
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -87,11 +89,13 @@ function normalizeTrip(input: unknown): UnknownRecord | null {
 }
 
 // GET /api/trips — return the canonical trip list for web/mobile clients.
-tripsRouter.get("/trips", async (_req, res) => {
+tripsRouter.get("/trips", async (req, res) => {
+  const userId = authenticatedUserId(req);
   try {
     const rows = await db
       .select({ trip: driverTripsTable.trip })
       .from(driverTripsTable)
+      .where(eq(driverTripsTable.userId, userId))
       .orderBy(desc(driverTripsTable.createdAt));
 
     res.json({ ok: true, trips: rows.map(row => row.trip) });
@@ -102,6 +106,7 @@ tripsRouter.get("/trips", async (_req, res) => {
 
 // POST /api/trips — create or update one trip, keyed by the client trip id.
 tripsRouter.post("/trips", async (req, res) => {
+  const userId = authenticatedUserId(req);
   const body = asRecord(req.body);
   const normalized = normalizeTrip(body?.trip ?? req.body);
   if (!normalized) {
@@ -112,13 +117,14 @@ tripsRouter.post("/trips", async (req, res) => {
     return;
   }
 
-  const id = normalized.id as string;
+  const clientId = normalized.id as string;
+  const id = `${userId}:${clientId}`;
   const source = stringOrEmpty(normalized.source) || "web";
 
   try {
     const [saved] = await db
       .insert(driverTripsTable)
-      .values({ id, trip: normalized, source, updatedAt: new Date() })
+      .values({ id, userId, trip: normalized, source, updatedAt: new Date() })
       .onConflictDoUpdate({
         target: driverTripsTable.id,
         set: { trip: normalized, source, updatedAt: new Date() },
@@ -128,7 +134,7 @@ tripsRouter.post("/trips", async (req, res) => {
         updatedAt: driverTripsTable.updatedAt,
       });
 
-    res.json({ ok: true, trip: normalized, id: saved.id, updatedAt: saved.updatedAt });
+    res.json({ ok: true, trip: normalized, id: clientId, updatedAt: saved.updatedAt });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err) });
   }
@@ -138,8 +144,16 @@ tripsRouter.post("/trips", async (req, res) => {
 // It is intentionally not used by the current clients, which never delete
 // remote data implicitly.
 tripsRouter.delete("/trips/:id", async (req, res) => {
+  const userId = authenticatedUserId(req);
   try {
-    await db.delete(driverTripsTable).where(eq(driverTripsTable.id, req.params.id));
+    const storageId = `${userId}:${req.params.id}`;
+    const deleted = await db.delete(driverTripsTable)
+      .where(and(eq(driverTripsTable.id, storageId), eq(driverTripsTable.userId, userId)))
+      .returning({ id: driverTripsTable.id });
+    if (!deleted.length) {
+      res.status(404).json({ ok: false, error: "Trip not found" });
+      return;
+    }
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err) });
