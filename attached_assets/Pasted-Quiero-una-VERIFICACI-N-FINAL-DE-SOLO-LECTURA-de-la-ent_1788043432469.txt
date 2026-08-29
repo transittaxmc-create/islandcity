@@ -1,0 +1,34 @@
+Quiero una VERIFICACIÓN FINAL DE SOLO LECTURA de la entrada aislada /inventory.html.
+
+NO modifiques archivos.
+NO ejecutes el proyecto con una sesión autenticada.
+NO ejecutes SQL ni migraciones.
+NO accedas, consultes ni modifiques producción o desarrollo.
+NO hagas Deploy ni Publish.
+NO hagas llamadas reales a APIs de datos.
+NO borres, escribas, sincronices, restaures ni subas datos.
+NO ejecutes localStorage.clear(), localStorage.setItem() ni localStorage.removeItem().
+
+Revisa estáticamente el código y responde en un informe corto, con Sí/No y evidencia de archivo/línea cuando sea posible:
+
+1. ¿/inventory.html carga solamente src/inventory-main.tsx?
+2. ¿El árbol completo de imports de inventory-main.tsx excluye App.tsx y src/main.tsx, tanto directa como indirectamente?
+3. ¿/inventory.html evita registrar Service Worker y evita listeners de pagehide, visibilitychange o load que escriban datos?
+4. ¿La entrada aislada y sus imports no contienen fetch, axios, XMLHttpRequest, WebSocket, EventSource ni llamadas a /api/?
+5. ¿La entrada aislada y sus imports no contienen SQL, Neon, Supabase, base de datos, backups, sincronización, restauración, GitHub push, GPS, Nominatim, Gemini, LimoSys, documentos, reportes o pagos?
+6. ¿La entrada aislada y sus imports no contienen localStorage.setItem, localStorage.removeItem, localStorage.clear, sessionStorage, IndexedDB o AsyncStorage?
+7. ¿MigrationInventory y migrationInventory.ts usan Local Storage únicamente con operaciones de lectura, como getItem, key, length o enumeración de nombres?
+8. ¿El user_id viene únicamente de Clerk mediante useUser() y se pasa como propiedad a MigrationInventory?
+9. ¿Las claves globales, heredadas, de ejemplo y no clasificadas aparecen separadas, sin atribuirse automáticamente al usuario autenticado?
+10. ¿Copiar manifiesto usa solamente navigator.clipboard.writeText y Descargar JSON usa solamente Blob, URL.createObjectURL y descarga local, sin red ni almacenamiento persistente?
+11. ¿La pantalla muestra un aviso visible de “modo solo lectura” y que no se conectó al servidor?
+12. ¿Qué datos exactos mostrará la pantalla para viajes, gastos, horas, metas, saldo, planes, configuraciones, recibos/documentos, evaluaciones, claves heredadas, claves globales, datos de ejemplo e ítems no clasificables?
+13. ¿Qué botones aparecerán exactamente en /inventory.html y cuál es el efecto de cada botón?
+14. ¿Qué riesgos o limitaciones quedan, especialmente porque Clerk puede usar sus propios recursos de autenticación y porque la app principal sigue teniendo localStorage.clear()?
+
+Al final, incluye una decisión clara:
+
+- “LISTO PARA PRUEBA MANUAL DE SOLO LECTURA”, o
+- “NO LISTO”, indicando el bloqueo exacto.
+
+Solo entrega el informe. No realices cambios, no pruebes con datos reales y no hagas ninguna acción de escritura.
