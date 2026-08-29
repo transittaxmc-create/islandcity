@@ -1,0 +1,38 @@
+Apruebo únicamente diseñar e implementar una ENTRADA WEB AISLADA Y AUTENTICADA para la FASE 0 de “Inventario de datos”.
+
+La finalidad es permitir revisar MigrationInventory sin importar ni montar App.tsx.
+
+LÍMITE ESTRICTO DE ESTA APROBACIÓN:
+- No modifiques App.tsx.
+- No modifiques enforceCleanSlate().
+- No reemplaces ni ejecutes localStorage.clear().
+- No modifiques las rutas, pantallas o comportamiento normal de la aplicación.
+- No ejecutes SQL ni migraciones.
+- No accedas, consultes ni modifiques producción o desarrollo.
+- No hagas fetch ni llamadas a /api/, /api/backup, /api/trips, /api/git-push o /api/documents.
+- No publiques, despliegues, ejecutes backups, sincronización, restauración, GPS, Gemini, LimoSys, Nominatim ni GitHub push.
+- No modifiques, escribas, borres, limpies ni sincronices localStorage.
+- No uses sessionStorage, IndexedDB o AsyncStorage.
+- No migres ni subas datos.
+- No modifiques los componentes existentes de la app normal, excepto lo estrictamente indispensable para registrar la entrada aislada sin importar App.tsx.
+
+REQUISITO TÉCNICO:
+La entrada aislada debe:
+1. Cargar Clerk y requerir autenticación.
+2. Montar únicamente MigrationInventory.
+3. No importar App.tsx, ni directa ni indirectamente.
+4. No registrar Service Worker desde esta entrada, si es posible evitarlo.
+5. No ejecutar efectos de persistencia, backup, restauración, sincronización, GPS, geocodificación ni GitHub.
+6. Leer únicamente las claves de localStorage que correspondan al usuario autenticado, además de clasificar claves globales/heredadas sin atribuirlas a ese usuario.
+7. Permitir solo ver detalles, copiar el manifiesto y descargar un JSON local.
+8. Mostrar de forma visible: “Modo de solo lectura: no se conectó al servidor y no se modificaron datos”.
+
+ANTES DE EDITAR ARCHIVOS:
+Muéstrame:
+- La lista exacta de archivos que modificarás o crearás.
+- Cómo garantizarás que App.tsx no se importa.
+- La URL o ruta propuesta para abrir la entrada aislada.
+- Confirmación explícita de que no habrá llamadas de red fuera de los recursos indispensables de Clerk/carga.
+- Plan de prueba manual que compare nombres, longitudes y hashes de Local Storage antes y después.
+
+Espera mi aprobación después de mostrar ese plan. No realices cambios todavía.
