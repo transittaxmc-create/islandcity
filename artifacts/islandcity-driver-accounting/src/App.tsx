@@ -1695,6 +1695,16 @@ export default function App() {
   const syncSaveTrips = (newTrips: Trip[]) => {
     try { localStorage.setItem("island-city-trips", JSON.stringify(newTrips)); } catch {}
     setTrips(newTrips);
+    // Keep the shared PostgreSQL collection current after every web save/edit.
+    // Each upsert is idempotent by trip id, and localStorage remains available
+    // when the driver is temporarily offline.
+    for (const trip of newTrips) {
+      fetch("/api/trips", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trip }),
+      }).catch(() => undefined);
+    }
   };
   const syncSaveExpenses = (newExpenses: Expense[]) => {
     try { localStorage.setItem("island-city-expenses", JSON.stringify(newExpenses)); } catch {}
