@@ -1,0 +1,733 @@
+Actúa como un arquitecto senior de software, auditor técnico y auditor de experiencia de usuario para esta aplicación existente de IslandCity Transit Services.
+
+IMPORTANTE: ESTA ES UNA FASE DE AUDITORÍA Y VERIFICACIÓN SOLAMENTE.
+
+NO hagas cambios de ningún tipo.
+NO escribas, edites, borres, muevas ni reemplaces archivos.
+NO cambies código, diseño, estilos, colores, tipografías, iconos, componentes, navegación visual, nombres, rutas, base de datos, API, lógica, cálculos, datos ni configuraciones.
+NO elimines, simplifiques, reestructures ni sustituyas ninguna función existente.
+NO conviertas valores de ejemplo en valores reales todavía.
+NO implementes funciones faltantes todavía.
+
+Tu única tarea ahora es inspeccionar el proyecto existente, verificar cómo funciona realmente y entregar un reporte técnico completo, preciso y verificable.
+
+El objetivo posterior será conectar todas las partes bajo una lógica financiera única, pero primero necesito saber exactamente qué existe, qué funciona, qué está desconectado, qué usa datos mock/hard-coded y qué falta. No tomes ninguna decisión ni realices ninguna implementación hasta después de entregar el reporte.
+
+==================================================
+CONTEXTO DEL PRODUCTO
+==================================================
+
+IslandCity Transit Services es una aplicación para choferes. Debe centralizar productividad, turnos, ingresos, gastos, recibos, pagos programados, presupuestos, reservas, proyecciones y reportes financieros.
+
+La aplicación tiene o puede tener estas secciones:
+
+- Dashboard.
+- Daily Entry.
+- Clock In.
+- Clock Out.
+- Break / Receso.
+- Trips.
+- Expenses.
+- Agregar Expense / Subir recibo.
+- Ledger.
+- Finance.
+- Reports.
+- Financial Statement.
+- AI.
+- Settings, si existe.
+
+La interfaz visual actual es valiosa y debe conservarse exactamente como está. Esto incluye la identidad visual IslandCity Transit Services, modo oscuro, negro, dorado, tarjetas, iconos, tipografías, navegación inferior, gráficas, estructura y estilo móvil. No propongas rediseño en esta fase.
+
+==================================================
+LÓGICA DE NEGOCIO OBJETIVO QUE DEBES AUDITAR
+==================================================
+
+1. TURNOS, CLOCK IN/OUT, BREAKS Y PRODUCTIVIDAD
+
+El sistema debe permitir que un chofer:
+
+- Haga Clock In al comenzar a trabajar.
+- Haga Start Break al tomar un descanso.
+- Haga End Break cuando vuelva a trabajar.
+- Haga Clock Out cuando termine el trabajo del día.
+- Mantenga un historial de turnos.
+
+Regla importante:
+
+Mientras el chofer está Clocked In y NO está en Break, todo el tiempo cuenta como tiempo activo.
+
+El tiempo activo incluye:
+
+- Buscar viajes.
+- Esperar demanda.
+- Estar en viaje.
+- Tráfico.
+- Baja demanda.
+- Tiempo sin ingreso.
+- Tiempo lento.
+- Tiempo en que el chofer se entretiene o pierde enfoque, si no ha iniciado Break.
+- Tiempo necesario de operación, si el sistema no está en Break.
+
+Solo debe detener el tiempo activo:
+
+- Start Break.
+- Receso.
+- Asunto personal registrado como Break.
+- Clock Out.
+
+El sistema debe distinguir:
+
+- Tiempo total transcurrido.
+- Tiempo activo.
+- Tiempo en Break.
+- Tiempo con ingresos/actividad productiva, si se puede detectar.
+- Tiempo disponible/sin ingreso.
+
+Métrica central:
+
+ingresoPorHoraActiva = ingresoBrutoAcumulado / horasActivas
+
+Debe soportar metas configurables, por ejemplo:
+
+- Meta mínima: $60/h.
+- Meta objetivo: $65/h.
+- Meta alta: $70/h.
+
+Durante el turno debe poder calcular:
+
+metaAcumulada = metaPorHora × horasActivas
+
+balanceDeRitmo = ingresoAcumulado − metaAcumulada
+
+Una hora lenta no debe considerarse un fracaso definitivo. El balance se acumula durante el turno y puede recuperarse con horas futuras más productivas.
+
+Si se conocen las horas restantes:
+
+ingresoNecesarioPorHoraRestante =
+(metaTotalDelTurno − ingresoAcumulado) / horasActivasRestantes
+
+El sistema objetivo debe actuar como un “cheerleader” basado en datos:
+
+- Check-ins breves por hora.
+- Mensajes positivos y concretos.
+- Comparación entre ritmo real y meta.
+- Cálculo de lo que falta para recuperar el ritmo.
+- Proyección de cierre del turno.
+- Sin avergonzar ni culpar al chofer.
+- Alertas configurables si pasa demasiado tiempo activo sin ingreso registrado, con opciones para seguir trabajando, iniciar break o terminar turno.
+
+Audita si esta lógica existe, existe parcialmente, solo aparece en UI/mock o no existe.
+
+2. INGRESOS, TRIPS Y SHIFTS
+
+El sistema debe permitir registrar:
+
+- Fecha.
+- Hora de inicio y finalización.
+- Breaks.
+- Plataforma o fuente de ingreso.
+- Viajes.
+- Ingreso bruto.
+- Propinas.
+- Bonos.
+- Efectivo.
+- Ajustes.
+- Millas, si existen.
+
+Los ingresos reales deben alimentar automáticamente:
+
+- Finance.
+- Budget.
+- Cash Flow.
+- Reports.
+- Financial Statement.
+- Cálculos de meta y rendimiento por hora.
+
+Cada ingreso debe registrarse una sola vez y reutilizarse en todas las secciones; no debe requerir duplicación manual.
+
+Audita qué existe, dónde se guarda y qué módulos lo consumen.
+
+3. EXPENSES, GASTOS Y RECIBOS
+
+El sistema debe permitir registrar gastos manualmente y mediante una foto de recibo.
+
+Cada gasto o recibo debe poder tener:
+
+- Fecha.
+- Monto.
+- Comercio.
+- Categoría.
+- Subcategoría.
+- Método de pago.
+- Vehículo, si aplica.
+- Relación con el trabajo: operativo, personal, parcialmente deducible o no deducible.
+- Imagen/archivo del recibo.
+- Nota opcional.
+
+Categorías posibles:
+
+- Gasolina o carga.
+- Peajes.
+- Estacionamiento.
+- Lavado.
+- Mantenimiento.
+- Reparaciones.
+- Seguro.
+- Pago del vehículo.
+- Comida de trabajo.
+- Renta.
+- Luz.
+- Cable/internet.
+- Teléfono.
+- Deudas.
+- Suscripciones.
+- Gastos personales.
+- Gastos no programados.
+
+Cada gasto real debe alimentar automáticamente Expenses, Budget, Finance, Cash Flow, Reports y Financial Statement.
+
+Audita si los recibos se guardan, dónde se guardan, si las imágenes persisten y si los gastos se reflejan en los demás módulos.
+
+4. PAGOS PROGRAMADOS Y GASTOS FIJOS
+
+Debe existir o poder construirse una estructura para:
+
+- Bills.
+- Upcoming Payments.
+- Pagos programados.
+- Gastos fijos.
+
+Cada obligación regular debe tener:
+
+- Nombre.
+- Categoría.
+- Monto.
+- Frecuencia: semanal, quincenal, mensual, anual o personalizada.
+- Fecha de vencimiento o regla de vencimiento.
+- Próxima fecha exacta de vencimiento.
+- Método de pago.
+- Prioridad.
+- Estado.
+- Monto reservado.
+- Monto pagado.
+- Saldo pendiente.
+
+Ejemplos:
+
+- Pago del carro: $919, semanal, todos los jueves.
+- Renta: monto configurable, mensual, día 19.
+- Luz.
+- Cable/internet.
+- Teléfono.
+- Seguro.
+- Deudas.
+- Suscripciones.
+
+Debe distinguir claramente:
+
+- Programado = obligación futura conocida.
+- Presupuestado = límite/plan para una categoría o período.
+- Reservado = dinero apartado virtualmente para una obligación.
+- Pagado = dinero que realmente salió.
+- Pendiente = dinero que falta reservar o pagar.
+
+Un pago programado no puede aparecer como pagado solo porque existe dinero reservado.
+
+Audita si esta estructura existe, dónde se define y cómo se conecta con Finance y Reports.
+
+5. BUDGET, PROGRAMADO Y REAL
+
+El sistema debe poder comparar, por día, semana, mes y año:
+
+- Programado.
+- Presupuesto.
+- Real.
+
+Definiciones:
+
+- Programado: obligación o evento futuro con fecha, como pago del carro los jueves o renta el día 19.
+- Presupuesto: monto planificado/límite para una categoría durante un período.
+- Real: ingreso, gasto o pago confirmado y registrado.
+
+Debe poder comparar:
+
+- Ingresos: meta vs. ingreso real.
+- Gastos: presupuesto vs. gasto real.
+- Pagos fijos: programado vs. reservado vs. pagado vs. pendiente.
+- Gastos no programados: separados y claramente visibles.
+
+Audita si Finance, Budget, Ledger y Reports usan estas distinciones correctamente o si mezclan conceptos.
+
+6. RESERVAS, DINERO COMPROMETIDO Y CASH-FLOW SAFEGUARD
+
+La lógica objetivo requiere “cash-flow safeguard”.
+
+Debe poder mostrar:
+
+- Saldo bancario real, si el usuario lo registra o conecta.
+- Dinero comprometido.
+- Dinero reservado.
+- Dinero disponible real.
+- Pagos próximos.
+- Cobertura de cada pago.
+- Riesgo de flujo de efectivo.
+
+Fórmula objetivo:
+
+disponibleReal = saldoBancarioReal − dineroComprometido
+
+Fondos virtuales/envelopes posibles:
+
+- Carro.
+- Renta.
+- Impuestos.
+- Mantenimiento.
+- Emergencia.
+- Ahorro.
+- Super Plus.
+
+Cobertura de pago:
+
+coberturaDePago = (montoReservado / montoDelPago) × 100
+
+Estados esperados:
+
+- Cubierto ahora.
+- Parcialmente cubierto.
+- Probablemente cubierto con ingresos planificados.
+- En riesgo.
+- Vencido.
+- Pagado.
+
+Debe poder responder:
+
+- “¿Tengo suficiente dinero para pagar $919 del carro este jueves?”
+- “¿Cuánto falta reservar para el pago del carro?”
+- “¿Con ingresos reales y planificados antes del jueves estaré cubierto?”
+- “¿Después de pagar carro, renta y otros gastos, cuánto saldo libre me queda?”
+- “¿Cuánto debo producir por día y por hora para cubrir pagos próximos y terminar con Super Plus?”
+
+Audita si existe algún concepto equivalente y cómo se calcula actualmente.
+
+7. FINANCE, PROYECCIONES Y SUPER PLUS
+
+Finance debe ser el centro de control y debe conectarse a:
+
+- Trips/Shifts.
+- Income.
+- Expenses.
+- Receipts.
+- Bills.
+- Budgets.
+- Reserves.
+- Goals.
+- Reports.
+
+Debe conservar las vistas existentes, incluyendo si existen:
+
+- Planned vs Actual.
+- Plan semanal.
+- Metas por día.
+- Estimado mensual.
+- Estimado anual.
+- Annual Outlook.
+
+Audita específicamente los valores visibles de ejemplo, como:
+
+- $400 por día.
+- $2,000 semanales.
+- Estimado mensual.
+- Estimado anual.
+- Annual Outlook.
+
+Determina si esos valores vienen de datos reales, configuración del usuario, cálculos dinámicos, localStorage, backend o están hard-coded/mock.
+
+La proyección objetivo debe considerar:
+
+- Ingresos reales acumulados.
+- Ingresos futuros planificados.
+- Gastos variables reales.
+- Gastos variables estimados.
+- Gastos fijos programados.
+- Pagos pendientes.
+- Reservas.
+- Saldo disponible.
+- Super Plus proyectado.
+
+Fórmula conceptual:
+
+superPlusProyectado =
+ingresosRealesYEstimados
+− gastosVariablesRealesYEstimados
+− gastosFijosProgramados
+− reservas
+
+Debe diferenciar con claridad:
+
+- Bruto.
+- Neto.
+- Pagado.
+- Reservado.
+- Comprometido.
+- Disponible.
+- Proyección.
+- Super Plus.
+
+Audita qué parte existe y qué parte falta.
+
+8. CASH FLOW Y REPORTES
+
+Debe existir o poder construirse un calendario de flujo de efectivo que muestre por fecha:
+
+- Saldo inicial.
+- Ingresos reales.
+- Ingresos planificados.
+- Gastos reales.
+- Pagos programados.
+- Reservas.
+- Saldo libre proyectado.
+
+Debe alertar si el saldo proyectado baja de un mínimo configurado o se vuelve negativo.
+
+Los reportes y el Financial Statement deben usar las mismas fuentes de datos que Trips, Expenses y Finance, sin duplicar valores ni usar cálculos independientes.
+
+El Financial Statement mensual objetivo debe incluir:
+
+- Ingresos: viajes, propinas, bonos, efectivo, ajustes y otras entradas.
+- Gastos operativos: gasolina, carga, peajes, estacionamiento, lavado, reparaciones, mantenimiento, seguro, vehículo y otros.
+- Ganancia operativa.
+- Gastos fijos/personales: renta, luz, cable/internet, teléfono, deudas, suscripciones y otros.
+- Reservas: impuestos, mantenimiento, emergencia, ahorro y metas.
+- Saldo neto disponible.
+- Super Plus.
+
+Reportes objetivo:
+
+- Budget vs Actual.
+- Programado vs Reservado vs Pagado.
+- Flujo de efectivo.
+- Rentabilidad: bruto/hora, neto/hora, gasto operativo/hora y, si existen millas, métricas por milla.
+- Gastos no programados.
+- Mejor y peor franja horaria, cuando haya datos suficientes.
+
+Audita si Reports y Financial Statement ya existen, cómo se alimentan y si sus totales coinciden con Finance, Trips y Expenses.
+
+9. PERSISTENCIA, FUENTE DE VERDAD Y SEGURIDAD
+
+Audita dónde se guarda actualmente cada tipo de dato.
+
+Busca y documenta uso de:
+
+- localStorage.
+- sessionStorage.
+- IndexedDB.
+- Base de datos.
+- Backend/API.
+- Archivos locales.
+- Object storage/almacenamiento de archivos para recibos.
+- Caché.
+- Variables en memoria.
+- Datos mock/hard-coded.
+
+Para cada tipo de dato, identifica:
+
+- Ubicación exacta.
+- Tecnología.
+- Archivo, tabla, endpoint, esquema o clave de almacenamiento.
+- Si persiste después de recargar.
+- Si persiste al cerrar/reabrir navegador.
+- Si se sincroniza en otro dispositivo.
+- Si depende de login.
+- Riesgo de pérdida o duplicación.
+- Recomendación futura, sin implementar cambios.
+
+Incluye:
+
+- Perfil de usuario.
+- Preferencias.
+- Metas.
+- Turnos.
+- Clock In/Clock Out.
+- Breaks.
+- Viajes.
+- Ingresos.
+- Gastos.
+- Recibos/fotos.
+- Pagos programados.
+- Pagos realizados.
+- Presupuestos.
+- Reservas.
+- Reportes.
+- Estado de turno activo.
+
+Principio esperado para el futuro, solo como recomendación:
+
+- Base de datos = fuente principal de verdad para datos financieros.
+- Almacenamiento de archivos = fotos de recibos.
+- localStorage = preferencias, filtros, borradores, caché temporal o modo offline.
+
+No implementes una migración todavía. Solo verifica la situación actual y describe una ruta segura si es necesaria.
+
+10. NAVEGACIÓN, CONECTIVIDAD Y MOVIMIENTO ENTRE PÁGINAS
+
+Audita toda la navegación sin modificarla.
+
+Es importante verificar si el usuario puede quedar atrapado en páginas como Expenses, Daily Entry, Ledger, Add Expense, detalles de recibo, Reports u otras pantallas internas.
+
+Debes revisar todas las rutas, pantallas, botones, iconos, tabs, menús, enlaces y botones de “back”/regreso.
+
+Módulos y pantallas que debes verificar, si existen:
+
+- Dashboard.
+- Daily Entry.
+- Clock In / Clock Out.
+- Shift activo.
+- Trips.
+- Expenses.
+- Agregar Expense.
+- Recibos.
+- Ledger.
+- Finance.
+- Reports.
+- Financial Statement.
+- AI.
+- Settings.
+- Pantallas de detalle, edición o formulario.
+
+Para cada pantalla o ruta, verifica:
+
+- Si existe una forma visible y funcional de volver a la pantalla anterior.
+- Si existe acceso al Dashboard.
+- Si existe acceso funcional a los módulos principales cuando corresponde.
+- Si la barra de navegación inferior aparece donde corresponde y si sus botones funcionan.
+- Si los botones, iconos y tabs llevan al destino correcto.
+- Si hay rutas rotas, pantallas en blanco, enlaces rotos o caminos sin salida.
+- Si el usuario necesita cerrar, recargar o perder datos para ir a otro módulo.
+- Si navegar mantiene correctamente un turno activo.
+- Si navegar durante un turno preserva el estado de Clock In, tiempo, breaks e ingresos.
+- Si navegar preserva formularios, recibos, filtros y contexto, cuando sea posible.
+- Si regresar desde Add Expense, Ledger, detalle de transacción o Report Detail provoca pérdida de datos no guardados.
+- Si todo funciona correctamente en móvil.
+
+No cambies absolutamente nada de navegación visual o de diseño durante esta auditoría. Solo documenta problemas, riesgos y rutas.
+
+==================================================
+REGLAS DE EVIDENCIA
+==================================================
+
+- No inventes que una función existe si no puedes demostrarla con evidencia técnica.
+- No uses una interfaz visible o un texto en pantalla como prueba de que una función está realmente conectada.
+- No asumas que un valor es dinámico porque aparece en una gráfica.
+- Si no puedes comprobar algo, escribe: “NO VERIFICADO”.
+- Para todo hallazgo, incluye evidencia técnica exacta:
+  - Ruta del archivo.
+  - Nombre de componente.
+  - Nombre de función.
+  - Hook/store/context.
+  - Endpoint.
+  - Tabla/colección.
+  - Esquema.
+  - Clave de localStorage/sessionStorage.
+  - Query.
+  - Línea aproximada, si está disponible.
+- Distingue estrictamente entre:
+  - IMPLEMENTADO Y CONECTADO.
+  - IMPLEMENTADO PARCIALMENTE.
+  - SOLO UI / MOCK / HARD-CODED.
+  - NO IMPLEMENTADO.
+  - NO VERIFICADO.
+
+==================================================
+FORMATO OBLIGATORIO DEL REPORTE
+==================================================
+
+A. RESUMEN EJECUTIVO
+Explica en lenguaje simple:
+- Qué ya funciona.
+- Qué está realmente conectado.
+- Qué está solo visual, mock o hard-coded.
+- Qué datos se guardan y dónde.
+- Principales riesgos.
+- Qué debe conservarse sin tocar.
+
+B. MAPA DE ARQUITECTURA ACTUAL
+Incluye:
+- Frontend.
+- Backend/API.
+- Base de datos.
+- Autenticación.
+- Almacenamiento de recibos.
+- localStorage/sessionStorage/IndexedDB.
+- Flujo de datos entre Dashboard, Daily Entry, Trips, Expenses, Ledger, Finance, Reports y AI.
+
+C. INVENTARIO DE MÓDULOS
+Crea una tabla con:
+- Módulo.
+- Archivo(s) y ruta(s).
+- Funciones actuales.
+- Datos de entrada.
+- Dónde se guardan.
+- Qué módulos consumen esos datos.
+- Estado.
+- Brecha contra la lógica objetivo.
+
+Incluye como mínimo:
+- Dashboard.
+- Daily Entry.
+- Clock In / Clock Out / Break.
+- Trips / Shifts / Income.
+- Expenses / Receipts.
+- Ledger.
+- Bills / pagos programados.
+- Budgets.
+- Reserves / Envelopes.
+- Finance.
+- Cash Flow.
+- Reports.
+- Financial Statement.
+- AI / Coach.
+- Autenticación.
+- Persistencia.
+- Navegación.
+
+D. AUDITORÍA DE PERSISTENCIA
+Crea una tabla con:
+- Tipo de dato.
+- Ubicación actual.
+- Tecnología de almacenamiento.
+- Archivo, clave, tabla o endpoint.
+- ¿Persiste al recargar?
+- ¿Persiste al cerrar/reabrir?
+- ¿Sincroniza otro dispositivo?
+- ¿Está asociado a usuario autenticado?
+- Riesgo.
+- Recomendación futura, sin implementar.
+
+E. AUDITORÍA DE LÓGICA
+Para cada requisito de negocio de las secciones 1 a 8, utiliza:
+- IMPLEMENTADO Y CONECTADO.
+- IMPLEMENTADO PARCIALMENTE.
+- SOLO UI / MOCK / HARD-CODED.
+- NO IMPLEMENTADO.
+- NO VERIFICADO.
+
+Para cada punto, indica:
+- Evidencia técnica.
+- Qué sucede hoy.
+- Qué falta.
+- Riesgo.
+- Dependencias futuras.
+
+F. RASTREO DE DATOS Y CÁLCULOS
+Explica paso a paso, con archivos/componentes/funciones reales:
+
+1. Qué ocurre al hacer Clock In.
+2. Cómo se calculan tiempo activo, tiempo total y breaks.
+3. Cómo se agrega un ingreso.
+4. Cómo se agrega un trip.
+5. Cómo se agrega un gasto o recibo.
+6. Dónde se guarda la foto de recibo.
+7. Cómo se crea un pago programado.
+8. Cómo se registra un pago real.
+9. Cómo se crean o calculan reservas, si existen.
+10. Cómo todo lo anterior actualiza Finance.
+11. Cómo Finance alimenta Reports y Financial Statement.
+12. Qué alimenta Planned vs Actual, la meta semanal, los estimados mensual/anual y Annual Outlook.
+13. Cómo se calcula disponible real, cash flow y Super Plus, si existen.
+
+G. LISTA DE DATOS HARDCODED, MOCK O DUPLICADOS
+Crea una tabla con:
+- Valor o dato.
+- Archivo y ubicación exacta.
+- Pantalla.
+- Tipo: hard-coded, mock, duplicado, temporal o calculado.
+- Si se puede editar.
+- Si se calcula dinámicamente.
+- Fuente actual.
+- Recomendación futura para reemplazarlo por fuente de verdad.
+
+Busca específicamente valores como:
+- $400 por día.
+- $2,000 semanales.
+- Metas mensuales/anuales.
+- Cifras de Annual Outlook.
+- Datos de demo en trips, expenses, ledger, finance y reports.
+
+H. AUDITORÍA DE NAVEGACIÓN Y CONECTIVIDAD
+Crea una tabla con:
+- Pantalla o ruta de origen.
+- Botón/link/tab/menú disponible.
+- Destino esperado.
+- Destino real.
+- ¿Funciona? Sí / No / Parcial / No verificado.
+- ¿Tiene regreso? Sí / No.
+- ¿Tiene acceso a Dashboard? Sí / No.
+- ¿Puede moverse a módulos principales? Sí / No / Parcial.
+- ¿Riesgo de perder datos? Sí / No / No verificado.
+- Problema identificado.
+- Archivo, componente o ruta técnica.
+- Recomendación futura, sin implementar.
+
+Incluye un mapa de rutas actual.
+
+Identifica específicamente toda pantalla desde la cual el usuario:
+- No pueda regresar.
+- No pueda ir al Dashboard.
+- No pueda acceder a otro módulo.
+- Quede atrapado.
+- Pierda datos.
+- Interrumpa o pierda el estado de un turno activo.
+
+I. BRECHAS Y PLAN POR FASES
+NO implementes nada.
+
+Prepara un plan de implementación futura en este orden:
+
+- Fase 0: respaldo, revisión de riesgos y pruebas de regresión.
+- Fase 1: centralizar modelos, datos y fuente única de verdad.
+- Fase 2: turnos, Clock In/Out, breaks, tiempo activo, $/hora y coach.
+- Fase 3: incomes, trips, recibos, gastos y Budget vs Actual.
+- Fase 4: pagos programados, reservas, cobertura y cash-flow safeguard.
+- Fase 5: Finance, proyecciones de semana/mes/año y Super Plus.
+- Fase 6: Reports y Financial Statement.
+- Fase 7: navegación segura, persistencia, migración y validación final.
+
+Para cada fase, incluye:
+- Objetivo.
+- Archivos/módulos que probablemente se tocarían.
+- Tablas/modelos/datos requeridos.
+- Cálculos requeridos.
+- Riesgos.
+- Qué debe preservarse.
+- Pruebas de aceptación.
+
+J. PRUEBAS DE ACEPTACIÓN FUTURAS
+
+Incluye al menos estas pruebas:
+
+1. Clock In + $65 en una hora activa debe dar $65/h.
+2. Un break de 30 minutos no debe aumentar tiempo activo.
+3. Tiempo activo sin ingreso debe seguir contando mientras no exista Break.
+4. Una hora lenta debe afectar balance acumulado, pero poder recuperarse con horas siguientes.
+5. Clock Out debe actualizar Finance y Reports.
+6. Un recibo de gasolina debe reducir neto y actualizar Budget vs Actual.
+7. Un pago de carro de $919 cada jueves debe mostrar separado: programado, reservado, pagado y pendiente.
+8. Reservar $640 para el carro no debe marcarlo como pagado.
+9. Cash Flow debe indicar si hay suficiente para carro jueves y renta día 19.
+10. Super Plus mensual debe coincidir con ingresos menos gastos, pagos y reservas.
+11. Trips, Expenses, Finance y Reports deben coincidir para el mismo período.
+12. Desde Dashboard, Daily Entry, Expenses, Ledger, Finance, Reports y pantallas de detalle debe existir navegación funcional sin quedar atrapado.
+13. Navegar no debe perder un turno activo, un break, un recibo en proceso o datos ya guardados.
+14. Los datos financieros deben persistir de acuerdo con la arquitectura real o futura aprobada.
+
+==================================================
+CIERRE OBLIGATORIO
+==================================================
+
+Termina exactamente con estas tres secciones:
+
+1. LO QUE ESTÁ LISTO PARA CONSERVAR
+2. LO QUE DEBE CORREGIRSE O CONSTRUIRSE
+3. PRIMERA FASE RECOMENDADA SIN ROMPER EL PROGRAMA
+
+Recuerda: NO realices cambios. Solo entrega el reporte técnico completo, con evidencia verificable y rutas/archivos concretos.
