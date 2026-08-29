@@ -1,0 +1,81 @@
+Quiero implementar únicamente la FASE 0: pantalla de Inventario y Vista Previa de Migración.
+
+Esta fase debe ser estrictamente DE SOLO LECTURA.
+
+REGLAS ABSOLUTAS:
+- No ejecutes SQL ni migraciones.
+- No crees ni modifiques tablas.
+- No hagas POST, PUT, PATCH o DELETE contra APIs.
+- No subas ni descargues datos.
+- No modifiques, elimines ni limpies localStorage, sessionStorage o AsyncStorage.
+- No ejecutes localStorage.clear().
+- No publiques ni despliegues.
+- No modifiques producción.
+- No actives pagos, importación, sincronización ni migración real.
+- No uses datos de otro usuario.
+
+OBJETIVO:
+Crear una pantalla o sección visible solo para el usuario autenticado llamada:
+“Inventario de datos” o “Vista previa de migración”.
+
+La pantalla debe leer únicamente los datos locales pertenecientes al user_id autenticado de Clerk y mostrar, sin modificar nada:
+
+1. Por cada entidad local:
+   - viajes,
+   - gastos,
+   - horas/turnos,
+   - metas,
+   - saldo/movimientos,
+   - planes,
+   - configuraciones,
+   - recibos o documentos vinculados,
+   - evaluaciones,
+   mostrar:
+   - clave(s) local(es) detectadas,
+   - cantidad de registros,
+   - total monetario cuando aplique,
+   - total de horas cuando aplique,
+   - rango de fechas,
+   - registros inválidos,
+   - duplicados locales detectados,
+   - hash bruto y hash normalizado,
+   - si hay datos de ejemplo excluidos.
+
+2. Identificar y mostrar por separado:
+   - datos asociados al usuario actual,
+   - claves globales/heredadas,
+   - datos de ejemplo de script.js,
+   - datos que no se pueden atribuir de forma segura al usuario actual.
+   No mezclar ni atribuir automáticamente datos globales al usuario.
+
+3. Mostrar una nota clara:
+   “Esta pantalla no sube, migra, borra ni modifica datos. Es solo una vista previa.”
+
+4. Permitir únicamente:
+   - ver detalles,
+   - copiar o descargar un manifiesto local en formato JSON,
+   - cerrar/volver.
+   La exportación debe generarse localmente y no debe enviarse a un servidor.
+
+5. Incluir un manifiesto con:
+   - versión,
+   - fecha de generación,
+   - user_id enmascarado en la interfaz,
+   - lista de claves detectadas,
+   - conteos,
+   - totales,
+   - hashes,
+   - rangos de fechas,
+   - datos de ejemplo excluidos,
+   - advertencias,
+   - lista preliminar de elementos nuevos, duplicados, conflictos o inválidos cuando sea posible calcularlo sin consultar servidor.
+
+6. Mantener los datos locales intactos.
+   No reemplaces localStorage.clear() en esta fase; solo señala dónde está para una fase futura.
+
+7. Antes de modificar archivos, muéstrame:
+   - la lista de archivos que planeas cambiar,
+   - el diseño de la pantalla,
+   - qué APIs del navegador leerá,
+   - confirmación de que no habrá llamadas de escritura ni acceso a base de datos.
+   Espera mi aprobación antes de editar cualquier archivo.
