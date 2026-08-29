@@ -10,6 +10,7 @@ import gitPushRouter from "./git-push";
 import geminiChatRouter from "./gemini-chat";
 import limosysEvalRouter from "./limosys-eval";
 import tripsRouter from "./trips";
+import meRouter from "./me";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(gitPushRouter);
 router.use(geminiChatRouter);
 router.use(limosysEvalRouter);
 router.use(tripsRouter);
+router.use(meRouter);
 
 export default router;
