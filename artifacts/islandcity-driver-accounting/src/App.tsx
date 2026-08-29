@@ -944,6 +944,46 @@ export default function App() {
     tryRestore();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Cross-device trip sync ───────────────────────────────────────────────
+  // The Android app posts compact entries to the shared API. Merge the
+  // canonical remote list with local browser data by id so existing local
+  // trips remain intact and Android trips appear in Register/Ledger/Reports.
+  useEffect(() => {
+    let cancelled = false;
+    const syncRemoteTrips = async () => {
+      try {
+        const res = await fetch("/api/trips");
+        if (!res.ok) return;
+        const data = await res.json() as { trips?: unknown[] };
+        const remoteTrips = Array.isArray(data.trips) ? data.trips as Trip[] : [];
+        const raw = localStorage.getItem("island-city-trips");
+        const localTrips: Trip[] = raw ? JSON.parse(raw) : [];
+        const byId = new Map<string, Trip>();
+        for (const trip of localTrips) if (trip?.id) byId.set(trip.id, trip);
+        for (const trip of remoteTrips) if (trip?.id) byId.set(trip.id, trip);
+        const merged = Array.from(byId.values()).sort(
+          (a, b) => new Date(b.timestamp || b.date).getTime() - new Date(a.timestamp || a.date).getTime()
+        );
+        if (cancelled) return;
+        if (merged.length !== localTrips.length || merged.some((trip, i) => trip.id !== localTrips[i]?.id)) {
+          syncSaveTrips(merged);
+        }
+        // Upload browser-only records too, making the API the shared source.
+        await Promise.all(localTrips.map(trip =>
+          fetch("/api/trips", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ trip }),
+          }).catch(() => undefined)
+        ));
+      } catch {
+        // Local storage remains the offline source of truth if the API is unavailable.
+      }
+    };
+    void syncRemoteTrips();
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Initial storage check
   useEffect(() => {
     try {

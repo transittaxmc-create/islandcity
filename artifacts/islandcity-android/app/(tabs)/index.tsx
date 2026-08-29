@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  FlatList,
   Platform,
   Pressable,
   ScrollView,
@@ -13,6 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { apiPost } from '@/utils/api';
 
 interface Trip {
   id: string;
@@ -21,6 +21,11 @@ interface Trip {
   total: number;
   time: string;
   date: string;
+}
+
+interface SyncResponse {
+  ok: boolean;
+  error?: string;
 }
 
 const GOLD = '#d9b64f';
@@ -38,6 +43,8 @@ export default function DashboardScreen() {
   const [tip, setTip] = useState('');
   const [goal, setGoal] = useState('400');
   const [logging, setLogging] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
 
   const todayStr = TODAY();
   const todayTrips = trips.filter(t => t.date === todayStr);
@@ -56,6 +63,32 @@ export default function DashboardScreen() {
 
   useEffect(() => { load(); }, [load]);
 
+  const syncTrip = async (trip: Trip) => {
+    try {
+      await apiPost<SyncResponse>('/api/trips', { trip });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const syncAllTrips = useCallback(async (entries: Trip[]) => {
+    if (entries.length === 0) return;
+    setSyncing(true);
+    const results = await Promise.all(entries.map(syncTrip));
+    const synced = results.filter(Boolean).length;
+    setSyncMessage(
+      synced === entries.length
+        ? `${synced} trip${synced === 1 ? '' : 's'} synced`
+        : `${synced}/${entries.length} synced — will retry`,
+    );
+    setSyncing(false);
+  }, []);
+
+  useEffect(() => {
+    if (trips.length > 0) void syncAllTrips(trips);
+  }, [trips, syncAllTrips]);
+
   const logTrip = async () => {
     const f = parseFloat(fare) || 0;
     const t = parseFloat(tip) || 0;
@@ -71,6 +104,8 @@ export default function DashboardScreen() {
     const updated = [newTrip, ...trips];
     setTrips(updated);
     await AsyncStorage.setItem('ic-android-trips', JSON.stringify(updated));
+    const synced = await syncTrip(newTrip);
+    setSyncMessage(synced ? 'Trip synced to web app' : 'Saved on phone — sync will retry');
     setFare(''); setTip('');
     setLogging(false);
   };
@@ -150,6 +185,14 @@ export default function DashboardScreen() {
             placeholderTextColor="#444"
           />
         </View>
+        {syncing || syncMessage ? (
+          <View style={styles.syncRow}>
+            <Feather name={syncing ? 'refresh-cw' : syncMessage.includes('retry') ? 'cloud-off' : 'cloud'} size={12} color={syncMessage.includes('retry') ? '#facc15' : GREEN} />
+            <Text style={[styles.syncText, syncMessage.includes('retry') && { color: '#facc15' }]}>
+              {syncing ? 'Syncing with web app…' : syncMessage}
+            </Text>
+          </View>
+        ) : null}
 
         {/* Quick trip entry */}
         <View style={styles.card}>
@@ -281,4 +324,6 @@ const styles = StyleSheet.create({
   },
   emptyText: { fontSize: 15, color: '#444', fontFamily: 'Inter_600SemiBold' },
   emptySubtext: { fontSize: 12, color: '#333', fontFamily: 'Inter_400Regular' },
+  syncRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 2 },
+  syncText: { fontSize: 10, color: GREEN, fontFamily: 'Inter_500Medium' },
 });
