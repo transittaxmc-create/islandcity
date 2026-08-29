@@ -441,15 +441,30 @@ FROM public.driver_trips;
 
 
 /* ============================================================
-   PASO 10B — SALVAGUARDA NULLABLE PARA driver_trips.user_id
+   PASO 11 — ÍNDICE DE AISLAMIENTO PARA driver_trips
    ============================================================ */
 
-ALTER TABLE public.driver_trips
-  ADD COLUMN IF NOT EXISTS user_id text;
+ALTER TABLE public.driver_trips ADD COLUMN IF NOT EXISTS user_id text;
+CREATE INDEX IF NOT EXISTS driver_trips_user_id_idx
+  ON public.driver_trips (user_id);
 
 
 /* ============================================================
-   PASO 10C — VERIFICACIÓN DESPUÉS DE LA SALVAGUARDA user_id
+   PASO 12 — VERIFICACIÓN DEL ÍNDICE DE driver_trips
+   ============================================================ */
+
+SELECT
+  schemaname,
+  tablename,
+  indexname,
+  indexdef
+FROM pg_indexes
+WHERE schemaname = 'public'
+  AND indexname = 'driver_trips_user_id_idx';
+
+
+/* ============================================================
+   PASO 12A — VERIFICACIÓN DESPUÉS DE LA SALVAGUARDA user_id
    ============================================================ */
 
 SELECT
@@ -493,28 +508,6 @@ FROM public.driver_trips;
   - La huella antes/después debe coincidir; con 0 trips ambas
     huellas representan una tabla sin registros.
 */
-
-
-/* ============================================================
-   PASO 11 — ÍNDICE DE AISLAMIENTO PARA driver_trips
-   ============================================================ */
-
-CREATE INDEX IF NOT EXISTS driver_trips_user_id_idx
-  ON public.driver_trips (user_id);
-
-
-/* ============================================================
-   PASO 12 — VERIFICACIÓN DEL ÍNDICE DE driver_trips
-   ============================================================ */
-
-SELECT
-  schemaname,
-  tablename,
-  indexname,
-  indexdef
-FROM pg_indexes
-WHERE schemaname = 'public'
-  AND indexname = 'driver_trips_user_id_idx';
 
 
 /* ============================================================
