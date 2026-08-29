@@ -1,0 +1,39 @@
+Antes de aprobar, necesito el plan técnico completo para la entrada aislada /inventory.html. No implementes cambios todavía.
+
+Confirma de manera específica:
+
+1. Lista exacta de archivos que crearás o modificarás.
+2. Qué archivo será el punto de entrada de /inventory.html.
+3. El árbol de imports de esa entrada, demostrando que App.tsx no se importa ni directa ni indirectamente.
+4. Cómo cargarás Clerk y protegerás /inventory.html sin reutilizar módulos que monten App.tsx o ejecuten efectos de la aplicación principal.
+5. Confirmación de que /inventory.html no registrará Service Worker ni importará src/main.tsx si src/main.tsx registra Service Worker.
+6. Confirmación de que no importará módulos de:
+   - backups,
+   - sincronización de viajes,
+   - restauración,
+   - GitHub push,
+   - GPS/geolocalización,
+   - reverse geocoding/Nominatim,
+   - Gemini,
+   - LimoSys,
+   - documentos,
+   - reportes,
+   - persistencia de viajes, gastos, horas o finanzas.
+7. Confirmación de que no habrá fetch, axios, llamadas a /api/, SQL, base de datos, POST, PUT, PATCH, DELETE, ni llamadas de red fuera de los recursos necesarios de Clerk y de cargar archivos estáticos.
+8. Confirmación de que no usará:
+   - localStorage.setItem,
+   - localStorage.removeItem,
+   - localStorage.clear,
+   - sessionStorage,
+   - IndexedDB,
+   - AsyncStorage.
+9. Cómo MigrationInventory recibirá solo el user_id autenticado y cómo leerá únicamente claves del usuario actual, mostrando claves globales/heredadas separadas y sin atribuirlas.
+10. Cómo funcionarán “Copiar manifiesto” y “Descargar JSON” sin enviar datos a un servidor.
+11. Plan de prueba manual:
+   - comparar claves permitidas antes y después,
+   - comparar longitudes y hashes,
+   - verificar Network sin /api/backup, /api/trips, /api/git-push, /api/documents, Nominatim, Gemini o LimoSys,
+   - confirmar que cerrar/bloquear Safari no activa escrituras.
+12. Confirmación de que no harás deploy, publish, cambios de base de datos, migraciones ni modificaciones en App.tsx o enforceCleanSlate().
+
+Después de mostrar ese plan, espera mi aprobación explícita antes de modificar cualquier archivo.
