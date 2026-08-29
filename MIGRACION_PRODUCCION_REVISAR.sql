@@ -129,6 +129,7 @@ FROM public.scanned_documents;
 
 CREATE TABLE IF NOT EXISTS public.driver_trips (
   id text PRIMARY KEY,
+  user_id text,
   trip jsonb NOT NULL,
   source text NOT NULL DEFAULT 'web',
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -396,6 +397,105 @@ ORDER BY indexname;
 
 
 /* ============================================================
+   PASO 10A — VERIFICACIÓN ANTES DE LA SALVAGUARDA user_id
+   ============================================================ */
+
+SELECT
+  table_name,
+  column_name,
+  data_type,
+  is_nullable,
+  column_default
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name = 'driver_trips'
+  AND column_name = 'user_id';
+
+SELECT
+  COUNT(*) AS trips_before_user_id_guard,
+  md5(
+    COALESCE(
+      string_agg(
+        concat_ws(
+          '|',
+          id::text,
+          trip::text,
+          source,
+          created_at::text,
+          updated_at::text
+        ),
+        '||' ORDER BY id
+      ),
+      ''
+    )
+  ) AS trips_fingerprint_before_user_id_guard
+FROM public.driver_trips;
+
+
+/*
+  Verificación esperada:
+  - Si driver_trips fue creada en el PASO 2, user_id ya debe aparecer
+    como text y nullable (is_nullable = YES).
+  - trips_before_user_id_guard debe ser 0.
+*/
+
+
+/* ============================================================
+   PASO 10B — SALVAGUARDA NULLABLE PARA driver_trips.user_id
+   ============================================================ */
+
+ALTER TABLE public.driver_trips
+  ADD COLUMN IF NOT EXISTS user_id text;
+
+
+/* ============================================================
+   PASO 10C — VERIFICACIÓN DESPUÉS DE LA SALVAGUARDA user_id
+   ============================================================ */
+
+SELECT
+  table_name,
+  column_name,
+  data_type,
+  is_nullable,
+  column_default
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name = 'driver_trips'
+  AND column_name = 'user_id';
+
+SELECT
+  COUNT(*) AS trips_after_user_id_guard,
+  md5(
+    COALESCE(
+      string_agg(
+        concat_ws(
+          '|',
+          id::text,
+          trip::text,
+          source,
+          created_at::text,
+          updated_at::text
+        ),
+        '||' ORDER BY id
+      ),
+      ''
+    )
+  ) AS trips_fingerprint_after_user_id_guard
+FROM public.driver_trips;
+
+
+/*
+  Verificación esperada:
+  - driver_trips.user_id debe existir.
+  - data_type debe ser text.
+  - is_nullable debe ser YES.
+  - trips_after_user_id_guard debe ser 0.
+  - La huella antes/después debe coincidir; con 0 trips ambas
+    huellas representan una tabla sin registros.
+*/
+
+
+/* ============================================================
    PASO 11 — ÍNDICE DE AISLAMIENTO PARA driver_trips
    ============================================================ */
 
@@ -463,6 +563,8 @@ WHERE schemaname = 'public'
 
 /* ============================================================
    PASO 17 — AUDITORÍA FINAL DE SOLO LECTURA
+   Incluye driver_trips.user_id, driver_backups.user_id y
+   scanned_documents.user_id.
    ============================================================ */
 
 SELECT
