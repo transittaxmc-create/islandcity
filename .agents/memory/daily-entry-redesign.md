@@ -39,3 +39,10 @@ MUST stay in sync with grandTotal logic. otherCash was missing — fixed.
 **Why:** otherCashIncome is a new income category (cash jobs, bonus payments) that wasn't tracked before. Consistency between grandTotal / _tripNet / grossToday is critical for financial accuracy.
 
 **How to apply:** Any display of trip total must include `trip.otherCash ?? 0` for backward compat with trips saved before this field existed.
+
+## Confirmed location card format
+Each captured location is approved as one rounded container ordered: POI/category, editable address once, `GPS lat, lng`, then the localized timestamp. The POI may include its category icon.
+
+**Why:** The user explicitly confirmed this exact presentation as the desired final format for Origin and Destination.
+
+**How to apply:** Preserve this order and single-container layout when changing the location capture UI.
