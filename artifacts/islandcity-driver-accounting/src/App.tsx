@@ -218,6 +218,22 @@ const AIRPORTS = [
   { name: "ISP Airport", lat: 40.7952, lng: -73.1002 },
 ] as const;
 
+const GPS_RELIABLE_ACCURACY_METERS = 100;
+
+function requestFreshGpsPosition(): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Geolocation is not supported"));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: 15000,
+    });
+  });
+}
+
 function extractTerminal(...values: string[]): string | undefined {
   const match = values.join(" ").match(/\b(?:terminal|term\.?)\s*#?\s*([A-Za-z0-9-]+)/i);
   return match ? `Terminal ${match[1]}` : undefined;
