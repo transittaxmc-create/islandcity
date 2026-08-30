@@ -41,8 +41,8 @@ MUST stay in sync with grandTotal logic. otherCash was missing — fixed.
 **How to apply:** Any display of trip total must include `trip.otherCash ?? 0` for backward compat with trips saved before this field existed.
 
 ## Confirmed location card format
-Each captured location is approved as one rounded container ordered: POI/category, editable address once, `GPS lat, lng`, then the localized timestamp. The POI may include its category icon.
+Each Origin/Destination capture is one rounded container ordered: selected icon/category, detected place name, airport terminal when available (or explicit unavailable status), editable `DIRECTIONS`, `LOCATION GPS`, then localized `DATE / TIME`. Selecting a category creates the card immediately; available GPS/TomTom data enriches it without changing the trip-saving contract.
 
-**Why:** The user explicitly confirmed this exact presentation as the desired final format for Origin and Destination.
+**Why:** The user explicitly requested that category buttons populate the corresponding Origin or Destination card with this complete location hierarchy, especially for airports.
 
-**How to apply:** Preserve this order and single-container layout when changing the location capture UI.
+**How to apply:** Preserve this order and single-container layout when changing location capture UI. Keep Directions editable and retain a visible card even when GPS or terminal data is unavailable.
