@@ -1,0 +1,21 @@
+INSTRUCCIÓN DEFINITIVA: CAPTURA POR CAPAS, PARÁMETROS GPS Y RESTAURACIÓN VISUAL
+Por favor ejecuta la implementación de la lógica por capas y la restauración visual en Daily Entry, garantizando la fidelidad total a la lógica de funcionamiento, cálculo y almacenamiento de peajes existente:
+1. Captura GPS independiente y parámetros de API (Backend / Lógica):
+ Configura la llamada GPS del cliente con ⁠enableHighAccuracy: true⁠ y ⁠maximumAge: 0⁠ para forzar lecturas de coordenadas en tiempo real.
+ Cada pulsación en Origin o Destination debe incluir un ⁠timestamp⁠ único en la petición a ⁠/api/geocode⁠ para deshabilitar la caché HTTP y aislar las respuestas.
+ Aplica la arquitectura por capas en el servidor:
+1. Coordenadas reales y precisión GPS (⁠accuracy⁠).
+2. Dirección física por geocodificación inversa.
+3. Categoría neutral para residencias (filtrando y descartando nombres propios aislados como "John S.").
+4. Objeto de datos estructurado para aeropuertos (⁠isAirport⁠, ⁠airportName⁠, ⁠terminal⁠).
+ Mantén el límite estricto de 42 metros para aceptar nombres comerciales de TomTom.
+2. Preservación estricta de la lógica de Peajes (Toll Breakdown & Auto GPS):
+ No tocar el motor de cálculo ni el almacenamiento: Manten intacta toda la lógica matemática, la detección automática por GPS, las funciones de suma y la persitencia de datos (⁠localStorage⁠, estado global o base de datos).
+ Mantén la compatibilidad total para registrar tanto un solo peaje como múltiples peajes en un mismo viaje sin perder ningún dato.
+3. Restauración visual de la interfaz (Frontend UI):
+ Restaura el recuadro TOLL REIMB. GPS AUTO para que esté cerrado por defecto, mostrando únicamente ⁠$ 0.00⁠, con la misma altura, estructura y padding que el recuadro de PLATFORM COMM. (como en la imagen original).
+ Define ⁠showTollBreakdown = false⁠ por defecto.
+ Inicializa el arreglo de peajes como vacío (⁠[]⁠), eliminando el bloque automático ⁠Mar | $ 0⁠. El desglose y el botón ⁠+ ADD TOLL⁠ solo deben desplegarse cuando el usuario interactúe explícitamente con la tarjeta.
+4. Compilación, reinicio e invalidación de caché (Obligatorio):
+ Ejecuta la compilación de producción (⁠build⁠) y reinicia los procesos de la app y la API.
+ Aplica un cambio de versión o cache-buster en el bundle del cliente para garantizar que el navegador cargue de inmediato el diseño limpio y cerrado.
