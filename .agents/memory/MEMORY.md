@@ -14,3 +14,4 @@
 - [Financial data ownership](financial-data-ownership.md) — Clerk identity is server-authoritative; legacy unowned financial rows stay quarantined and invisible.
 - [Clerk production proxy](clerk-production-proxy.md) — Published web clients must pass Replit’s injected Clerk proxy URL or production can remain blank before React mounts.
 - [Toll direction policy](toll-direction-policy.md) — Port Authority charges entering New York only; uncertain direction preserves the charge to avoid missing a real toll.
+- [GPS location capture](gps-location-capture.md) — Origin/Destination use independent button-time fixes; reject stale responses and distant POI names.

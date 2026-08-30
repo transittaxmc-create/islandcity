@@ -923,6 +923,7 @@ export default function App() {
   const [gps, setGps] = useState<GpsState>({ lat: null, lng: null, acc: null, status: "inactive" });
   const [gpsAddress, setGpsAddress] = useState("");
   const [gpsAirport, setGpsAirport] = useState("");
+  const gpsAddressSkipTimestampRef = useRef<number | null>(null);
 
   const [showPickupMenu, setShowPickupMenu] = useState(false);
   const [showDropoffMenu, setShowDropoffMenu] = useState(false);
@@ -1449,6 +1450,10 @@ export default function App() {
       setGpsAirport(`${nearest.name} (${nearest.dist.toFixed(1)} km)`);
     } else {
       setGpsAirport("");
+    }
+    if (gps.timestamp && gpsAddressSkipTimestampRef.current === gps.timestamp) {
+      gpsAddressSkipTimestampRef.current = null;
+      return;
     }
     const controller = new AbortController();
     (async () => {
@@ -3929,6 +3934,7 @@ export default function App() {
                 lng = position.coords.longitude;
                 accuracy = position.coords.accuracy ?? 999;
                 capturedAt = new Date(position.timestamp || Date.now());
+                gpsAddressSkipTimestampRef.current = position.timestamp;
                 setGps({ lat, lng, acc: accuracy, timestamp: position.timestamp, status: "active" });
               } catch {
                 if (requestId !== locationCaptureRequestRef.current.pickup) return;
@@ -3946,6 +3952,7 @@ export default function App() {
                 const capture = await reverseGeocodeRich(lat, lng, undefined, capturedAt, undefined, accuracy);
                 if (requestId !== locationCaptureRequestRef.current.pickup) return;
                 setPickupLocationCapture(capture);
+                setGpsAddress(capture.physicalAddress);
                 setTripForm(s => ({
                   ...s,
                   pickup: capture.physicalAddress,
@@ -3962,7 +3969,9 @@ export default function App() {
                   pickupTimestamp: capture.timestamp,
                 }));
                 showToast("GPS coordinates saved (offline)");
-              } finally { setPickupResolving(false); }
+              } finally {
+                if (requestId === locationCaptureRequestRef.current.pickup) setPickupResolving(false);
+              }
             }} className="flex-shrink-0 w-9 h-8 rounded-lg bg-[#052e16] border border-[#166534] flex items-center justify-center text-[10px] font-bold text-[#4ade80] active:scale-90 transition-all">
               {pickupResolving ? <span className="animate-spin text-[10px]">⏳</span> : "GPS"}
             </button>
@@ -4034,6 +4043,7 @@ export default function App() {
                 lng = position.coords.longitude;
                 accuracy = position.coords.accuracy ?? 999;
                 capturedAt = new Date(position.timestamp || Date.now());
+                gpsAddressSkipTimestampRef.current = position.timestamp;
                 setGps({ lat, lng, acc: accuracy, timestamp: position.timestamp, status: "active" });
               } catch {
                 if (requestId !== locationCaptureRequestRef.current.dropoff) return;
@@ -4051,6 +4061,7 @@ export default function App() {
                 const capture = await reverseGeocodeRich(lat, lng, undefined, capturedAt, undefined, accuracy);
                 if (requestId !== locationCaptureRequestRef.current.dropoff) return;
                 setDropoffLocationCapture(capture);
+                setGpsAddress(capture.physicalAddress);
                 setTripForm(s => ({
                   ...s,
                   dropoff: capture.physicalAddress,
@@ -4067,7 +4078,9 @@ export default function App() {
                   dropoffTimestamp: capture.timestamp,
                 }));
                 showToast("GPS coordinates saved (offline)");
-              } finally { setDropoffResolving(false); }
+              } finally {
+                if (requestId === locationCaptureRequestRef.current.dropoff) setDropoffResolving(false);
+              }
             }} className="flex-shrink-0 w-9 h-8 rounded-lg bg-[#0c1a33] border border-[#1e3a8a] flex items-center justify-center text-[10px] font-bold text-[#60a5fa] active:scale-90 transition-all">
               {dropoffResolving ? <span className="animate-spin text-[10px]">⏳</span> : "GPS"}
             </button>
@@ -4136,6 +4149,7 @@ export default function App() {
                   const lng = position.coords.longitude;
                   const accuracy = position.coords.accuracy ?? 999;
                   const capturedAt = new Date(position.timestamp || Date.now());
+                  gpsAddressSkipTimestampRef.current = position.timestamp;
                   setGps({ lat, lng, acc: accuracy, timestamp: position.timestamp, status: "active" });
                   applyCapture(fallbackLocationCapture(lat, lng, capturedAt, cat, accuracy));
                   if (accuracy > GPS_RELIABLE_ACCURACY_METERS) {
@@ -4143,7 +4157,9 @@ export default function App() {
                     return;
                   }
                   try {
-                    applyCapture(await reverseGeocodeRich(lat, lng, undefined, capturedAt, cat, accuracy));
+                    const capture = await reverseGeocodeRich(lat, lng, undefined, capturedAt, cat, accuracy);
+                    applyCapture(capture);
+                    if (requestId === locationCaptureRequestRef.current[target]) setGpsAddress(capture.physicalAddress);
                     showToast(`${target === "pickup" ? "Pickup" : "Drop-off"} GPS confirmed ✓`);
                   } catch {
                     showToast("GPS coordinates confirmed · address service unavailable");
