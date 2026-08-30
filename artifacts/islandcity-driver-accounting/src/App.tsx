@@ -4410,17 +4410,11 @@ export default function App() {
             {detectedToll && (
               <p className="text-[8px] text-neutral-600 font-mono-jet mb-1 -mt-1">{detectedToll.plaza} · ${detectedToll.rate.toFixed(2)}{detectedToll.rate === 16.79 ? " Peak" : detectedToll.rate === 14.79 ? " Off-pk" : ""}</p>
             )}
-            <div className="flex items-center">
+            <div className="flex items-center" aria-label="Automatic toll reimbursement">
               <span className="text-neutral-500 text-[13px] mr-1.5">$</span>
-              <input inputMode="decimal" value={tripForm.toll}
-                onChange={e => {
-                  if (!numericFilter(e.target.value)) return;
-                  setTripForm(s => ({ ...s, toll: e.target.value }));
-                  setTollManuallyEdited(true);
-                }}
-                 onBlur={reconcileManualTollTotal}
-                placeholder="0.00"
-                className="flex-1 bg-transparent text-white text-[20px] font-bold font-mono-jet placeholder:text-[#2a2a2a] focus:outline-none" />
+              <span className="flex-1 bg-transparent text-white text-[20px] font-bold font-mono-jet">
+                {(parseFloat(tripForm.toll) || 0).toFixed(2)}
+              </span>
             </div>
           </div>
 
