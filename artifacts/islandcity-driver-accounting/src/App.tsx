@@ -1627,6 +1627,10 @@ export default function App() {
         pickupTimestamp: "", dropoffTimestamp: "", notes: "",
         tripDate: todayYMD, tripTime: now.toTimeString().slice(0, 5), tripMiles: "",
       });
+      replaceTripTollEvents([]);
+      setDetectedToll(null);
+      setTollManuallyEdited(false);
+      lastDetectedPlazaRef.current = null;
       setEditingId(null);
       showToast(`Nuevo día ${todayYMD} · pantallas limpias ✓`);
     }
