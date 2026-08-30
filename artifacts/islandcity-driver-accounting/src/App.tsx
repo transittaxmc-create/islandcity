@@ -735,11 +735,14 @@ export default function App() {
       reference: "", earnings: "", tips: "", extraCash: "", otherCashIncome: "", toll: "",
       platformFee: "", platform: "Uber", pickup: "", dropoff: "",
       pickupTimestamp: "", dropoffTimestamp: "", notes: "",
-      tripDate: "",
-      tripTime: "",
+      tripDate: toYYYYMMDD(new Date()),
+      tripTime: new Date().toTimeString().slice(0, 5),
       tripMiles: "",
     };
   });
+  const entryDateManuallySetRef = useRef(false);
+  const entryTimeManuallySetRef = useRef(false);
+  const entryAutoDayRef = useRef(toYYYYMMDD(new Date()));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showPlatformDropdown, setShowPlatformDropdown] = useState(false);
   const [inlineEditId, setInlineEditId] = useState<string | null>(null);
@@ -922,6 +925,20 @@ export default function App() {
     const id = window.setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(id);
   }, []);
+
+  // Keep the automatic date/time current for a new entry when the calendar
+  // day changes, without overwriting an explicit driver selection.
+  useEffect(() => {
+    const today = toYYYYMMDD(currentTime);
+    if (today === entryAutoDayRef.current) return;
+    entryAutoDayRef.current = today;
+    if (editingId) return;
+    setTripForm(s => ({
+      ...s,
+      ...(entryDateManuallySetRef.current ? {} : { tripDate: today }),
+      ...(entryTimeManuallySetRef.current ? {} : { tripTime: currentTime.toTimeString().slice(0, 5) }),
+    }));
+  }, [currentTime, editingId]);
 
   // Persist trips
   useEffect(() => {
@@ -1462,11 +1479,14 @@ export default function App() {
 
     if (isNewDay) {
       // New day — reset entry form so the screen starts clean
+      entryDateManuallySetRef.current = false;
+      entryTimeManuallySetRef.current = false;
+      entryAutoDayRef.current = todayYMD;
       setTripForm({
         reference: "", earnings: "", tips: "", extraCash: "", otherCashIncome: "", toll: "",
         platformFee: "", platform: "Uber", pickup: "", dropoff: "",
         pickupTimestamp: "", dropoffTimestamp: "", notes: "",
-        tripDate: "", tripTime: "", tripMiles: "",
+        tripDate: todayYMD, tripTime: now.toTimeString().slice(0, 5), tripMiles: "",
       });
       setEditingId(null);
       showToast(`Nuevo día ${todayYMD} · pantallas limpias ✓`);
@@ -1781,6 +1801,7 @@ export default function App() {
   }, [currentTime, grossToday, todayGoal, perHourGross]);
 
   const resetForm = () => {
+    const _nr = new Date();
     // Stop any active trip tracking without saving miles (trip was cancelled/reset)
     if (tripWatchIdRef.current !== null) {
       try { navigator.geolocation.clearWatch(tripWatchIdRef.current); } catch {}
@@ -1790,9 +1811,12 @@ export default function App() {
     tripMilesRef.current   = 0;
     setTripTracking(false);
     setTripMilesDisplay(0);
+    entryDateManuallySetRef.current = false;
+    entryTimeManuallySetRef.current = false;
+    entryAutoDayRef.current = toYYYYMMDD(_nr);
     setTripForm({ reference: "", earnings: "", tips: "", extraCash: "", otherCashIncome: "", toll: "", platformFee: "", platform: "Uber", pickup: "", dropoff: "",
       pickupTimestamp: "", dropoffTimestamp: "", notes: "",
-      tripDate: "", tripTime: "", tripMiles: "" });
+      tripDate: toYYYYMMDD(_nr), tripTime: _nr.toTimeString().slice(0, 5), tripMiles: "" });
     setPickupLocationCapture(null);
     setDropoffLocationCapture(null);
     setEditingId(null);
@@ -1850,6 +1874,8 @@ export default function App() {
 
   const handleEditToEntry = (trip: Trip) => {
     setEditingId(trip.id);
+    entryDateManuallySetRef.current = true;
+    entryTimeManuallySetRef.current = true;
     const _tsDt = (() => { try { return new Date(trip.timestamp || (trip.date + 'T12:00:00')); } catch { return new Date(); } })();
     setTripForm({
       reference: trip.reference, earnings: String(trip.earnings), tips: String(trip.tips),
@@ -3428,35 +3454,6 @@ export default function App() {
               textShadow: grandTotalLive > 0 ? "0 0 16px rgba(250,204,21,0.55)" : "none" }}>
             ${grandTotalLive.toFixed(2)}
           </p>
-        </div>
-      </div>
-
-      {/* ══ FARE TYPE — quick chips (top 3 platforms by history) ══ */}
-      <div className="pt-1 pb-2">
-        <p className="text-[9px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-2">FARE TYPE</p>
-        <div className="grid grid-cols-3 gap-2">
-          {topPlatforms.map(name => {
-            const m = getPlatformMeta(name);
-            const isSel = tripForm.platform === name;
-            const short = name === "Aventus Ride" ? "Aventus" : name === "Classic Ryde" ? "Classic" : name === "Island City Transit" ? "IC Transit" : name;
-            return (
-              <button key={name} type="button"
-                onClick={() => { setTripForm(s => ({ ...s, platform: name })); setShowPlatformDropdown(false); }}
-                className="h-[46px] rounded-2xl flex items-center gap-2 px-3 transition-all active:scale-95 border-2"
-                style={{
-                  background: isSel ? "rgba(250,204,21,0.1)" : "#0f0f0f",
-                  borderColor: isSel ? "#facc15" : "#2e2e2e",
-                  boxShadow: isSel ? "0 0 12px rgba(250,204,21,0.22)" : "none",
-                }}>
-                <div className={`w-7 h-7 rounded-full ${m.logoBg ?? "bg-white"} flex items-center justify-center flex-shrink-0 overflow-hidden border border-white/10`}>
-                  {m.logo ? <img src={m.logo} alt={name} className={`w-full h-full ${(m.logoBg && m.logoBg !== "bg-white") ? "object-cover" : "object-contain"}`} />
-                    : <span className="text-[9px] font-black text-black">{m.initial}</span>}
-                </div>
-                <span className="text-[11px] font-bold truncate leading-none" style={{ color: isSel ? "#facc15" : "#888" }}>{short}</span>
-                {isSel && <span className="ml-auto text-[#facc15] text-[10px] flex-shrink-0">✓</span>}
-              </button>
-            );
-          })}
         </div>
       </div>
 
