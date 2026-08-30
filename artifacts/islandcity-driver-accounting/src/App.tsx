@@ -3599,24 +3599,26 @@ export default function App() {
         <p className="text-[9px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-1.5">
           ORIGIN <span className="text-neutral-600 normal-case font-normal tracking-normal">· Pickup Location</span>
         </p>
-        <div className="rounded-xl bg-[#080808] px-3 border"
-          style={{ minHeight: 54, borderColor: "#444" }}>
+        <div className={`rounded-xl bg-[#080808] px-3 border overflow-hidden ${pickupLocationCapture ? "h-[112px]" : "min-h-[54px]"}`}
+          style={{ borderColor: "#444" }}>
           {pickupLocationCapture && (
-            <div className="py-1.5 flex items-center gap-2 min-w-0">
+            <div className="h-[42px] flex items-center gap-2 min-w-0">
               <span className="text-[17px] leading-none flex-shrink-0">{pickupLocationCapture.categoryIcon ?? pickupLocationCapture.poiHeader.split(" ")[0]}</span>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 min-w-0 leading-tight">
+                <div className="flex items-center gap-1.5 min-w-0 leading-tight h-[18px]">
                   <span className="text-[8px] text-neutral-500 font-bold uppercase tracking-wider flex-shrink-0">
                     {pickupLocationCapture.category ?? "LOCATION"}
                   </span>
                   <p className="text-[12px] font-bold text-white truncate">
                     {pickupLocationCapture.locationName ?? pickupLocationCapture.poiHeader.replace(/^\S+\s*/, "")}
                   </p>
-                  {pickupLocationCapture.terminal && (
-                    <span className="text-[9px] text-[#facc15] font-semibold truncate flex-shrink-0">· {pickupLocationCapture.terminal}</span>
-                  )}
                 </div>
-                <p className="text-[9px] text-neutral-400 leading-tight truncate">{pickupLocationCapture.cityState}</p>
+                <div className="flex items-center gap-2 min-w-0 h-[16px]">
+                  {pickupLocationCapture.terminal && (
+                    <span className="text-[9px] text-[#facc15] font-semibold truncate flex-shrink-0">{pickupLocationCapture.terminal}</span>
+                  )}
+                  <p className="text-[9px] text-neutral-400 leading-tight truncate">{pickupLocationCapture.cityState}</p>
+                </div>
               </div>
             </div>
           )}
@@ -3669,24 +3671,26 @@ export default function App() {
         <p className="text-[9px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-1.5">
           DESTINATION <span className="text-neutral-600 normal-case font-normal tracking-normal">· Drop-off Location</span>
         </p>
-        <div className="rounded-xl bg-[#080808] px-3 border"
-          style={{ minHeight: 54, borderColor: "#444" }}>
+        <div className={`rounded-xl bg-[#080808] px-3 border overflow-hidden ${dropoffLocationCapture ? "h-[112px]" : "min-h-[54px]"}`}
+          style={{ borderColor: "#444" }}>
           {dropoffLocationCapture && (
-            <div className="py-1.5 flex items-center gap-2 min-w-0">
+            <div className="h-[42px] flex items-center gap-2 min-w-0">
               <span className="text-[17px] leading-none flex-shrink-0">{dropoffLocationCapture.categoryIcon ?? dropoffLocationCapture.poiHeader.split(" ")[0]}</span>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 min-w-0 leading-tight">
+                <div className="flex items-center gap-1.5 min-w-0 leading-tight h-[18px]">
                   <span className="text-[8px] text-neutral-500 font-bold uppercase tracking-wider flex-shrink-0">
                     {dropoffLocationCapture.category ?? "LOCATION"}
                   </span>
                   <p className="text-[12px] font-bold text-white truncate">
                     {dropoffLocationCapture.locationName ?? dropoffLocationCapture.poiHeader.replace(/^\S+\s*/, "")}
                   </p>
-                  {dropoffLocationCapture.terminal && (
-                    <span className="text-[9px] text-[#facc15] font-semibold truncate flex-shrink-0">· {dropoffLocationCapture.terminal}</span>
-                  )}
                 </div>
-                <p className="text-[9px] text-neutral-400 leading-tight truncate">{dropoffLocationCapture.cityState}</p>
+                <div className="flex items-center gap-2 min-w-0 h-[16px]">
+                  {dropoffLocationCapture.terminal && (
+                    <span className="text-[9px] text-[#facc15] font-semibold truncate flex-shrink-0">{dropoffLocationCapture.terminal}</span>
+                  )}
+                  <p className="text-[9px] text-neutral-400 leading-tight truncate">{dropoffLocationCapture.cityState}</p>
+                </div>
               </div>
             </div>
           )}
