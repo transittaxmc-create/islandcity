@@ -1961,6 +1961,7 @@ export default function App() {
     setEditingId(null);
     setDetectedToll(null);
     setTollManuallyEdited(false);
+    replaceTripTollEvents([]);
     lastDetectedPlazaRef.current = null;
   };
 
@@ -1990,6 +1991,7 @@ export default function App() {
       timestamp: (() => { try { return new Date(`${savedTripDate}T${savedTripTime}:00`).toISOString(); } catch { return now.toISOString(); } })(),
       gps: gps.lat && gps.lng ? { lat: gps.lat, lng: gps.lng, acc: gps.acc ?? undefined } : undefined,
       miles: tripMi > 0 ? tripMi : undefined,
+      tollEvents: tripTollEventsRef.current.length > 0 ? [...tripTollEventsRef.current] : undefined,
       status: "pending" as const,
       reviewed: false,
     };
@@ -2012,6 +2014,16 @@ export default function App() {
   };
 
   const handleEditToEntry = (trip: Trip) => {
+    const restoredTollEvents = Array.isArray(trip.tollEvents) ? trip.tollEvents : [];
+    const detectedTollTotal = restoredTollEvents.reduce((sum, event) => sum + event.rate, 0);
+    replaceTripTollEvents(restoredTollEvents);
+    const latestToll = restoredTollEvents.at(-1);
+    setDetectedToll(latestToll ? { plaza: latestToll.plaza, rate: latestToll.rate, at: latestToll.at } : null);
+    setTollManuallyEdited(
+      restoredTollEvents.length === 0
+        ? trip.toll > 0
+        : Math.abs(detectedTollTotal - trip.toll) >= 0.01
+    );
     setEditingId(trip.id);
     entryDateManuallySetRef.current = true;
     entryTimeManuallySetRef.current = true;
