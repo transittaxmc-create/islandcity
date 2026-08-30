@@ -1102,7 +1102,7 @@ export default function App() {
     if (!navigator.geolocation) return;
     setGps(s => ({ ...s, status: "searching" }));
     navigator.geolocation.getCurrentPosition(
-      pos => setGps({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy ?? null, status: "active" }),
+      pos => setGps({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy ?? null, timestamp: pos.timestamp, status: "active" }),
       () => setGps(s => ({ ...s, status: "inactive" })),
       { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 }
     );
@@ -1314,7 +1314,7 @@ export default function App() {
           }
         }
         prevGpsRef.current = { lat: newLat, lng: newLng };
-        setGps({ lat: newLat, lng: newLng, acc: newAcc, status: "active" });
+        setGps({ lat: newLat, lng: newLng, acc: newAcc, timestamp: pos.timestamp, status: "active" });
       },
       () => setGps(s => ({ ...s, status: "error" })),
       { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
@@ -3039,7 +3039,7 @@ export default function App() {
               if (!navigator.geolocation) return;
               setGps(s => ({ ...s, status: "searching" }));
               navigator.geolocation.getCurrentPosition(
-                pos => setGps({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy ?? null, status: "active" }),
+                pos => setGps({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy ?? null, timestamp: pos.timestamp, status: "active" }),
                 () => setGps(s => ({ ...s, status: "error" })),
                 { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 }
               );
