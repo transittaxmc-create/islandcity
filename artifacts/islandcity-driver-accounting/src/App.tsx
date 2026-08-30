@@ -292,16 +292,15 @@ async function reverseGeocodeRich(
   const addr = data.address || {};
   const poi = data.poi;
   const categories = (poi?.categories || []).map(category => category.toLowerCase());
-  const city = addr.municipality || addr.municipalitySubdivision || addr.countrySubdivision || "";
   const coordText = `GPS ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 
   // 3. Build the independent POI/category header.
   let poiHeader = "🏡 Residencial";
-  if (nearAirport && nearAirport.dist < 2) {
+  if (poi && categories.some(category => category.includes("airport"))) {
+    poiHeader = `✈️ ${poi.name}`;
+  } else if (nearAirport && nearAirport.dist < 2) {
     // Within 2 km of known airport → airport name
     poiHeader = `✈️ ${nearAirport.name}`;
-  } else if (poi && categories.some(category => category.includes("airport"))) {
-    poiHeader = `✈️ ${poi.name}`;
   } else if (poi && categories.some(category => category.includes("hospital"))) {
     poiHeader = `🏥 ${poi.name}`;
   } else if (poi && (poi.distanceMeters ?? Infinity) <= 80) {
@@ -318,12 +317,14 @@ async function reverseGeocodeRich(
   const street = [addr.streetNumber, addr.streetName].filter(Boolean).join(" ");
   const locality = [addr.borough || addr.municipalitySubdivision, addr.municipality]
     .filter((part, index, all) => Boolean(part) && all.indexOf(part) === index);
-  const region = [addr.countrySubdivision, addr.postalCode].filter(Boolean).join(" ");
-  const physicalAddress = [
-    street || addr.freeformAddress,
-    ...locality,
-    region,
-  ].filter(Boolean).join(", ") || "Dirección no disponible";
+  const state = addr.countrySubdivision
+    ? (STATE_ABBR[addr.countrySubdivision] || addr.countrySubdivision)
+    : "";
+  const region = [state, addr.postalCode].filter(Boolean).join(" ");
+  const structuredAddress = [street, ...locality, region].filter(Boolean).join(", ");
+  const physicalAddress = (
+    street ? structuredAddress : (addr.freeformAddress || [...locality, region].filter(Boolean).join(", "))
+  ) || "Dirección no disponible";
 
   return {
     poiHeader,
