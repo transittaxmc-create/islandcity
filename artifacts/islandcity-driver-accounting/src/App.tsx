@@ -64,6 +64,10 @@ type LocationCapture = {
   physicalAddress: string;
   coordinates: string;
   timestamp: string;
+  category?: string;
+  categoryIcon?: string;
+  locationName?: string;
+  terminal?: string;
 };
 
 type HoursEntry = {
@@ -199,12 +203,23 @@ const LOCATION_CATEGORIES = [
   "Airport", "Restaurant", "Train/Bus", "Hotel", "Tourist",
 ] as const;
 
+const LOCATION_CATEGORY_ICONS: Record<string, string> = {
+  Hospital: "🏥", City: "🏙", Home: "🏠", Suburbs: "🌳",
+  Office: "🏢", Airport: "✈️", Restaurant: "🍽", "Train/Bus": "🚉",
+  Hotel: "🏨", Tourist: "🌍",
+};
+
 const AIRPORTS = [
   { name: "JFK Airport", lat: 40.6413, lng: -73.7781 },
   { name: "LGA Airport", lat: 40.7769, lng: -73.874 },
   { name: "Newark Airport (EWR)", lat: 40.6895, lng: -74.1745 },
   { name: "ISP Airport", lat: 40.7952, lng: -73.1002 },
 ] as const;
+
+function extractTerminal(...values: string[]): string | undefined {
+  const match = values.join(" ").match(/\b(?:terminal|term\.?)\s*#?\s*([A-Za-z0-9-]+)/i);
+  return match ? `Terminal ${match[1]}` : undefined;
+}
 
 // IRS standard mileage rates by confirmed tax year — verify each year at irs.gov before filing.
 // 2022 is intentionally excluded: IRS used two rates that year ($0.585 Jan–Jun, $0.625 Jul–Dec)
@@ -290,7 +305,7 @@ const STATE_ABBR: Record<string, string> = {
 };
 
 async function reverseGeocodeRich(
-  lat: number, lng: number, signal?: AbortSignal, capturedAt = new Date()
+  lat: number, lng: number, signal?: AbortSignal, capturedAt = new Date(), selectedCategory?: string
 ): Promise<LocationCapture> {
   // 1. Airport proximity (within 5 km → likely at the airport)
   let nearAirport: { name: string; dist: number } | null = null;
@@ -364,12 +379,26 @@ async function reverseGeocodeRich(
     street ? structuredAddress : (addr.freeformAddress || [...locality, region].filter(Boolean).join(", "))
   ) || "Dirección no disponible";
 
+  const categoryIcon = selectedCategory ? (LOCATION_CATEGORY_ICONS[selectedCategory] || "📌") : poiHeader.split(" ")[0];
+  const locationName = selectedCategory
+    ? (selectedCategory === "Airport"
+      ? (poi?.name || nearAirport?.name || "Airport")
+      : (poi?.name || selectedCategory))
+    : poiHeader.replace(/^\S+\s*/, "");
+  const terminal = selectedCategory === "Airport"
+    ? (extractTerminal(poi?.name || "", physicalAddress) || "Terminal # unavailable")
+    : undefined;
+
   return {
-    poiHeader,
+    poiHeader: `${categoryIcon} ${locationName}`,
     cityState,
     physicalAddress,
     coordinates: coordText,
     timestamp: formatLocationTimestamp(capturedAt),
+    category: selectedCategory,
+    categoryIcon,
+    locationName,
+    terminal,
   };
 }
 
@@ -382,13 +411,22 @@ function formatLocationTimestamp(date: Date): string {
   return `${weekdays[date.getDay()]} ${String(date.getDate()).padStart(2, "0")} ${months[date.getMonth()]} ${date.getFullYear()} · ${hour12}:${minute} ${hours >= 12 ? "PM" : "AM"}`;
 }
 
-function fallbackLocationCapture(lat: number, lng: number, capturedAt: Date): LocationCapture {
+function fallbackLocationCapture(
+  lat: number | null, lng: number | null, capturedAt: Date, selectedCategory?: string
+): LocationCapture {
+  const categoryIcon = selectedCategory ? (LOCATION_CATEGORY_ICONS[selectedCategory] || "📌") : "🏡";
+  const locationName = selectedCategory || "Residencial";
+  const hasCoordinates = lat !== null && lng !== null;
   return {
-    poiHeader: "🏡 Residencial",
+    poiHeader: `${categoryIcon} ${locationName}`,
     cityState: "City / state unavailable",
-    physicalAddress: "Dirección no disponible",
-    coordinates: `GPS ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+    physicalAddress: selectedCategory ? `${locationName} · enter address in Directions` : "Dirección no disponible",
+    coordinates: hasCoordinates ? `GPS ${lat.toFixed(4)}, ${lng!.toFixed(4)}` : "GPS unavailable",
     timestamp: formatLocationTimestamp(capturedAt),
+    category: selectedCategory,
+    categoryIcon,
+    locationName,
+    terminal: selectedCategory === "Airport" ? "Terminal # unavailable" : undefined,
   };
 }
 
