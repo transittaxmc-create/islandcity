@@ -46,3 +46,10 @@ Each Origin/Destination capture is one rounded container ordered: selected icon/
 **Why:** The user explicitly requested that category buttons populate the corresponding Origin or Destination card with this complete location hierarchy, especially for airports.
 
 **How to apply:** Preserve this order and single-container layout when changing location capture UI. Keep Directions editable and retain a visible card even when GPS or terminal data is unavailable; group the rows compactly so captured cards stay close to the original height on mobile.
+
+## Fixed mobile shell
+The app viewport is a fixed-height shell and the active content panel is the only vertical scroll container. Horizontal overflow stays blocked; the TRIPS sub-navigation and bottom tab bar remain outside the scrolling panel.
+
+**Why:** Allowing the root shell itself to scroll caused Daily Entry to shift and lose alignment against fixed navigation and floating controls on mobile.
+
+**How to apply:** Keep the outer app shell at the dynamic viewport height with overflow hidden. Add long page content inside the existing internal vertical scroller rather than restoring root-level scrolling.
