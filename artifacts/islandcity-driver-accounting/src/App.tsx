@@ -1274,7 +1274,7 @@ export default function App() {
     const controller = new AbortController();
     (async () => {
       try {
-        const rich = await reverseGeocodeRich(gps.lat!, gps.lng!, controller.signal);
+        const rich = await reverseGeocodeRich(gps.lat!, gps.lng!, controller.signal, new Date(), undefined, gps.acc ?? undefined);
         setGpsAddress(rich.physicalAddress);
       } catch {}
     })();
@@ -3656,7 +3656,7 @@ export default function App() {
               const capturedAt = new Date();
               setPickupResolving(true);
               try {
-                const capture = await reverseGeocodeRich(gps.lat, gps.lng, undefined, capturedAt);
+                const capture = await reverseGeocodeRich(gps.lat, gps.lng, undefined, capturedAt, undefined, gps.acc ?? undefined);
                 setPickupLocationCapture(capture);
                 setTripForm(s => ({
                   ...s,
@@ -3665,7 +3665,7 @@ export default function App() {
                 }));
                 showToast("Pickup resolved ✓");
               } catch {
-                const capture = fallbackLocationCapture(gps.lat, gps.lng, capturedAt);
+                const capture = fallbackLocationCapture(gps.lat, gps.lng, capturedAt, undefined, gps.acc);
                 setPickupLocationCapture(capture);
                 setTripForm(s => ({
                   ...s,
@@ -3728,7 +3728,7 @@ export default function App() {
               const capturedAt = new Date();
               setDropoffResolving(true);
               try {
-                const capture = await reverseGeocodeRich(gps.lat, gps.lng, undefined, capturedAt);
+                const capture = await reverseGeocodeRich(gps.lat, gps.lng, undefined, capturedAt, undefined, gps.acc ?? undefined);
                 setDropoffLocationCapture(capture);
                 setTripForm(s => ({
                   ...s,
@@ -3737,7 +3737,7 @@ export default function App() {
                 }));
                 showToast("Drop-off resolved ✓");
               } catch {
-                const capture = fallbackLocationCapture(gps.lat, gps.lng, capturedAt);
+                const capture = fallbackLocationCapture(gps.lat, gps.lng, capturedAt, undefined, gps.acc);
                 setDropoffLocationCapture(capture);
                 setTripForm(s => ({
                   ...s,
@@ -3784,7 +3784,7 @@ export default function App() {
               <button key={cat} type="button" onClick={() => {
                 const target = showPickupMenu ? "pickup" : "dropoff";
                 const capturedAt = new Date();
-                const immediateCapture = fallbackLocationCapture(gps.lat, gps.lng, capturedAt, cat);
+                const immediateCapture = fallbackLocationCapture(gps.lat, gps.lng, capturedAt, cat, gps.acc);
                 const applyCapture = (capture: LocationCapture) => {
                   if (target === "pickup") {
                     setPickupLocationCapture(capture);
@@ -3797,7 +3797,7 @@ export default function App() {
 
                 applyCapture(immediateCapture);
                 if (gps.lat !== null && gps.lng !== null) {
-                  reverseGeocodeRich(gps.lat, gps.lng, undefined, capturedAt, cat)
+                  reverseGeocodeRich(gps.lat, gps.lng, undefined, capturedAt, cat, gps.acc ?? undefined)
                     .then(applyCapture)
                     .catch(() => { /* the immediate GPS/category card remains visible offline */ });
                 }
