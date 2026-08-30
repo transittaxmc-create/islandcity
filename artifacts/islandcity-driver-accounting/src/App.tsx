@@ -60,6 +60,7 @@ type GpsState = {
 
 type LocationCapture = {
   poiHeader: string;
+  cityState: string;
   physicalAddress: string;
   coordinates: string;
   timestamp: string;
@@ -355,6 +356,9 @@ async function reverseGeocodeRich(
     ? (STATE_ABBR[addr.countrySubdivision] || addr.countrySubdivision)
     : "";
   const region = [state, addr.postalCode].filter(Boolean).join(" ");
+  const cityState = [addr.municipality || addr.municipalitySubdivision, state]
+    .filter((part, index, all) => Boolean(part) && all.indexOf(part) === index)
+    .join(", ") || "City / state unavailable";
   const structuredAddress = [street, ...locality, region].filter(Boolean).join(", ");
   const physicalAddress = (
     street ? structuredAddress : (addr.freeformAddress || [...locality, region].filter(Boolean).join(", "))
@@ -362,6 +366,7 @@ async function reverseGeocodeRich(
 
   return {
     poiHeader,
+    cityState,
     physicalAddress,
     coordinates: coordText,
     timestamp: formatLocationTimestamp(capturedAt),
@@ -380,6 +385,7 @@ function formatLocationTimestamp(date: Date): string {
 function fallbackLocationCapture(lat: number, lng: number, capturedAt: Date): LocationCapture {
   return {
     poiHeader: "🏡 Residencial",
+    cityState: "City / state unavailable",
     physicalAddress: "Dirección no disponible",
     coordinates: `GPS ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
     timestamp: formatLocationTimestamp(capturedAt),
@@ -3520,21 +3526,33 @@ export default function App() {
         )}
       </div>
 
-      {/* ══ GROSS FARE — hero field ════════════════════════════════ */}
+      {/* ══ GROSS FARE + REF ═══════════════════════════════════════ */}
       <div className="border-t border-[#252525] pt-3 pb-3">
-        <p className="text-[9px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-2">GROSS FARE</p>
-        <div className="flex items-center rounded-2xl transition-all"
-          style={{
-            height: 72, background: "#080808",
-            border: `2.5px solid ${tripForm.earnings ? "#facc15" : "#333"}`,
-            boxShadow: tripForm.earnings ? "0 0 24px rgba(250,204,21,0.18)" : "none",
-          }}>
-          <span className="pl-4 font-black select-none" style={{ fontSize: 30, color: tripForm.earnings ? "#facc15" : "#555" }}>$</span>
-          <input inputMode="decimal" value={tripForm.earnings}
-            onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, earnings: e.target.value })); }}
-            placeholder="0.00"
-            className="flex-1 h-full bg-transparent pl-2 pr-4 font-black font-mono-jet placeholder:text-[#2a2a2a] focus:outline-none"
-            style={{ fontSize: 42, color: tripForm.earnings ? "#facc15" : undefined }} />
+        <div className="grid grid-cols-[minmax(0,1fr)_140px] gap-2 items-end">
+          <div className="min-w-0">
+            <p className="text-[9px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-2">GROSS FARE</p>
+            <div className="flex items-center rounded-2xl transition-all"
+              style={{
+                height: 72, background: "#080808",
+                border: `2.5px solid ${tripForm.earnings ? "#facc15" : "#333"}`,
+                boxShadow: tripForm.earnings ? "0 0 24px rgba(250,204,21,0.18)" : "none",
+              }}>
+              <span className="pl-4 font-black select-none" style={{ fontSize: 30, color: tripForm.earnings ? "#facc15" : "#555" }}>$</span>
+              <input inputMode="decimal" value={tripForm.earnings}
+                onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, earnings: e.target.value })); }}
+                placeholder="0.00"
+                className="flex-1 h-full bg-transparent pl-2 pr-4 font-black font-mono-jet placeholder:text-[#2a2a2a] focus:outline-none"
+                style={{ fontSize: 42, color: tripForm.earnings ? "#facc15" : undefined }} />
+            </div>
+          </div>
+          <div className="rounded-xl border bg-[#080808] px-3 h-[72px] flex flex-col justify-center"
+            style={{ borderColor: "#2e2e2e" }}>
+            <label className="text-[8px] text-neutral-500 font-bold uppercase tracking-wider block mb-1">REF</label>
+            <input value={tripForm.reference}
+              onChange={e => setTripForm(s => ({ ...s, reference: e.target.value }))}
+              placeholder="Invoice / reference"
+              className="w-full bg-transparent text-white text-[13px] placeholder:text-[#333] focus:outline-none min-w-0" />
+          </div>
         </div>
       </div>
 
@@ -3546,8 +3564,15 @@ export default function App() {
         <div className="rounded-xl bg-[#080808] px-3 border"
           style={{ minHeight: 54, borderColor: "#444" }}>
           {pickupLocationCapture && (
-            <p className="pt-2.5 text-[13px] font-bold text-white leading-snug">{pickupLocationCapture.poiHeader}</p>
+            <div className="pt-2.5 pb-1.5 flex items-start gap-2">
+              <span className="text-[16px] leading-none">{pickupLocationCapture.poiHeader.split(" ")[0]}</span>
+              <div className="min-w-0">
+                <p className="text-[13px] font-bold text-white leading-snug">{pickupLocationCapture.poiHeader.replace(/^\S+\s*/, "")}</p>
+                <p className="text-[10px] text-neutral-400 leading-snug mt-0.5">{pickupLocationCapture.cityState}</p>
+              </div>
+            </div>
           )}
+          {pickupLocationCapture && <p className="text-[8px] tracking-[0.16em] text-neutral-600 font-bold uppercase pb-0.5">LOCATION</p>}
           <div className="flex items-center gap-2 min-h-[54px]">
             <span className="text-[#4ade80] text-[18px] flex-shrink-0">📍</span>
             <input value={tripForm.pickup}
@@ -3582,9 +3607,9 @@ export default function App() {
             </button>
           </div>
         {pickupLocationCapture && (
-          <div className="pb-2.5 space-y-1">
-            <p className="font-mono-jet text-[10px] text-[#4ade80] leading-snug">{pickupLocationCapture.coordinates}</p>
-            <p className="font-mono-jet text-[10px] text-neutral-500 leading-snug">{tripForm.pickupTimestamp}</p>
+          <div className="pb-2.5 pt-1.5 space-y-1">
+            <p className="font-mono-jet text-[10px] text-[#4ade80] leading-snug"><span className="text-[8px] tracking-wider text-neutral-600 mr-1">GPS</span>{pickupLocationCapture.coordinates.replace(/^GPS\s*/, "")}</p>
+            <p className="font-mono-jet text-[10px] text-neutral-500 leading-snug"><span className="text-[8px] tracking-wider text-neutral-600 mr-1">CAPTURED</span>{tripForm.pickupTimestamp}</p>
           </div>
         )}
         </div>
@@ -3598,8 +3623,15 @@ export default function App() {
         <div className="rounded-xl bg-[#080808] px-3 border"
           style={{ minHeight: 54, borderColor: "#444" }}>
           {dropoffLocationCapture && (
-            <p className="pt-2.5 text-[13px] font-bold text-white leading-snug">{dropoffLocationCapture.poiHeader}</p>
+            <div className="pt-2.5 pb-1.5 flex items-start gap-2">
+              <span className="text-[16px] leading-none">{dropoffLocationCapture.poiHeader.split(" ")[0]}</span>
+              <div className="min-w-0">
+                <p className="text-[13px] font-bold text-white leading-snug">{dropoffLocationCapture.poiHeader.replace(/^\S+\s*/, "")}</p>
+                <p className="text-[10px] text-neutral-400 leading-snug mt-0.5">{dropoffLocationCapture.cityState}</p>
+              </div>
+            </div>
           )}
+          {dropoffLocationCapture && <p className="text-[8px] tracking-[0.16em] text-neutral-600 font-bold uppercase pb-0.5">LOCATION</p>}
           <div className="flex items-center gap-2 min-h-[54px]">
             <span className="text-[#60a5fa] text-[18px] flex-shrink-0">📍</span>
             <input value={tripForm.dropoff}
@@ -3634,9 +3666,9 @@ export default function App() {
             </button>
           </div>
         {dropoffLocationCapture && (
-          <div className="pb-2.5 space-y-1">
-            <p className="font-mono-jet text-[10px] text-[#60a5fa] leading-snug">{dropoffLocationCapture.coordinates}</p>
-            <p className="font-mono-jet text-[10px] text-neutral-500 leading-snug">{tripForm.dropoffTimestamp}</p>
+          <div className="pb-2.5 pt-1.5 space-y-1">
+            <p className="font-mono-jet text-[10px] text-[#60a5fa] leading-snug"><span className="text-[8px] tracking-wider text-neutral-600 mr-1">GPS</span>{dropoffLocationCapture.coordinates.replace(/^GPS\s*/, "")}</p>
+            <p className="font-mono-jet text-[10px] text-neutral-500 leading-snug"><span className="text-[8px] tracking-wider text-neutral-600 mr-1">CAPTURED</span>{tripForm.dropoffTimestamp}</p>
           </div>
         )}
         </div>
@@ -3701,80 +3733,6 @@ export default function App() {
             📍 {gps.lat.toFixed(4)}, {gps.lng?.toFixed(4)}{gpsAddress ? ` · ${gpsAddress}` : ""}
           </p>
         )}
-      </div>
-
-      {/* ══ REF + TRIP MILEAGE ═══════════════════════════════════ */}
-      <div className="border-t border-[#252525] pt-2 pb-2">
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-xl border bg-[#080808] px-3 h-[62px] flex flex-col justify-center"
-            style={{ borderColor: "#2e2e2e" }}>
-            <label className="text-[8px] text-neutral-500 font-bold uppercase tracking-wider block mb-1">REF</label>
-            <input value={tripForm.reference}
-              onChange={e => setTripForm(s => ({ ...s, reference: e.target.value }))}
-              placeholder="Invoice / reference"
-              className="w-full bg-transparent text-white text-[13px] placeholder:text-[#333] focus:outline-none min-w-0" />
-          </div>
-
-          <div className="rounded-xl border bg-[#080808] px-3 h-[62px] flex flex-col justify-center"
-            style={{ borderColor: parseFloat(tripForm.tripMiles) > 0 ? "#facc15" : "#2e2e2e" }}>
-            <div className="flex items-center justify-between mb-1">
-              <p className="text-[8px] tracking-[0.12em] text-neutral-500 font-bold uppercase">TRIP MILEAGE</p>
-              {tripTracking && (
-                <span className="flex items-center gap-1 text-[8px] font-bold text-[#4ade80]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse inline-block" />
-                  TRACKING
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-mono-jet text-[19px] font-bold"
-                style={{ color: parseFloat(tripForm.tripMiles) > 0 ? "#facc15" : (tripTracking ? "#4ade80" : "#555") }}>
-                {tripTracking ? tripMilesDisplay.toFixed(2) : (tripForm.tripMiles || "—")}
-              </span>
-              <span className="text-[10px] text-neutral-500 font-mono-jet">mi</span>
-              {!tripTracking && (
-                <>
-                  <input
-                    inputMode="decimal"
-                    value={tripForm.tripMiles}
-                    onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, tripMiles: e.target.value })); }}
-                    placeholder="0.00"
-                    className="absolute opacity-0 w-0 h-0 pointer-events-none"
-                    aria-hidden
-                  />
-                  <button type="button"
-                    onClick={() => {
-                      const v = window.prompt("Enter miles manually:", tripForm.tripMiles || "0");
-                      if (v !== null && numericFilter(v)) setTripForm(s => ({ ...s, tripMiles: v }));
-                    }}
-                    aria-label="Edit trip mileage"
-                    className="ml-auto h-8 w-8 rounded-lg border border-[#2e2e2e] bg-[#0a0a0a] flex items-center justify-center active:scale-95 transition-all text-neutral-400 text-[13px]">
-                    ✏️
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {!tripTracking ? (
-          <button type="button" onClick={startTripTracking}
-            className="mt-2 w-full flex items-center justify-center gap-2 h-9 px-3 rounded-xl border border-[#2e2e2e] bg-[#0a0a0a] active:scale-[0.99] transition-all">
-            <span className="text-[#facc15] text-[14px]">▶</span>
-            <span className="text-[10px] font-bold text-white tracking-[0.06em]">START TRACKING</span>
-          </button>
-        ) : (
-          <button type="button" onClick={() => stopTripTracking(true)}
-            className="mt-2 w-full flex items-center justify-center gap-2 h-9 px-3 rounded-xl border border-[#4ade80]/40 bg-[#052e16]/30 active:scale-[0.99] transition-all">
-            <span className="text-[#f87171] text-[14px]">⏹</span>
-            <span className="text-[10px] font-bold text-[#4ade80] tracking-[0.06em]">STOP &amp; SAVE</span>
-          </button>
-        )}
-        <p className="text-[8px] text-neutral-600 mt-1 leading-relaxed">
-          {tripTracking
-            ? "GPS is recording your route. Tap STOP & SAVE when you arrive."
-            : "Tap ▶ before you start driving. Or enter miles manually with ✏️."}
-        </p>
       </div>
 
       {/* ══ ADDITIONAL INCOME & DEDUCTIONS ═══════════════════════ */}
@@ -3857,6 +3815,71 @@ export default function App() {
             placeholder="Surge, traffic, late toll, details…" rows={1}
             className="flex-1 bg-transparent text-[13px] text-[#d1d5db] placeholder:text-[#333] focus:outline-none resize-none leading-relaxed min-w-0" />
         </div>
+      </div>
+
+      {/* ══ TRIP MILEAGE + TRACKING ═══════════════════════════════ */}
+      <div className="border-t border-[#252525] pt-2 pb-2">
+        <div className="grid grid-cols-2 gap-2 items-stretch">
+          <div className="rounded-xl border bg-[#080808] px-3 h-[62px] flex flex-col justify-center"
+            style={{ borderColor: parseFloat(tripForm.tripMiles) > 0 ? "#facc15" : "#2e2e2e" }}>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-[8px] tracking-[0.12em] text-neutral-500 font-bold uppercase">TRIP MILEAGE</p>
+              {tripTracking && (
+                <span className="flex items-center gap-1 text-[8px] font-bold text-[#4ade80]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse inline-block" />
+                  TRACKING
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="font-mono-jet text-[19px] font-bold"
+                style={{ color: parseFloat(tripForm.tripMiles) > 0 ? "#facc15" : (tripTracking ? "#4ade80" : "#555") }}>
+                {tripTracking ? tripMilesDisplay.toFixed(2) : (tripForm.tripMiles || "—")}
+              </span>
+              <span className="text-[10px] text-neutral-500 font-mono-jet">mi</span>
+              {!tripTracking && (
+                <>
+                  <input
+                    inputMode="decimal"
+                    value={tripForm.tripMiles}
+                    onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, tripMiles: e.target.value })); }}
+                    placeholder="0.00"
+                    className="absolute opacity-0 w-0 h-0 pointer-events-none"
+                    aria-hidden
+                  />
+                  <button type="button"
+                    onClick={() => {
+                      const v = window.prompt("Enter miles manually:", tripForm.tripMiles || "0");
+                      if (v !== null && numericFilter(v)) setTripForm(s => ({ ...s, tripMiles: v }));
+                    }}
+                    aria-label="Edit trip mileage"
+                    className="ml-auto h-8 w-8 rounded-lg border border-[#2e2e2e] bg-[#0a0a0a] flex items-center justify-center active:scale-95 transition-all text-neutral-400 text-[13px]">
+                    ✏️
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {!tripTracking ? (
+            <button type="button" onClick={startTripTracking}
+              className="h-[62px] w-full flex items-center justify-center gap-2 px-3 rounded-xl border border-[#2e2e2e] bg-[#0a0a0a] active:scale-[0.99] transition-all">
+              <span className="text-[#facc15] text-[14px]">▶</span>
+              <span className="text-[10px] font-bold text-white tracking-[0.06em]">START TRACKING</span>
+            </button>
+          ) : (
+            <button type="button" onClick={() => stopTripTracking(true)}
+              className="h-[62px] w-full flex items-center justify-center gap-2 px-3 rounded-xl border border-[#4ade80]/40 bg-[#052e16]/30 active:scale-[0.99] transition-all">
+              <span className="text-[#f87171] text-[14px]">⏹</span>
+              <span className="text-[10px] font-bold text-[#4ade80] tracking-[0.06em]">STOP &amp; SAVE</span>
+            </button>
+          )}
+        </div>
+        <p className="text-[8px] text-neutral-600 mt-1 leading-relaxed">
+          {tripTracking
+            ? "GPS is recording your route. Tap STOP & SAVE when you arrive."
+            : "Tap ▶ before you start driving. Or enter miles manually with ✏️."}
+        </p>
       </div>
 
       {/* ══ POST TRANSACTION ══════════════════════════════════════ */}
