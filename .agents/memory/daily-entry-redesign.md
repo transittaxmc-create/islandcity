@@ -53,3 +53,10 @@ The app viewport is a fixed-height shell and the active content panel is the onl
 **Why:** Allowing the root shell itself to scroll caused Daily Entry to shift and lose alignment against fixed navigation and floating controls on mobile.
 
 **How to apply:** Keep the outer app shell at the dynamic viewport height with overflow hidden. Add long page content inside the existing internal vertical scroller rather than restoring root-level scrolling.
+
+## GPS location trust
+Origin/Destination captures must request a fresh high-accuracy device position. Reverse-geocoded addresses are confirmed only at ±100 meters or better; weaker fixes retain category context but stay explicitly unconfirmed. Cards show the device-reported accuracy.
+
+**Why:** A high-accuracy request alone does not guarantee a street-level fix. Accepting a stale or low-accuracy point, or an unrelated nearby POI, can display the wrong location as though it were verified.
+
+**How to apply:** Keep `maximumAge: 0`, show the reported accuracy, reject address confirmation above the threshold, and only use POI names that match the selected category. Known-airport fallback is valid only within 2 km.
