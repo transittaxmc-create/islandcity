@@ -1998,6 +1998,53 @@ export default function App() {
     return { emoji: "📍", text: "Start your shift to begin tracking your performance.", type: "neutral" };
   }, [currentTime, grossToday, todayGoal, perHourGross]);
 
+  const applyTollEvents = (events: TollEvent[], markManual = true) => {
+    replaceTripTollEvents(events);
+    const total = Math.round(events.reduce((sum, event) => sum + event.rate, 0) * 100) / 100;
+    setTripForm(s => ({
+      ...s,
+      toll: total > 0 ? total.toFixed(2) : "",
+      notes: withTollBreakdown(s.notes, events),
+    }));
+    if (markManual) setTollManuallyEdited(true);
+  };
+
+  const reconcileManualTollTotal = () => {
+    const targetTotal = parseFloat(tripForm.toll) || 0;
+    applyTollEvents(reconcileTollEventsToTotal(tripTollEventsRef.current, targetTotal));
+  };
+
+  const addManualTollEvent = () => {
+    const now = new Date();
+    applyTollEvents([
+      ...tripTollEventsRef.current,
+      {
+        id: `manual-toll-${now.getTime()}`,
+        plaza: "Manual toll",
+        rate: 0,
+        at: now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+        timestamp: now.toISOString(),
+        source: "manual",
+      },
+    ]);
+  };
+
+  const updateTollEvent = (id: string, patch: Partial<Pick<TollEvent, "plaza" | "rate">>) => {
+    applyTollEvents(tripTollEventsRef.current.map(event =>
+      event.id === id
+        ? {
+            ...event,
+            ...patch,
+            source: event.source === "adjustment" ? "adjustment" as const : "manual" as const,
+          }
+        : event
+    ));
+  };
+
+  const removeTollEvent = (id: string) => {
+    applyTollEvents(tripTollEventsRef.current.filter(event => event.id !== id));
+  };
+
   const resetForm = () => {
     const _nr = new Date();
     // Stop any active trip tracking without saving miles (trip was cancelled/reset)
