@@ -25,3 +25,11 @@ description: How the GitHub auto-push is wired — remote, PAT secret, API endpo
 - Shows `githubPushing` loading state
 
 **Why:** PAT in env var (not git config) keeps credentials out of the repo history. Rate limit prevents runaway pushes from the debounced backup loop.
+
+## Divergent-history safety
+
+Never force-push or automatically merge when the workspace and GitHub `main` histories have diverged. Preserve the local snapshot on a new timestamped `replit-backup/` branch instead.
+
+**Why:** Both histories can contain valid, substantially different work; overwriting or auto-merging can destroy remote code or introduce broad conflicts.
+
+**How to apply:** Attempt the normal `main` push first. Only when Git rejects it as non-fast-forward, create a new backup branch and report success after verifying that branch exists remotely.
