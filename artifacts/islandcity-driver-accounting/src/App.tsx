@@ -184,8 +184,25 @@ const TOLL_PLAZAS: {
 ];
 
 function stripManagedTollNotes(notes: string): string {
-  const markerIndex = notes.indexOf(TOLL_NOTES_HEADER);
-  return (markerIndex >= 0 ? notes.slice(0, markerIndex) : notes).trimEnd();
+  const lines = notes.split("\n");
+  const headerIndex = lines.findIndex(line => line.trim() === TOLL_NOTES_HEADER);
+  if (headerIndex < 0) return notes.trimEnd();
+
+  const totalIndex = lines.findIndex(
+    (line, index) => index > headerIndex && /^Total tolls:\s*\$\d+(?:\.\d{1,2})?\s*$/.test(line.trim())
+  );
+  let endIndex = totalIndex;
+  if (endIndex < 0) {
+    endIndex = headerIndex;
+    while (endIndex + 1 < lines.length && lines[endIndex + 1].trim().startsWith("• ")) {
+      endIndex += 1;
+    }
+  }
+
+  return [...lines.slice(0, headerIndex), ...lines.slice(endIndex + 1)]
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function withTollBreakdown(notes: string, events: TollEvent[]): string {
