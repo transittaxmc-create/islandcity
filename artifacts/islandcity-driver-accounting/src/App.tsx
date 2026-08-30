@@ -1218,7 +1218,10 @@ export default function App() {
 
   // ── GPS toll geofencing ───────────────────────────────────────────────────
   useEffect(() => {
-    if (!gps.lat || !gps.lng) return;
+    // E-ZPass detection only runs during an active shift and with a
+    // street-level GPS fix. A weak/stale position must never create a toll.
+    if (!shiftActive || gps.lat === null || gps.lng === null) return;
+    if (gps.acc === null || gps.acc > GPS_RELIABLE_ACCURACY_METERS) return;
     const currentGps = { lat: gps.lat, lng: gps.lng };
     const previousGps = tollPreviousGpsRef.current;
     tollPreviousGpsRef.current = currentGps;
@@ -1272,7 +1275,7 @@ export default function App() {
     }
     // Driver moved away from all plazas — clear the "last detected" so re-entry fires again
     lastDetectedPlazaRef.current = null;
-  }, [gps.lat, gps.lng, pickupLocationCapture, dropoffLocationCapture]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [gps.lat, gps.lng, gps.acc, shiftActive, pickupLocationCapture, dropoffLocationCapture]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // GPS airport + reverse geocode
   useEffect(() => {
