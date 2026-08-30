@@ -3487,48 +3487,50 @@ export default function App() {
         <p className="text-[9px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-1.5">
           ORIGIN <span className="text-neutral-600 normal-case font-normal tracking-normal">· Pickup Location</span>
         </p>
-        <div className="flex items-center gap-2 rounded-xl bg-[#080808] px-3 border"
-          style={{ height: 54, borderColor: "#444" }}>
-          <span className="text-[#4ade80] text-[18px] flex-shrink-0">📍</span>
-          <input value={tripForm.pickup}
-            onChange={e => setTripForm(s => ({ ...s, pickup: e.target.value }))}
-            placeholder={gps.lat ? `${gps.lat.toFixed(4)}, ${gps.lng?.toFixed(4)}` : "Street, City"}
-            className="flex-1 bg-transparent text-white text-[15px] placeholder:text-[#444] focus:outline-none min-w-0" />
-          <button type="button" onClick={async () => {
-            if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
-            const capturedAt = new Date();
-            setPickupResolving(true);
-            try {
-              const capture = await reverseGeocodeRich(gps.lat, gps.lng, undefined, capturedAt);
-              setPickupLocationCapture(capture);
-              setTripForm(s => ({
-                ...s,
-                pickup: capture.physicalAddress,
-                pickupTimestamp: capture.timestamp,
-              }));
-              showToast("Pickup resolved ✓");
-            } catch {
-              const capture = fallbackLocationCapture(gps.lat, gps.lng, capturedAt);
-              setPickupLocationCapture(capture);
-              setTripForm(s => ({
-                ...s,
-                pickup: capture.physicalAddress,
-                pickupTimestamp: capture.timestamp,
-              }));
-              showToast("GPS coordinates saved (offline)");
-            } finally { setPickupResolving(false); }
-          }} className="flex-shrink-0 w-10 h-10 rounded-xl bg-[#052e16] border border-[#166534] flex items-center justify-center text-[11px] font-bold text-[#4ade80] active:scale-90 transition-all">
-            {pickupResolving ? <span className="animate-spin text-[10px]">⏳</span> : "GPS"}
-          </button>
-        </div>
+        <div className="rounded-xl bg-[#080808] px-3 border"
+          style={{ minHeight: 54, borderColor: "#444" }}>
+          <div className="flex items-center gap-2 min-h-[54px]">
+            <span className="text-[#4ade80] text-[18px] flex-shrink-0">📍</span>
+            <input value={tripForm.pickup}
+              onChange={e => setTripForm(s => ({ ...s, pickup: e.target.value }))}
+              placeholder={gps.lat ? `${gps.lat.toFixed(4)}, ${gps.lng?.toFixed(4)}` : "Street, City"}
+              className="flex-1 bg-transparent text-white text-[15px] placeholder:text-[#444] focus:outline-none min-w-0" />
+            <button type="button" onClick={async () => {
+              if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
+              const capturedAt = new Date();
+              setPickupResolving(true);
+              try {
+                const capture = await reverseGeocodeRich(gps.lat, gps.lng, undefined, capturedAt);
+                setPickupLocationCapture(capture);
+                setTripForm(s => ({
+                  ...s,
+                  pickup: capture.physicalAddress,
+                  pickupTimestamp: capture.timestamp,
+                }));
+                showToast("Pickup resolved ✓");
+              } catch {
+                const capture = fallbackLocationCapture(gps.lat, gps.lng, capturedAt);
+                setPickupLocationCapture(capture);
+                setTripForm(s => ({
+                  ...s,
+                  pickup: capture.physicalAddress,
+                  pickupTimestamp: capture.timestamp,
+                }));
+                showToast("GPS coordinates saved (offline)");
+              } finally { setPickupResolving(false); }
+            }} className="flex-shrink-0 w-10 h-10 rounded-xl bg-[#052e16] border border-[#166534] flex items-center justify-center text-[11px] font-bold text-[#4ade80] active:scale-90 transition-all">
+              {pickupResolving ? <span className="animate-spin text-[10px]">⏳</span> : "GPS"}
+            </button>
+          </div>
         {pickupLocationCapture && (
-          <div className="mt-2 rounded-xl border border-[#1e3a24] bg-[#07100a] px-3 py-2.5 space-y-1">
+          <div className="pb-2.5 space-y-1">
             <p className="text-[13px] font-bold text-white leading-snug">{pickupLocationCapture.poiHeader}</p>
             <p className="text-[11px] text-neutral-300 leading-snug">{pickupLocationCapture.physicalAddress}</p>
             <p className="font-mono-jet text-[10px] text-[#4ade80] leading-snug">{pickupLocationCapture.coordinates}</p>
             <p className="font-mono-jet text-[10px] text-neutral-500 leading-snug">{tripForm.pickupTimestamp}</p>
           </div>
         )}
+        </div>
       </div>
 
       {/* ══ DESTINATION (DROP-OFF LOCATION) ══════════════════════ */}
@@ -3536,48 +3538,50 @@ export default function App() {
         <p className="text-[9px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-1.5">
           DESTINATION <span className="text-neutral-600 normal-case font-normal tracking-normal">· Drop-off Location</span>
         </p>
-        <div className="flex items-center gap-2 rounded-xl bg-[#080808] px-3 border"
-          style={{ height: 54, borderColor: "#444" }}>
-          <span className="text-[#60a5fa] text-[18px] flex-shrink-0">📍</span>
-          <input value={tripForm.dropoff}
-            onChange={e => setTripForm(s => ({ ...s, dropoff: e.target.value }))}
-            placeholder="Street, City"
-            className="flex-1 bg-transparent text-white text-[15px] placeholder:text-[#444] focus:outline-none min-w-0" />
-          <button type="button" onClick={async () => {
-            if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
-            const capturedAt = new Date();
-            setDropoffResolving(true);
-            try {
-              const capture = await reverseGeocodeRich(gps.lat, gps.lng, undefined, capturedAt);
-              setDropoffLocationCapture(capture);
-              setTripForm(s => ({
-                ...s,
-                dropoff: capture.physicalAddress,
-                dropoffTimestamp: capture.timestamp,
-              }));
-              showToast("Drop-off resolved ✓");
-            } catch {
-              const capture = fallbackLocationCapture(gps.lat, gps.lng, capturedAt);
-              setDropoffLocationCapture(capture);
-              setTripForm(s => ({
-                ...s,
-                dropoff: capture.physicalAddress,
-                dropoffTimestamp: capture.timestamp,
-              }));
-              showToast("GPS coordinates saved (offline)");
-            } finally { setDropoffResolving(false); }
-          }} className="flex-shrink-0 w-10 h-10 rounded-xl bg-[#0c1a33] border border-[#1e3a8a] flex items-center justify-center text-[11px] font-bold text-[#60a5fa] active:scale-90 transition-all">
-            {dropoffResolving ? <span className="animate-spin text-[10px]">⏳</span> : "GPS"}
-          </button>
-        </div>
+        <div className="rounded-xl bg-[#080808] px-3 border"
+          style={{ minHeight: 54, borderColor: "#444" }}>
+          <div className="flex items-center gap-2 min-h-[54px]">
+            <span className="text-[#60a5fa] text-[18px] flex-shrink-0">📍</span>
+            <input value={tripForm.dropoff}
+              onChange={e => setTripForm(s => ({ ...s, dropoff: e.target.value }))}
+              placeholder="Street, City"
+              className="flex-1 bg-transparent text-white text-[15px] placeholder:text-[#444] focus:outline-none min-w-0" />
+            <button type="button" onClick={async () => {
+              if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
+              const capturedAt = new Date();
+              setDropoffResolving(true);
+              try {
+                const capture = await reverseGeocodeRich(gps.lat, gps.lng, undefined, capturedAt);
+                setDropoffLocationCapture(capture);
+                setTripForm(s => ({
+                  ...s,
+                  dropoff: capture.physicalAddress,
+                  dropoffTimestamp: capture.timestamp,
+                }));
+                showToast("Drop-off resolved ✓");
+              } catch {
+                const capture = fallbackLocationCapture(gps.lat, gps.lng, capturedAt);
+                setDropoffLocationCapture(capture);
+                setTripForm(s => ({
+                  ...s,
+                  dropoff: capture.physicalAddress,
+                  dropoffTimestamp: capture.timestamp,
+                }));
+                showToast("GPS coordinates saved (offline)");
+              } finally { setDropoffResolving(false); }
+            }} className="flex-shrink-0 w-10 h-10 rounded-xl bg-[#0c1a33] border border-[#1e3a8a] flex items-center justify-center text-[11px] font-bold text-[#60a5fa] active:scale-90 transition-all">
+              {dropoffResolving ? <span className="animate-spin text-[10px]">⏳</span> : "GPS"}
+            </button>
+          </div>
         {dropoffLocationCapture && (
-          <div className="mt-2 rounded-xl border border-[#172844] bg-[#070c14] px-3 py-2.5 space-y-1">
+          <div className="pb-2.5 space-y-1">
             <p className="text-[13px] font-bold text-white leading-snug">{dropoffLocationCapture.poiHeader}</p>
             <p className="text-[11px] text-neutral-300 leading-snug">{dropoffLocationCapture.physicalAddress}</p>
             <p className="font-mono-jet text-[10px] text-[#60a5fa] leading-snug">{dropoffLocationCapture.coordinates}</p>
             <p className="font-mono-jet text-[10px] text-neutral-500 leading-snug">{tripForm.dropoffTimestamp}</p>
           </div>
         )}
+        </div>
       </div>
 
       {/* ══ LOCATION CATEGORY ════════════════════════════════════ */}
