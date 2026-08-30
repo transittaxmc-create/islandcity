@@ -13,3 +13,4 @@
 - [IslandCity Android app](android-app.md) — Expo app at artifacts/islandcity-android; 3 tabs: DASH (AsyncStorage trips), LIMOSYS (expo-image-picker → /api/limosys-eval), AI (→ /api/gemini-chat); pure black + gold theme; EXPO_PUBLIC_DOMAIN auto-injected by dev script.
 - [Financial data ownership](financial-data-ownership.md) — Clerk identity is server-authoritative; legacy unowned financial rows stay quarantined and invisible.
 - [Clerk production proxy](clerk-production-proxy.md) — Published web clients must pass Replit’s injected Clerk proxy URL or production can remain blank before React mounts.
+- [Toll direction policy](toll-direction-policy.md) — Port Authority charges entering New York only; uncertain direction preserves the charge to avoid missing a real toll.

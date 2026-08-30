@@ -134,30 +134,64 @@ type DocEntry = {
 // ── Toll plaza list — update rates each January ───────────────────────────
 // Last updated: 2026 · E-ZPass · passenger car · per crossing
 // Sources: MTA Bridges & Tunnels 2026; Port Authority 2026 schedule
-// Port Authority peak = Mon–Fri 6–10 AM and 4–9 PM; all other = off-peak
+// Port Authority peak = Mon–Fri 6–10 AM and 4–8 PM; weekends 11 AM–9 PM
 const TOLL_YEAR = 2026;
+const TOLL_RATES_LAST_VERIFIED = "2026-08-30";
+const TOLL_RATE_REVIEW_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;
 const TOLL_PLAZAS: {
   name: string; lat: number; lng: number;
   rate: number; offPeak?: number; type: string;
+  directionality: "bidirectional" | "one-way";
+  tollDirection: "both" | "eastbound-only";
 }[] = [
   // ── MTA Bridges & Tunnels ─────────────────────────────────────────────
-  { name: "Queens Midtown Tunnel",      lat: 40.7434, lng: -73.9637, rate: 7.46, type: "MTA" },
-  { name: "Hugh L. Carey Tunnel",       lat: 40.6895, lng: -74.0149, rate: 7.46, type: "MTA" },
-  { name: "RFK Bridge",                 lat: 40.7800, lng: -73.9500, rate: 7.46, type: "MTA" },
-  { name: "Verrazzano-Narrows Bridge",  lat: 40.6066, lng: -74.0449, rate: 7.46, type: "MTA" },
-  { name: "Whitestone Bridge",          lat: 40.7960, lng: -73.8305, rate: 7.46, type: "MTA" },
-  { name: "Throgs Neck Bridge",         lat: 40.8010, lng: -73.7970, rate: 7.46, type: "MTA" },
-  { name: "Henry Hudson Bridge",        lat: 40.8760, lng: -73.9300, rate: 3.42, type: "MTA" },
-  { name: "Cross Bay Bridge",           lat: 40.5960, lng: -73.8400, rate: 2.80, type: "MTA" },
-  { name: "Marine Parkway Bridge",      lat: 40.5800, lng: -73.8900, rate: 2.80, type: "MTA" },
-  // ── Port Authority (peak / off-peak) ──────────────────────────────────
-  { name: "Lincoln Tunnel",             lat: 40.7589, lng: -74.0060, rate: 16.79, offPeak: 14.79, type: "Port Authority" },
-  { name: "Holland Tunnel",             lat: 40.7260, lng: -74.0270, rate: 16.79, offPeak: 14.79, type: "Port Authority" },
-  { name: "George Washington Bridge",   lat: 40.8517, lng: -73.9527, rate: 16.79, offPeak: 14.79, type: "Port Authority" },
-  { name: "Goethals Bridge",            lat: 40.6400, lng: -74.1900, rate: 16.79, offPeak: 14.79, type: "Port Authority" },
-  { name: "Bayonne Bridge",             lat: 40.6400, lng: -74.1100, rate: 16.79, offPeak: 14.79, type: "Port Authority" },
-  { name: "Outerbridge Crossing",       lat: 40.5200, lng: -74.2500, rate: 16.79, offPeak: 14.79, type: "Port Authority" },
+  { name: "Queens Midtown Tunnel",      lat: 40.7434, lng: -73.9637, rate: 7.46, type: "MTA", directionality: "bidirectional", tollDirection: "both" },
+  { name: "Hugh L. Carey Tunnel",       lat: 40.6895, lng: -74.0149, rate: 7.46, type: "MTA", directionality: "bidirectional", tollDirection: "both" },
+  { name: "RFK Bridge",                 lat: 40.7800, lng: -73.9500, rate: 7.46, type: "MTA", directionality: "bidirectional", tollDirection: "both" },
+  { name: "Verrazzano-Narrows Bridge",  lat: 40.6066, lng: -74.0449, rate: 7.46, type: "MTA", directionality: "bidirectional", tollDirection: "both" },
+  { name: "Whitestone Bridge",          lat: 40.7960, lng: -73.8305, rate: 7.46, type: "MTA", directionality: "bidirectional", tollDirection: "both" },
+  { name: "Throgs Neck Bridge",         lat: 40.8010, lng: -73.7970, rate: 7.46, type: "MTA", directionality: "bidirectional", tollDirection: "both" },
+  { name: "Henry Hudson Bridge",        lat: 40.8760, lng: -73.9300, rate: 3.42, type: "MTA", directionality: "bidirectional", tollDirection: "both" },
+  { name: "Cross Bay Bridge",           lat: 40.5960, lng: -73.8400, rate: 2.80, type: "MTA", directionality: "bidirectional", tollDirection: "both" },
+  { name: "Marine Parkway Bridge",      lat: 40.5800, lng: -73.8900, rate: 2.80, type: "MTA", directionality: "bidirectional", tollDirection: "both" },
+  // ── Port Authority (peak / off-peak; collected entering New York only) ─
+  { name: "Lincoln Tunnel",             lat: 40.7589, lng: -74.0060, rate: 16.79, offPeak: 14.79, type: "Port Authority", directionality: "one-way", tollDirection: "eastbound-only" },
+  { name: "Holland Tunnel",             lat: 40.7260, lng: -74.0270, rate: 16.79, offPeak: 14.79, type: "Port Authority", directionality: "one-way", tollDirection: "eastbound-only" },
+  { name: "George Washington Bridge",   lat: 40.8517, lng: -73.9527, rate: 16.79, offPeak: 14.79, type: "Port Authority", directionality: "one-way", tollDirection: "eastbound-only" },
+  { name: "Goethals Bridge",            lat: 40.6400, lng: -74.1900, rate: 16.79, offPeak: 14.79, type: "Port Authority", directionality: "one-way", tollDirection: "eastbound-only" },
+  { name: "Bayonne Bridge",             lat: 40.6400, lng: -74.1100, rate: 16.79, offPeak: 14.79, type: "Port Authority", directionality: "one-way", tollDirection: "eastbound-only" },
+  { name: "Outerbridge Crossing",       lat: 40.5200, lng: -74.2500, rate: 16.79, offPeak: 14.79, type: "Port Authority", directionality: "one-way", tollDirection: "eastbound-only" },
 ];
+
+type TollDirectionPoint = { lat: number; lng: number };
+
+function locationCapturePoint(capture: LocationCapture | null): TollDirectionPoint | null {
+  const match = capture?.coordinates.match(/GPS\s+(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/i);
+  if (!match) return null;
+  const lat = Number(match[1]);
+  const lng = Number(match[2]);
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+}
+
+function inferEastboundTravel(
+  pickup: TollDirectionPoint | null,
+  dropoff: TollDirectionPoint | null,
+  previousGps: TollDirectionPoint | null,
+  currentGps: TollDirectionPoint,
+): boolean | null {
+  const candidateSegments: Array<[TollDirectionPoint | null, TollDirectionPoint | null]> = [
+    [pickup, dropoff],
+    [pickup, currentGps],
+    [previousGps, currentGps],
+  ];
+
+  for (const [from, to] of candidateSegments) {
+    if (!from || !to || haversineKm(from.lat, from.lng, to.lat, to.lng) < 0.05) continue;
+    const longitudeDelta = to.lng - from.lng;
+    if (Math.abs(longitudeDelta) >= 0.0005) return longitudeDelta > 0;
+  }
+  return null;
+}
 
 const LOCATION_CATEGORIES = [
   "Hospital", "City", "Home", "Suburbs", "Office",
@@ -550,6 +584,9 @@ export default function App() {
   const finScrollRef = useRef<HTMLDivElement>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
+  const tollRatesLastVerifiedDate = new Date(`${TOLL_RATES_LAST_VERIFIED}T12:00:00`);
+  const tollRatesNeedReview =
+    currentTime.getTime() - tollRatesLastVerifiedDate.getTime() > TOLL_RATE_REVIEW_INTERVAL_MS;
 
   const [trips, setTrips] = useState<Trip[]>(() => {
     try {
@@ -677,6 +714,7 @@ export default function App() {
   const [detectedToll, setDetectedToll] = useState<{ plaza: string; rate: number; at: string } | null>(null);
   const [tollManuallyEdited, setTollManuallyEdited] = useState(false);
   const lastDetectedPlazaRef = useRef<string | null>(null);
+  const tollPreviousGpsRef = useRef<TollDirectionPoint | null>(null);
 
   // Refs that always hold the latest state — used by the iOS pagehide/
   // visibilitychange listener so it never captures a stale closure.
@@ -1084,6 +1122,9 @@ export default function App() {
   // ── GPS toll geofencing ───────────────────────────────────────────────────
   useEffect(() => {
     if (!gps.lat || !gps.lng) return;
+    const currentGps = { lat: gps.lat, lng: gps.lng };
+    const previousGps = tollPreviousGpsRef.current;
+    tollPreviousGpsRef.current = currentGps;
     const GEOFENCE_KM = 0.35; // ~350 m radius around each plaza
     for (const plaza of TOLL_PLAZAS) {
       const d = haversineKm(gps.lat, gps.lng, plaza.lat, plaza.lng);
@@ -1092,6 +1133,19 @@ export default function App() {
         if (lastDetectedPlazaRef.current === plaza.name) return;
         lastDetectedPlazaRef.current = plaza.name;
 
+        if (plaza.directionality === "one-way" && plaza.tollDirection === "eastbound-only") {
+          const isEastbound = inferEastboundTravel(
+            locationCapturePoint(pickupLocationCapture),
+            locationCapturePoint(dropoffLocationCapture),
+            previousGps,
+            currentGps,
+          );
+          if (isEastbound === false) return;
+          // Heading is not persisted by the existing GPS state. If captured
+          // endpoints and recent movement cannot prove direction, preserve the
+          // previous charge behavior rather than risk omitting a real toll.
+        }
+
         // Port Authority: choose peak vs off-peak by time of day
         let rate = plaza.rate;
         if (plaza.offPeak !== undefined) {
@@ -1099,7 +1153,10 @@ export default function App() {
           const h = now.getHours();
           const dow = now.getDay(); // 0=Sun 6=Sat
           const isWeekday = dow >= 1 && dow <= 5;
-          const isPeak = isWeekday && ((h >= 6 && h < 10) || (h >= 16 && h < 21));
+          const isWeekend = dow === 0 || dow === 6;
+          const isPeak =
+            (isWeekday && ((h >= 6 && h < 10) || (h >= 16 && h < 20))) ||
+            (isWeekend && h >= 11 && h < 21);
           rate = isPeak ? plaza.rate : plaza.offPeak;
         }
 
@@ -1118,7 +1175,7 @@ export default function App() {
     }
     // Driver moved away from all plazas — clear the "last detected" so re-entry fires again
     lastDetectedPlazaRef.current = null;
-  }, [gps.lat, gps.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [gps.lat, gps.lng, pickupLocationCapture, dropoffLocationCapture]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // GPS airport + reverse geocode
   useEffect(() => {
@@ -7774,6 +7831,24 @@ export default function App() {
                   }}>
                   {githubPushing ? "Pushing…" : "🐙 Push to GitHub now"}
                 </button>
+              </div>
+
+              {/* ── Toll rate verification reminder ── */}
+              <div className="bg-[#141414] border border-[#2e2e2e] rounded-2xl p-3.5 space-y-2">
+                <p className="text-[9px] tracking-[0.16em] text-neutral-400 font-semibold uppercase">🛣️ Tarifas de peajes</p>
+                <p className="text-[11px] text-neutral-400 leading-relaxed">
+                  Verificadas por última vez:{" "}
+                  <span className="text-white font-mono-jet">
+                    {tollRatesLastVerifiedDate.toLocaleDateString("es-US", { year: "numeric", month: "short", day: "numeric" })}
+                  </span>
+                </p>
+                {tollRatesNeedReview && (
+                  <button
+                    onClick={() => showToast("🛣️ Recuerda pedirle a Claude que verifique las tarifas actualizadas")}
+                    className="w-full rounded-xl border border-amber-400/25 px-3 py-2 text-left text-[10px] leading-relaxed text-amber-300/90 hover:bg-amber-400/5 transition-colors">
+                    Han pasado más de 30 días — toca aquí para recordar verificar tarifas actualizadas
+                  </button>
+                )}
               </div>
 
               {/* Backup — #8 */}
