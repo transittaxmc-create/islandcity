@@ -4040,7 +4040,7 @@ export default function App() {
               {detectedToll ? (
                 tollManuallyEdited
                   ? <span className="text-[7px] font-bold text-amber-400 animate-pulse">✎ EDITED</span>
-                  : <span className="text-[7px] font-bold text-[#4ade80]">⚡ AUTO</span>
+                  : <span className="text-[7px] font-bold text-[#4ade80]">⚡ AUTO · {tripTollEvents.length} {tripTollEvents.length === 1 ? "TOLL" : "TOLLS"}</span>
               ) : <span className="text-[7px] font-bold text-neutral-600">GPS AUTO</span>}
             </div>
             {detectedToll && (
@@ -4052,7 +4052,7 @@ export default function App() {
                 onChange={e => {
                   if (!numericFilter(e.target.value)) return;
                   setTripForm(s => ({ ...s, toll: e.target.value }));
-                  if (detectedToll) setTollManuallyEdited(true);
+                  setTollManuallyEdited(true);
                 }}
                 placeholder="0.00"
                 className="flex-1 bg-transparent text-white text-[20px] font-bold font-mono-jet placeholder:text-[#2a2a2a] focus:outline-none" />
@@ -4079,8 +4079,9 @@ export default function App() {
         <div className="flex items-start gap-3 rounded-xl border bg-[#080808] px-3 py-2.5" style={{ borderColor: "#2e2e2e" }}>
           <span className="text-[9px] text-neutral-500 font-bold uppercase tracking-wider flex-shrink-0 mt-0.5">NOTE</span>
           <textarea value={tripForm.notes} onChange={e => setTripForm(s => ({ ...s, notes: e.target.value }))}
-            placeholder="Surge, traffic, late toll, details…" rows={1}
-            className="flex-1 bg-transparent text-[13px] text-[#d1d5db] placeholder:text-[#333] focus:outline-none resize-none leading-relaxed min-w-0" />
+            placeholder="Surge, traffic, late toll, details…"
+            rows={Math.min(4, Math.max(1, tripForm.notes.split("\n").length))}
+            className="flex-1 max-h-[92px] overflow-y-auto bg-transparent text-[13px] text-[#d1d5db] placeholder:text-[#333] focus:outline-none resize-none leading-relaxed min-w-0" />
         </div>
       </div>
 
