@@ -1407,7 +1407,8 @@ export default function App() {
       // New day — reset entry form so the screen starts clean
       setTripForm({
         reference: "", earnings: "", tips: "", extraCash: "", otherCashIncome: "", toll: "",
-        platformFee: "", platform: "Uber", pickup: "", dropoff: "", notes: "",
+        platformFee: "", platform: "Uber", pickup: "", dropoff: "",
+        pickupTimestamp: "", dropoffTimestamp: "", notes: "",
         tripDate: todayYMD, tripTime: new Date().toTimeString().slice(0, 5), tripMiles: "",
       });
       setEditingId(null);
@@ -1733,8 +1734,11 @@ export default function App() {
     tripMilesRef.current   = 0;
     setTripTracking(false);
     setTripMilesDisplay(0);
-    setTripForm({ reference: "", earnings: "", tips: "", extraCash: "", otherCashIncome: "", toll: "", platformFee: "", platform: "Uber", pickup: "", dropoff: "", notes: "",
+    setTripForm({ reference: "", earnings: "", tips: "", extraCash: "", otherCashIncome: "", toll: "", platformFee: "", platform: "Uber", pickup: "", dropoff: "",
+      pickupTimestamp: "", dropoffTimestamp: "", notes: "",
       tripDate: toYYYYMMDD(_nr), tripTime: _nr.toTimeString().slice(0, 5), tripMiles: "" });
+    setPickupLocationCapture(null);
+    setDropoffLocationCapture(null);
     setEditingId(null);
     setDetectedToll(null);
     setTollManuallyEdited(false);
@@ -1793,6 +1797,7 @@ export default function App() {
       reference: trip.reference, earnings: String(trip.earnings), tips: String(trip.tips),
       extraCash: String(trip.extra), otherCashIncome: String(trip.otherCash ?? 0), toll: String(trip.toll), platformFee: String(trip.fee),
       platform: trip.platform, pickup: trip.pickup, dropoff: trip.dropoff, notes: trip.notes,
+      pickupTimestamp: "", dropoffTimestamp: "",
       tripDate: trip.date,
       tripTime: _tsDt.toTimeString().slice(0, 5),
       tripMiles: trip.miles ? String(trip.miles) : "",
@@ -2103,8 +2108,8 @@ export default function App() {
     new Promise(resolve => {
       const doGeocode = async (lat: number, lng: number) => {
         try {
-          const addr = await reverseGeocodeRich(lat, lng);
-          resolve({ lat, lng, addr: addr || `${lat.toFixed(4)},${lng.toFixed(4)}` });
+          const rich = await reverseGeocodeRich(lat, lng);
+          resolve({ lat, lng, addr: rich.physicalAddress || `${lat.toFixed(4)},${lng.toFixed(4)}` });
         } catch {
           resolve({ lat, lng, addr: `${lat.toFixed(4)},${lng.toFixed(4)}` });
         }
