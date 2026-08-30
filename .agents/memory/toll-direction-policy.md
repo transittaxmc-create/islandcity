@@ -11,8 +11,8 @@ Automatic toll geofencing runs only during an active shift and only from device 
 
 **How to apply:** Preserve the active-shift and accuracy gates, direction-aware filtering, manual toll-edit protection, and explicit rate-verification date. The Settings reminder prompts a manual rate review after 30 days.
 
-Each valid crossing is an individual event, while `Trip.toll` remains the authoritative compatible total for Register, Ledger, reports, and financial summaries. A later automatic crossing adds its rate to a manually corrected total instead of replacing the correction.
+Every automatic crossing and manual correction must appear as an individual breakdown line, and the line-item sum must always equal the displayed toll total. A later automatic crossing adds to a prior correction instead of replacing it.
 
 **Why:** Drivers may cross several facilities during one trip, and a manual correction must not cause the next GPS detection to erase prior work.
 
-**How to apply:** Deduplicate only while the vehicle remains inside the same geofence; allow the same plaza again after departure. Regenerate only the managed E-ZPass block in Notes and preserve personal text both before and after it.
+**How to apply:** Deduplicate only while the vehicle remains inside the same geofence; allow the same plaza again after departure. Keep additions, edits, removals, Notes, and the aggregate total synchronized. Preserve personal text both before and after the managed breakdown.
