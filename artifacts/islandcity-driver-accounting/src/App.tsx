@@ -2361,7 +2361,6 @@ export default function App() {
   const syncSaveHours = (newHours: HoursEntry[]) => {
     try { localStorage.setItem(hoursStorageKey, JSON.stringify(newHours)); } catch {}
     const previousById = new Map(hoursLogRef.current.map(entry => [hoursEntryId(entry), entry]));
-    const nextIds = new Set(newHours.map(hoursEntryId));
     hoursLogRef.current = newHours;
     setHoursLog(newHours);
     for (const entry of newHours) {
@@ -2377,12 +2376,6 @@ export default function App() {
       }).then(res => {
         if (res.ok) remoteHoursIdsRef.current.add(id);
       }).catch(() => undefined);
-    }
-    for (const id of previousById.keys()) {
-      if (nextIds.has(id) || !remoteHoursIdsRef.current.has(id)) continue;
-      fetch(`/api/hours/${encodeURIComponent(id)}`, { method: "DELETE" })
-        .then(res => { if (res.ok) remoteHoursIdsRef.current.delete(id); })
-        .catch(() => undefined);
     }
   };
 
