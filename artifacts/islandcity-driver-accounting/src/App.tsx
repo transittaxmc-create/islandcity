@@ -2083,21 +2083,23 @@ export default function App() {
     const tl  = parseFloat(tripForm.toll) || 0;
     const f   = parseFloat(tripForm.platformFee) || 0;
     const tripMi = parseFloat(tripForm.tripMiles) || 0;
+    const savedTollEvents = reconcileTollEventsToTotal(tripTollEventsRef.current, tl);
+    const savedToll = Math.round(savedTollEvents.reduce((sum, event) => sum + event.rate, 0) * 100) / 100;
     const newTrip: Trip = {
       id: editingId || Date.now().toString(),
       reference: tripForm.reference.trim(),
-      earnings: e, tips: t, extra: ex, otherCash: oci, toll: tl, fee: f,
+      earnings: e, tips: t, extra: ex, otherCash: oci, toll: savedToll, fee: f,
       platform: tripForm.platform,
       pickup: tripForm.pickup.trim(),
       dropoff: tripForm.dropoff.trim(),
-      notes: tripForm.notes,
-      grandTotal: e + t + ex + oci + tl - f,
+      notes: withTollBreakdown(tripForm.notes, savedTollEvents),
+      grandTotal: e + t + ex + oci + savedToll - f,
       time: (() => { try { return new Date(`${savedTripDate}T${savedTripTime}:00`).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); } catch { return now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); } })(),
       date: savedTripDate,
       timestamp: (() => { try { return new Date(`${savedTripDate}T${savedTripTime}:00`).toISOString(); } catch { return now.toISOString(); } })(),
       gps: gps.lat && gps.lng ? { lat: gps.lat, lng: gps.lng, acc: gps.acc ?? undefined } : undefined,
       miles: tripMi > 0 ? tripMi : undefined,
-      tollEvents: tripTollEventsRef.current.length > 0 ? [...tripTollEventsRef.current] : undefined,
+      tollEvents: savedTollEvents.length > 0 ? savedTollEvents : undefined,
       status: "pending" as const,
       reviewed: false,
     };
@@ -2871,15 +2873,18 @@ export default function App() {
     const newToll = parseFloat(inlineForm.toll) || 0;
     syncSaveTrips(trips.map(t => {
       if (t.id !== id) return t;
+      const nextTollEvents = reconcileTollEventsToTotal(t.tollEvents ?? [], newToll);
+      const reconciledToll = Math.round(nextTollEvents.reduce((sum, event) => sum + event.rate, 0) * 100) / 100;
       return {
         ...t,
         pickup: inlineForm.pickup,
         dropoff: inlineForm.dropoff,
         earnings: newEarnings,
         reference: inlineForm.reference,
-        toll: newToll,
-        notes: inlineForm.notes,
-        grandTotal: newEarnings + t.tips + t.extra + (t.otherCash || 0) + newToll - t.fee,
+        toll: reconciledToll,
+        tollEvents: nextTollEvents.length > 0 ? nextTollEvents : undefined,
+        notes: withTollBreakdown(inlineForm.notes, nextTollEvents),
+        grandTotal: newEarnings + t.tips + t.extra + (t.otherCash || 0) + reconciledToll - t.fee,
       };
     }));
     setInlineEditId(null);
