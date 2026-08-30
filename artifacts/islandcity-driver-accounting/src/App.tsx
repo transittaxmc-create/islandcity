@@ -3837,10 +3837,8 @@ export default function App() {
             const isDropSet   = dropoffLocationCapture?.category === cat || tripForm.dropoff.startsWith(cat);
             const isSet = isPickupSet || isDropSet;
             return (
-              <button key={cat} type="button" onClick={() => {
+              <button key={cat} type="button" onClick={async () => {
                 const target = showPickupMenu ? "pickup" : "dropoff";
-                const capturedAt = new Date();
-                const immediateCapture = fallbackLocationCapture(gps.lat, gps.lng, capturedAt, cat, gps.acc);
                 const applyCapture = (capture: LocationCapture) => {
                   if (target === "pickup") {
                     setPickupLocationCapture(capture);
@@ -3851,16 +3849,33 @@ export default function App() {
                   }
                 };
 
-                applyCapture(immediateCapture);
-                if (gps.lat !== null && gps.lng !== null) {
-                  reverseGeocodeRich(gps.lat, gps.lng, undefined, capturedAt, cat, gps.acc ?? undefined)
-                    .then(applyCapture)
-                    .catch(() => { /* the immediate GPS/category card remains visible offline */ });
-                }
-
+                applyCapture(fallbackLocationCapture(null, null, new Date(), cat));
                 if (target === "pickup") setShowPickupMenu(false);
                 else setShowDropoffMenu(false);
-                showToast(`${target === "pickup" ? "Pickup" : "Drop-off"}: ${cat}`);
+                showToast(`${target === "pickup" ? "Pickup" : "Drop-off"}: ${cat} · confirming GPS…`);
+
+                try {
+                  const position = await requestFreshGpsPosition();
+                  const lat = position.coords.latitude;
+                  const lng = position.coords.longitude;
+                  const accuracy = position.coords.accuracy ?? 999;
+                  const capturedAt = new Date(position.timestamp || Date.now());
+                  setGps({ lat, lng, acc: accuracy, timestamp: position.timestamp, status: "active" });
+                  applyCapture(fallbackLocationCapture(lat, lng, capturedAt, cat, accuracy));
+                  if (accuracy > GPS_RELIABLE_ACCURACY_METERS) {
+                    showToast(`Category saved · GPS weak (±${Math.round(accuracy)} m), address not confirmed`);
+                    return;
+                  }
+                  try {
+                    applyCapture(await reverseGeocodeRich(lat, lng, undefined, capturedAt, cat, accuracy));
+                    showToast(`${target === "pickup" ? "Pickup" : "Drop-off"} GPS confirmed ✓`);
+                  } catch {
+                    showToast("GPS coordinates confirmed · address service unavailable");
+                  }
+                } catch {
+                  setGps(s => ({ ...s, status: "error" }));
+                  showToast("Category saved · GPS location could not be confirmed");
+                }
               }}
                 className="h-[52px] rounded-xl flex flex-col items-center justify-center gap-0.5 border-2 transition-all active:scale-95"
                 style={{
