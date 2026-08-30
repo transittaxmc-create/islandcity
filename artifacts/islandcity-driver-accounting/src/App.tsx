@@ -3668,11 +3668,31 @@ export default function App() {
               placeholder="Directions / street, city"
               className="flex-1 bg-transparent text-white text-[13px] placeholder:text-[#444] focus:outline-none min-w-0 truncate" />
             <button type="button" onClick={async () => {
-              if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
-              const capturedAt = new Date();
               setPickupResolving(true);
+              let lat: number;
+              let lng: number;
+              let accuracy: number;
+              let capturedAt: Date;
               try {
-                const capture = await reverseGeocodeRich(gps.lat, gps.lng, undefined, capturedAt, undefined, gps.acc ?? undefined);
+                const position = await requestFreshGpsPosition();
+                lat = position.coords.latitude;
+                lng = position.coords.longitude;
+                accuracy = position.coords.accuracy ?? 999;
+                capturedAt = new Date(position.timestamp || Date.now());
+                setGps({ lat, lng, acc: accuracy, timestamp: position.timestamp, status: "active" });
+              } catch {
+                setGps(s => ({ ...s, status: "error" }));
+                showToast("Unable to confirm a fresh GPS location");
+                setPickupResolving(false);
+                return;
+              }
+              if (accuracy > GPS_RELIABLE_ACCURACY_METERS) {
+                showToast(`GPS signal too weak (±${Math.round(accuracy)} m) — move to an open area`);
+                setPickupResolving(false);
+                return;
+              }
+              try {
+                const capture = await reverseGeocodeRich(lat, lng, undefined, capturedAt, undefined, accuracy);
                 setPickupLocationCapture(capture);
                 setTripForm(s => ({
                   ...s,
@@ -3681,7 +3701,7 @@ export default function App() {
                 }));
                 showToast("Pickup resolved ✓");
               } catch {
-                const capture = fallbackLocationCapture(gps.lat, gps.lng, capturedAt, undefined, gps.acc);
+                const capture = fallbackLocationCapture(lat, lng, capturedAt, undefined, accuracy);
                 setPickupLocationCapture(capture);
                 setTripForm(s => ({
                   ...s,
@@ -3740,11 +3760,31 @@ export default function App() {
               placeholder="Directions / street, city"
               className="flex-1 bg-transparent text-white text-[13px] placeholder:text-[#444] focus:outline-none min-w-0 truncate" />
             <button type="button" onClick={async () => {
-              if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
-              const capturedAt = new Date();
               setDropoffResolving(true);
+              let lat: number;
+              let lng: number;
+              let accuracy: number;
+              let capturedAt: Date;
               try {
-                const capture = await reverseGeocodeRich(gps.lat, gps.lng, undefined, capturedAt, undefined, gps.acc ?? undefined);
+                const position = await requestFreshGpsPosition();
+                lat = position.coords.latitude;
+                lng = position.coords.longitude;
+                accuracy = position.coords.accuracy ?? 999;
+                capturedAt = new Date(position.timestamp || Date.now());
+                setGps({ lat, lng, acc: accuracy, timestamp: position.timestamp, status: "active" });
+              } catch {
+                setGps(s => ({ ...s, status: "error" }));
+                showToast("Unable to confirm a fresh GPS location");
+                setDropoffResolving(false);
+                return;
+              }
+              if (accuracy > GPS_RELIABLE_ACCURACY_METERS) {
+                showToast(`GPS signal too weak (±${Math.round(accuracy)} m) — move to an open area`);
+                setDropoffResolving(false);
+                return;
+              }
+              try {
+                const capture = await reverseGeocodeRich(lat, lng, undefined, capturedAt, undefined, accuracy);
                 setDropoffLocationCapture(capture);
                 setTripForm(s => ({
                   ...s,
@@ -3753,7 +3793,7 @@ export default function App() {
                 }));
                 showToast("Drop-off resolved ✓");
               } catch {
-                const capture = fallbackLocationCapture(gps.lat, gps.lng, capturedAt, undefined, gps.acc);
+                const capture = fallbackLocationCapture(lat, lng, capturedAt, undefined, accuracy);
                 setDropoffLocationCapture(capture);
                 setTripForm(s => ({
                   ...s,
