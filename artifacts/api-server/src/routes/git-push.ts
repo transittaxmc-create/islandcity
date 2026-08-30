@@ -10,6 +10,23 @@ const gitPushRouter = Router();
 let lastPushAt = 0;
 const MIN_INTERVAL_MS = 10 * 60 * 1000;
 
+function errorOutput(err: unknown): string {
+  if (!err || typeof err !== "object") return String(err);
+  const candidate = err as { message?: unknown; stdout?: unknown; stderr?: unknown };
+  return [candidate.message, candidate.stdout, candidate.stderr]
+    .filter((part): part is string => typeof part === "string" && part.length > 0)
+    .join("\n");
+}
+
+function isNonFastForwardPush(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("fetch first") ||
+    normalized.includes("non-fast-forward") ||
+    normalized.includes("rejected") && normalized.includes("remote contains work")
+  );
+}
+
 // POST /api/git-push — push latest code to GitHub
 gitPushRouter.post("/git-push", async (_req, res) => {
   const pat = process.env.GITHUB_PAT;
@@ -35,17 +52,45 @@ gitPushRouter.post("/git-push", async (_req, res) => {
       await execAsync(`git commit -m "Auto-backup ${ts}"`, { cwd: workspaceRoot });
     }
 
-    // Push to GitHub
-    const { stdout, stderr } = await execAsync(
-      `git push "${repoUrl}" main`,
-      { cwd: workspaceRoot, timeout: 30000 }
-    );
+    // Push to the configured main branch first. If GitHub's main has commits
+    // that are not in this workspace, never force-push over them: preserve the
+    // complete local snapshot in a new backup branch instead.
+    let stdout = "";
+    let stderr = "";
+    let backupBranch: string | undefined;
+    try {
+      ({ stdout, stderr } = await execAsync(
+        `git push "${repoUrl}" main`,
+        { cwd: workspaceRoot, timeout: 30000 }
+      ));
+    } catch (pushError: unknown) {
+      const pushMessage = errorOutput(pushError);
+      if (!isNonFastForwardPush(pushMessage)) throw pushError;
+
+      const branchSuffix = new Date().toISOString()
+        .replace(/[-:]/g, "")
+        .replace(/\.\d{3}Z$/, "Z")
+        .replace("T", "-")
+        .replace("Z", "");
+      backupBranch = `replit-backup/${branchSuffix}`;
+      ({ stdout, stderr } = await execAsync(
+        `git push "${repoUrl}" HEAD:refs/heads/${backupBranch}`,
+        { cwd: workspaceRoot, timeout: 30000 }
+      ));
+    }
 
     lastPushAt = Date.now();
     const msg = stdout || stderr || "Push complete";
-    return res.json({ ok: true, message: msg.trim(), pushedAt: new Date().toISOString() });
+    return res.json({
+      ok: true,
+      message: backupBranch
+        ? `Main branch was ahead; snapshot saved to ${backupBranch}. ${msg.trim()}`
+        : msg.trim(),
+      branch: backupBranch ?? "main",
+      pushedAt: new Date().toISOString(),
+    });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorOutput(err);
     // Sanitize PAT from error message before returning
     const safe = message.replace(pat, "***");
     return res.status(500).json({ ok: false, error: safe });
