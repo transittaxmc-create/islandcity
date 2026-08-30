@@ -86,6 +86,7 @@ type LocationCapture = {
 };
 
 type HoursEntry = {
+  id?: string;
   date: string;
   hours: number;
   clockIn: string;
@@ -93,6 +94,9 @@ type HoursEntry = {
   breakMs: number;
   miles?: number; // GPS-tracked shift miles (accumulated via haversine)
 };
+
+const hoursEntryId = (entry: HoursEntry): string =>
+  entry.id || `hour-${entry.date}-${entry.clockIn}-${entry.clockOut}-${entry.hours.toFixed(4)}`;
 
 type Expense = {
   id: string;
@@ -952,6 +956,10 @@ export default function App() {
   const tripsRef     = useRef<Trip[]>([]);
   const expensesRef  = useRef<Expense[]>([]);
   const hoursLogRef  = useRef<HoursEntry[]>([]);
+  const remoteExpenseIdsRef = useRef<Set<string>>(new Set());
+  const remoteHoursIdsRef = useRef<Set<string>>(new Set());
+  const skipNextGoalsWriteRef = useRef(false);
+  const [goalsRemoteReady, setGoalsRemoteReady] = useState(false);
 
   // Storage state
   const [lastSavedAt, setLastSavedAt] = useState<string>(() => {
@@ -1237,6 +1245,27 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("ic-recurring-plan", JSON.stringify(recurringPlan)); } catch {} }, [recurringPlan]);
   useEffect(() => { try { localStorage.setItem("ic-exp-budgets", JSON.stringify(expBudgets)); } catch {} }, [expBudgets]);
 
+  // PostgreSQL is authoritative for goal settings once an authenticated GET
+  // succeeds. The first hydration never writes the existing local cache back;
+  // only a subsequent user change creates or updates the remote row.
+  useEffect(() => {
+    if (!goalsRemoteReady) return;
+    if (skipNextGoalsWriteRef.current) {
+      skipNextGoalsWriteRef.current = false;
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      fetch("/api/goals", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          goals: { dailyGoal, workDays, dayTargets, recurringPlan, weekOverrides },
+        }),
+      }).catch(() => undefined);
+    }, 250);
+    return () => window.clearTimeout(timeout);
+  }, [goalsRemoteReady, dailyGoal, workDays, dayTargets, recurringPlan, weekOverrides]);
+
   // Keep refs in sync so the pagehide listener always has the latest state
   useEffect(() => { tripsRef.current    = trips;    }, [trips]);
   useEffect(() => { expensesRef.current = expenses; }, [expenses]);
@@ -1352,6 +1381,83 @@ export default function App() {
     void syncRemoteTrips();
     return () => { cancelled = true; };
   }, [tripsStorageKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Authenticated financial-data sync ────────────────────────────────────
+  // Existing browser-only history is kept visible and untouched, but is not
+  // uploaded automatically. Remote records win on matching IDs; future user
+  // mutations write through to PostgreSQL and continue caching locally.
+  useEffect(() => {
+    let cancelled = false;
+    const syncFinancialData = async () => {
+      const [expensesResult, hoursResult, goalsResult] = await Promise.allSettled([
+        fetch("/api/expenses"),
+        fetch("/api/hours"),
+        fetch("/api/goals"),
+      ]);
+      if (cancelled) return;
+
+      if (expensesResult.status === "fulfilled" && expensesResult.value.ok) {
+        const data = await expensesResult.value.json() as { expenses?: unknown[] };
+        if (cancelled || !Array.isArray(data.expenses)) return;
+        const remoteExpenses = data.expenses as Expense[];
+        remoteExpenseIdsRef.current = new Set(remoteExpenses.map(expense => expense.id));
+        const remoteIds = remoteExpenseIdsRef.current;
+        const merged = [
+          ...remoteExpenses,
+          ...expensesRef.current.filter(expense => !remoteIds.has(expense.id)),
+        ];
+        try { localStorage.setItem(expensesStorageKey, JSON.stringify(merged)); } catch {}
+        expensesRef.current = merged;
+        setExpenses(merged);
+      }
+
+      if (hoursResult.status === "fulfilled" && hoursResult.value.ok) {
+        const data = await hoursResult.value.json() as { hours?: unknown[] };
+        if (cancelled || !Array.isArray(data.hours)) return;
+        const remoteHours = data.hours as HoursEntry[];
+        remoteHoursIdsRef.current = new Set(remoteHours.map(hoursEntryId));
+        const remoteIds = remoteHoursIdsRef.current;
+        const merged = [
+          ...remoteHours,
+          ...hoursLogRef.current.filter(entry => !remoteIds.has(hoursEntryId(entry))),
+        ];
+        try { localStorage.setItem(hoursStorageKey, JSON.stringify(merged)); } catch {}
+        hoursLogRef.current = merged;
+        setHoursLog(merged);
+      }
+
+      if (goalsResult.status === "fulfilled" && goalsResult.value.ok) {
+        const data = await goalsResult.value.json() as {
+          goals?: null | {
+            dailyGoal: number;
+            workDays: number[];
+            dayTargets: Record<number, number>;
+            recurringPlan: { enabled: boolean; workDays: number[]; dayTargets: Record<number, number>; untilDate: string };
+            weekOverrides: Record<string, { workDays: number[]; dayTargets: Record<number, number> }>;
+          };
+        };
+        if (cancelled) return;
+        skipNextGoalsWriteRef.current = true;
+        if (data.goals) {
+          setDailyGoal(data.goals.dailyGoal);
+          setWorkDays(data.goals.workDays);
+          setDayTargets(data.goals.dayTargets);
+          setRecurringPlan(data.goals.recurringPlan);
+          setWeekOverrides(data.goals.weekOverrides);
+          try {
+            localStorage.setItem("ic-daily-goal", String(data.goals.dailyGoal));
+            localStorage.setItem("ic-work-days", JSON.stringify(data.goals.workDays));
+            localStorage.setItem("ic-day-targets", JSON.stringify(data.goals.dayTargets));
+            localStorage.setItem("ic-recurring-plan", JSON.stringify(data.goals.recurringPlan));
+            localStorage.setItem("ic-week-overrides", JSON.stringify(data.goals.weekOverrides));
+          } catch {}
+        }
+        setGoalsRemoteReady(true);
+      }
+    };
+    void syncFinancialData().catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [expensesStorageKey, hoursStorageKey]);
 
   // Initial storage check
   useEffect(() => {
@@ -1683,8 +1789,7 @@ export default function App() {
       syncSaveTrips(data.trips);
       syncSaveExpenses(Array.isArray(data.expenses) ? data.expenses : []);
       if (Array.isArray(data.hoursLog)) {
-        try { localStorage.setItem("ic-hours-log", JSON.stringify(data.hoursLog)); } catch {}
-        setHoursLog(data.hoursLog);
+        syncSaveHours(data.hoursLog);
       }
     } else {
       // merge — keep existing, add backup entries whose IDs don't already exist
@@ -1699,8 +1804,7 @@ export default function App() {
       if (Array.isArray(data.hoursLog)) {
         const existingDates = new Set(hoursLog.map(h => h.date));
         const mergedHours = [...hoursLog, ...data.hoursLog.filter((h: HoursEntry) => !existingDates.has(h.date))];
-        try { localStorage.setItem("ic-hours-log", JSON.stringify(mergedHours)); } catch {}
-        setHoursLog(mergedHours);
+        syncSaveHours(mergedHours);
       }
     }
 
@@ -1780,9 +1884,17 @@ export default function App() {
     if (isOnBreak && breakStart) breakMs += now.getTime() - breakStart.getTime();
     const activeMs = now.getTime() - clockInTime.getTime() - breakMs;
     const hours = Math.max(0, activeMs / 3600000);
-    setHoursLog(p => [
-      { date: toYYYYMMDD(now), hours, clockIn: clockInTime.toISOString(), clockOut: now.toISOString(), breakMs, miles: shiftMiles },
-      ...p,
+    syncSaveHours([
+      {
+        id: `hour-${now.getTime()}`,
+        date: toYYYYMMDD(now),
+        hours,
+        clockIn: clockInTime.toISOString(),
+        clockOut: now.toISOString(),
+        breakMs,
+        miles: shiftMiles,
+      },
+      ...hoursLogRef.current,
     ].slice(0, 60));
     setShiftActive(false);
     setIsOnBreak(false);
@@ -2223,7 +2335,55 @@ export default function App() {
   };
   const syncSaveExpenses = (newExpenses: Expense[]) => {
     try { localStorage.setItem(expensesStorageKey, JSON.stringify(newExpenses)); } catch {}
+    const previousById = new Map(expensesRef.current.map(expense => [expense.id, expense]));
+    const nextIds = new Set(newExpenses.map(expense => expense.id));
+    expensesRef.current = newExpenses;
     setExpenses(newExpenses);
+    for (const expense of newExpenses) {
+      const previous = previousById.get(expense.id);
+      if (previous && JSON.stringify(previous) === JSON.stringify(expense)) continue;
+      const isRemote = remoteExpenseIdsRef.current.has(expense.id);
+      fetch(isRemote ? `/api/expenses/${encodeURIComponent(expense.id)}` : "/api/expenses", {
+        method: isRemote ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expense }),
+      }).then(res => {
+        if (res.ok) remoteExpenseIdsRef.current.add(expense.id);
+      }).catch(() => undefined);
+    }
+    for (const id of previousById.keys()) {
+      if (nextIds.has(id) || !remoteExpenseIdsRef.current.has(id)) continue;
+      fetch(`/api/expenses/${encodeURIComponent(id)}`, { method: "DELETE" })
+        .then(res => { if (res.ok) remoteExpenseIdsRef.current.delete(id); })
+        .catch(() => undefined);
+    }
+  };
+  const syncSaveHours = (newHours: HoursEntry[]) => {
+    try { localStorage.setItem(hoursStorageKey, JSON.stringify(newHours)); } catch {}
+    const previousById = new Map(hoursLogRef.current.map(entry => [hoursEntryId(entry), entry]));
+    const nextIds = new Set(newHours.map(hoursEntryId));
+    hoursLogRef.current = newHours;
+    setHoursLog(newHours);
+    for (const entry of newHours) {
+      const id = hoursEntryId(entry);
+      const persistedEntry = entry.id ? entry : { ...entry, id };
+      const previous = previousById.get(id);
+      if (previous && JSON.stringify(previous) === JSON.stringify(entry)) continue;
+      const isRemote = remoteHoursIdsRef.current.has(id);
+      fetch(isRemote ? `/api/hours/${encodeURIComponent(id)}` : "/api/hours", {
+        method: isRemote ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hour: persistedEntry }),
+      }).then(res => {
+        if (res.ok) remoteHoursIdsRef.current.add(id);
+      }).catch(() => undefined);
+    }
+    for (const id of previousById.keys()) {
+      if (nextIds.has(id) || !remoteHoursIdsRef.current.has(id)) continue;
+      fetch(`/api/hours/${encodeURIComponent(id)}`, { method: "DELETE" })
+        .then(res => { if (res.ok) remoteHoursIdsRef.current.delete(id); })
+        .catch(() => undefined);
+    }
   };
 
   // ── Bank statement scan ───────────────────────────────────────────────────

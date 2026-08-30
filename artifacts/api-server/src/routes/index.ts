@@ -13,6 +13,9 @@ import tripsRouter from "./trips";
 import meRouter from "./me";
 import claimLegacyBackupsRouter from "./claim-legacy-backups";
 import geocodeRouter from "./geocode";
+import expensesRouter from "./expenses";
+import hoursRouter from "./hours";
+import goalsRouter from "./goals";
 
 const router: IRouter = Router();
 
@@ -30,5 +33,8 @@ router.use(tripsRouter);
 router.use(meRouter);
 router.use(claimLegacyBackupsRouter);
 router.use(geocodeRouter);
+router.use(expensesRouter);
+router.use(hoursRouter);
+router.use(goalsRouter);
 
 export default router;

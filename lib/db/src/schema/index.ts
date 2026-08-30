@@ -20,3 +20,6 @@
 export * from "./driver-backups";
 export * from "./driver-trips";
 export * from "./scanned-documents";
+export * from "./driver-expenses";
+export * from "./driver-hours";
+export * from "./driver-goals";

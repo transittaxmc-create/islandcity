@@ -8,6 +8,13 @@
       "when": 1788026730985,
       "tag": "0000_add_financial_ownership",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788116601941,
+      "tag": "0001_steep_white_tiger",
+      "breakpoints": true
     }
   ]
 }
