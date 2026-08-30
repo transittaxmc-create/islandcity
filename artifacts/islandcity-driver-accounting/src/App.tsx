@@ -43,6 +43,8 @@ type TripForm = {
   platform: string;
   pickup: string;
   dropoff: string;
+  pickupTimestamp: string;
+  dropoffTimestamp: string;
   notes: string;
   tripDate: string; // YYYY-MM-DD — actual date the trip happened (editable for late entries)
   tripTime: string; // HH:MM     — actual time the trip happened (editable for late entries)
@@ -54,6 +56,13 @@ type GpsState = {
   lng: number | null;
   acc: number | null;
   status: "inactive" | "searching" | "active" | "error";
+};
+
+type LocationCapture = {
+  poiHeader: string;
+  physicalAddress: string;
+  coordinates: string;
+  timestamp: string;
 };
 
 type HoursEntry = {
@@ -246,8 +255,8 @@ const STATE_ABBR: Record<string, string> = {
 };
 
 async function reverseGeocodeRich(
-  lat: number, lng: number, signal?: AbortSignal
-): Promise<string> {
+  lat: number, lng: number, signal?: AbortSignal, capturedAt = new Date()
+): Promise<LocationCapture> {
   // 1. Airport proximity (within 5 km → likely at the airport)
   let nearAirport: { name: string; dist: number } | null = null;
   for (const ap of AIRPORTS) {
@@ -259,15 +268,18 @@ async function reverseGeocodeRich(
   // 2. TomTom runs server-side so its API key never reaches the browser.
   const params = new URLSearchParams({ lat: String(lat), lng: String(lng) });
   const res = await fetch(`/api/geocode?${params.toString()}`, { signal });
-  if (!res.ok) return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  if (!res.ok) throw new Error(`Geocode request failed: ${res.status}`);
   const data = await res.json() as {
     ok: boolean;
     address?: {
       freeformAddress?: string;
+      streetNumber?: string;
       streetName?: string;
-      municipality?: string;
       municipalitySubdivision?: string;
+      municipality?: string;
       countrySubdivision?: string;
+      postalCode?: string;
+      borough?: string;
     };
     poi?: {
       name: string;
@@ -275,54 +287,68 @@ async function reverseGeocodeRich(
       distanceMeters?: number;
     } | null;
   };
-  if (!data.ok) return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  if (!data.ok) throw new Error("Geocode response was not ok");
 
   const addr = data.address || {};
   const poi = data.poi;
   const categories = (poi?.categories || []).map(category => category.toLowerCase());
-
-  const parts: string[] = [];
   const city = addr.municipality || addr.municipalitySubdivision || addr.countrySubdivision || "";
-  const road = addr.streetName || "";
+  const coordText = `GPS ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 
-  // 3. Branch by location type
+  // 3. Build the independent POI/category header.
+  let poiHeader = "🏡 Residencial";
   if (nearAirport && nearAirport.dist < 2) {
     // Within 2 km of known airport → airport name
-    parts.push(`✈ ${nearAirport.name}`);
+    poiHeader = `✈️ ${nearAirport.name}`;
   } else if (poi && categories.some(category => category.includes("airport"))) {
-    parts.push(`✈ ${poi.name}`);
+    poiHeader = `✈️ ${poi.name}`;
   } else if (poi && categories.some(category => category.includes("hospital"))) {
-    parts.push(`🏥 ${poi.name}`);
-    if (city) parts.push(city);
+    poiHeader = `🏥 ${poi.name}`;
   } else if (poi && (poi.distanceMeters ?? Infinity) <= 80) {
     const icon =
       categories.some(category => category.includes("hotel")) ? "🏨" :
       categories.some(category => category.includes("restaurant") || category.includes("food")) ? "🍽" :
       categories.some(category => category.includes("gas") || category.includes("petrol")) ? "⛽" :
       categories.some(category => category.includes("parking")) ? "🅿" :
-      "📍";
-    parts.push(`${icon} ${poi.name}`);
-    if (city) parts.push(city);
-  } else {
-    // Residential/street fallback when there is no nearby POI.
-    if (road) {
-      parts.push(`🏡 ${road}`);
-    } else if (addr.freeformAddress) {
-      parts.push(`🏡 ${addr.freeformAddress}`);
-    } else {
-      parts.push("🏡 Residencial");
-    }
-    if (city) parts.push(city);
+      "🏬";
+    poiHeader = `${icon} ${poi.name}`;
   }
 
-  // 8. Coordinates suffix (always included)
-  const coord = `${lat.toFixed(5)},${lng.toFixed(5)}`;
+  // 4. Build the complete physical address independently of the header.
+  const street = [addr.streetNumber, addr.streetName].filter(Boolean).join(" ");
+  const locality = [addr.borough || addr.municipalitySubdivision, addr.municipality]
+    .filter((part, index, all) => Boolean(part) && all.indexOf(part) === index);
+  const region = [addr.countrySubdivision, addr.postalCode].filter(Boolean).join(" ");
+  const physicalAddress = [
+    street || addr.freeformAddress,
+    ...locality,
+    region,
+  ].filter(Boolean).join(", ") || "Dirección no disponible";
 
-  const label =
-    parts.filter(Boolean).join(", ") ||
-    coord;
+  return {
+    poiHeader,
+    physicalAddress,
+    coordinates: coordText,
+    timestamp: formatLocationTimestamp(capturedAt),
+  };
+}
 
-  return `${label} · ${coord}`;
+function formatLocationTimestamp(date: Date): string {
+  const weekdays = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+  const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+  const hours = date.getHours();
+  const hour12 = hours % 12 || 12;
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${weekdays[date.getDay()]} ${String(date.getDate()).padStart(2, "0")} ${months[date.getMonth()]} ${date.getFullYear()} · ${hour12}:${minute} ${hours >= 12 ? "PM" : "AM"}`;
+}
+
+function fallbackLocationCapture(lat: number, lng: number, capturedAt: Date): LocationCapture {
+  return {
+    poiHeader: "🏡 Residencial",
+    physicalAddress: "Dirección no disponible",
+    coordinates: `GPS ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+    timestamp: formatLocationTimestamp(capturedAt),
+  };
 }
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
