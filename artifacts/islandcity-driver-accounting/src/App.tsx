@@ -6877,12 +6877,12 @@ export default function App() {
 
   // ─── Render ───────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-black text-white selection:bg-[#d9b64f]/30">
-      <div className="w-full max-w-[480px] mx-auto min-h-screen bg-black border-x border-[#121212] relative">
+    <div className="h-[100dvh] min-h-0 overflow-hidden bg-black text-white selection:bg-[#d9b64f]/30">
+      <div className="w-full max-w-[480px] mx-auto h-full min-h-0 bg-black border-x border-[#121212] relative flex flex-col overflow-hidden">
 
         {/* TRIPS sub-navigation — directly below the system status bar */}
         {activeTab === "TRIPS" && (
-          <div className="sticky top-0 z-20 bg-black px-4 pt-[max(8px,env(safe-area-inset-top))] pb-2">
+          <div className="flex-shrink-0 z-20 bg-black px-4 pt-[max(8px,env(safe-area-inset-top))] pb-2">
             <div className="flex gap-2">
               {([
                 { key: "ENTRY",    label: "💰 Daily Entry", badge: 0 },
@@ -6911,7 +6911,8 @@ export default function App() {
         )}
 
         {/* Content */}
-        <div className="px-4 pb-36 pt-3">
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-4 pb-36 pt-3"
+          style={{ scrollbarGutter: "stable" }}>
           {activeTab === "DASHBOARD" && DashboardContent}
           {activeTab === "FINANCES"  && FinancesContent}
           {activeTab === "TRIPS" && tripsTab === "ENTRY"    && EntryFormContent}
