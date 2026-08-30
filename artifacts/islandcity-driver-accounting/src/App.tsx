@@ -2181,37 +2181,6 @@ export default function App() {
     applyTollEvents(reconcileTollEventsToTotal(tripTollEventsRef.current, targetTotal));
   };
 
-  const addManualTollEvent = () => {
-    const now = new Date();
-    applyTollEvents([
-      ...tripTollEventsRef.current,
-      {
-        id: `manual-toll-${now.getTime()}`,
-        plaza: "Manual toll",
-        rate: 0,
-        at: now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
-        timestamp: now.toISOString(),
-        source: "manual",
-      },
-    ]);
-  };
-
-  const updateTollEvent = (id: string, patch: Partial<Pick<TollEvent, "plaza" | "rate">>) => {
-    applyTollEvents(tripTollEventsRef.current.map(event =>
-      event.id === id
-        ? {
-            ...event,
-            ...patch,
-            source: event.source === "adjustment" ? "adjustment" as const : "manual" as const,
-          }
-        : event
-    ));
-  };
-
-  const removeTollEvent = (id: string) => {
-    applyTollEvents(tripTollEventsRef.current.filter(event => event.id !== id));
-  };
-
   const resetForm = () => {
     const _nr = new Date();
     // Stop any active trip tracking without saving miles (trip was cancelled/reset)
@@ -4396,47 +4365,6 @@ export default function App() {
                 placeholder="0.00"
                 className="flex-1 bg-transparent text-white text-[20px] font-bold font-mono-jet placeholder:text-[#2a2a2a] focus:outline-none" />
             </div>
-        <div className="mt-2 rounded-xl border border-[#2e2e2e] bg-[#080808] p-2.5 space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <p className="text-[8px] text-neutral-500 font-bold uppercase tracking-wider">Toll breakdown</p>
-              <p className="text-[8px] text-neutral-600 mt-0.5">Edit each crossing; total and Notes update together.</p>
-            </div>
-            <button type="button" onClick={addManualTollEvent}
-              className="h-7 px-3 rounded-full border border-[#365314] text-[#bef264] text-[9px] font-bold whitespace-nowrap">
-              + ADD TOLL
-            </button>
-          </div>
-          {tripTollEvents.length === 0 ? (
-            <p className="text-[9px] text-neutral-600 py-1">No toll crossings recorded.</p>
-          ) : (
-            <div className="space-y-1.5">
-              {tripTollEvents.map((event, index) => (
-                <div key={event.id} className="grid grid-cols-[1fr_76px_28px] gap-1.5 items-center">
-                  <input value={event.plaza}
-                    onChange={e => updateTollEvent(event.id, { plaza: e.target.value })}
-                    aria-label={`Toll ${index + 1} plaza`}
-                    className="h-8 min-w-0 rounded-lg bg-black border border-[#262626] px-2 text-[10px] text-white focus:outline-none focus:border-[#facc15]/40" />
-                  <div className="h-8 rounded-lg bg-black border border-[#262626] px-2 flex items-center">
-                    <span className="text-[10px] text-neutral-500 mr-1">$</span>
-                    <input value={String(event.rate)} inputMode="decimal"
-                      onChange={e => {
-                        if (!/^-?\d*\.?\d{0,2}$/.test(e.target.value)) return;
-                        updateTollEvent(event.id, { rate: parseFloat(e.target.value) || 0 });
-                      }}
-                      aria-label={`Toll ${index + 1} amount`}
-                      className="w-full min-w-0 bg-transparent text-[10px] text-white font-mono-jet focus:outline-none" />
-                  </div>
-                  <button type="button" onClick={() => removeTollEvent(event.id)}
-                    aria-label={`Remove toll ${index + 1}`}
-                    className="h-7 w-7 rounded-full border border-[#3a1010] text-[#f87171] text-[11px]">
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
           </div>
 
           {/* PLATFORM COMMISSION */}
