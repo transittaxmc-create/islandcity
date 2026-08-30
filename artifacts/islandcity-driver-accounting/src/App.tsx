@@ -3603,19 +3603,27 @@ export default function App() {
           style={{ minHeight: 54, borderColor: "#444" }}>
           {pickupLocationCapture && (
             <div className="pt-2.5 pb-1.5 flex items-start gap-2">
-              <span className="text-[16px] leading-none">{pickupLocationCapture.poiHeader.split(" ")[0]}</span>
+              <span className="text-[18px] leading-none">{pickupLocationCapture.categoryIcon ?? pickupLocationCapture.poiHeader.split(" ")[0]}</span>
               <div className="min-w-0">
-                <p className="text-[13px] font-bold text-white leading-snug">{pickupLocationCapture.poiHeader.replace(/^\S+\s*/, "")}</p>
+                <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider leading-none mb-1">
+                  {pickupLocationCapture.category ?? "LOCATION"}
+                </p>
+                <p className="text-[13px] font-bold text-white leading-snug">
+                  {pickupLocationCapture.locationName ?? pickupLocationCapture.poiHeader.replace(/^\S+\s*/, "")}
+                </p>
+                {pickupLocationCapture.terminal && (
+                  <p className="text-[10px] text-[#facc15] font-semibold leading-snug mt-0.5">{pickupLocationCapture.terminal}</p>
+                )}
                 <p className="text-[10px] text-neutral-400 leading-snug mt-0.5">{pickupLocationCapture.cityState}</p>
               </div>
             </div>
           )}
-          {pickupLocationCapture && <p className="text-[8px] tracking-[0.16em] text-neutral-600 font-bold uppercase pb-0.5">LOCATION</p>}
+          {pickupLocationCapture && <p className="text-[8px] tracking-[0.16em] text-neutral-600 font-bold uppercase pb-0.5">DIRECTIONS</p>}
           <div className="flex items-center gap-2 min-h-[54px]">
             <span className="text-[#4ade80] text-[18px] flex-shrink-0">📍</span>
             <input value={tripForm.pickup}
               onChange={e => setTripForm(s => ({ ...s, pickup: e.target.value }))}
-              placeholder="Street, City"
+              placeholder="Directions / street, city"
               className="flex-1 bg-transparent text-white text-[15px] placeholder:text-[#444] focus:outline-none min-w-0" />
             <button type="button" onClick={async () => {
               if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
@@ -3646,8 +3654,8 @@ export default function App() {
           </div>
         {pickupLocationCapture && (
           <div className="pb-2.5 pt-1.5 space-y-1">
-            <p className="font-mono-jet text-[10px] text-[#4ade80] leading-snug"><span className="text-[8px] tracking-wider text-neutral-600 mr-1">GPS</span>{pickupLocationCapture.coordinates.replace(/^GPS\s*/, "")}</p>
-            <p className="font-mono-jet text-[10px] text-neutral-500 leading-snug"><span className="text-[8px] tracking-wider text-neutral-600 mr-1">CAPTURED</span>{tripForm.pickupTimestamp}</p>
+            <p className="font-mono-jet text-[10px] text-[#4ade80] leading-snug"><span className="text-[8px] tracking-wider text-neutral-600 mr-1">LOCATION GPS</span>{pickupLocationCapture.coordinates.replace(/^GPS\s*/, "")}</p>
+            <p className="font-mono-jet text-[10px] text-neutral-500 leading-snug"><span className="text-[8px] tracking-wider text-neutral-600 mr-1">DATE / TIME</span>{tripForm.pickupTimestamp || pickupLocationCapture.timestamp}</p>
           </div>
         )}
         </div>
@@ -3662,19 +3670,27 @@ export default function App() {
           style={{ minHeight: 54, borderColor: "#444" }}>
           {dropoffLocationCapture && (
             <div className="pt-2.5 pb-1.5 flex items-start gap-2">
-              <span className="text-[16px] leading-none">{dropoffLocationCapture.poiHeader.split(" ")[0]}</span>
+              <span className="text-[18px] leading-none">{dropoffLocationCapture.categoryIcon ?? dropoffLocationCapture.poiHeader.split(" ")[0]}</span>
               <div className="min-w-0">
-                <p className="text-[13px] font-bold text-white leading-snug">{dropoffLocationCapture.poiHeader.replace(/^\S+\s*/, "")}</p>
+                <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider leading-none mb-1">
+                  {dropoffLocationCapture.category ?? "LOCATION"}
+                </p>
+                <p className="text-[13px] font-bold text-white leading-snug">
+                  {dropoffLocationCapture.locationName ?? dropoffLocationCapture.poiHeader.replace(/^\S+\s*/, "")}
+                </p>
+                {dropoffLocationCapture.terminal && (
+                  <p className="text-[10px] text-[#facc15] font-semibold leading-snug mt-0.5">{dropoffLocationCapture.terminal}</p>
+                )}
                 <p className="text-[10px] text-neutral-400 leading-snug mt-0.5">{dropoffLocationCapture.cityState}</p>
               </div>
             </div>
           )}
-          {dropoffLocationCapture && <p className="text-[8px] tracking-[0.16em] text-neutral-600 font-bold uppercase pb-0.5">LOCATION</p>}
+          {dropoffLocationCapture && <p className="text-[8px] tracking-[0.16em] text-neutral-600 font-bold uppercase pb-0.5">DIRECTIONS</p>}
           <div className="flex items-center gap-2 min-h-[54px]">
             <span className="text-[#60a5fa] text-[18px] flex-shrink-0">📍</span>
             <input value={tripForm.dropoff}
               onChange={e => setTripForm(s => ({ ...s, dropoff: e.target.value }))}
-              placeholder="Street, City"
+              placeholder="Directions / street, city"
               className="flex-1 bg-transparent text-white text-[15px] placeholder:text-[#444] focus:outline-none min-w-0" />
             <button type="button" onClick={async () => {
               if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
@@ -3705,8 +3721,8 @@ export default function App() {
           </div>
         {dropoffLocationCapture && (
           <div className="pb-2.5 pt-1.5 space-y-1">
-            <p className="font-mono-jet text-[10px] text-[#60a5fa] leading-snug"><span className="text-[8px] tracking-wider text-neutral-600 mr-1">GPS</span>{dropoffLocationCapture.coordinates.replace(/^GPS\s*/, "")}</p>
-            <p className="font-mono-jet text-[10px] text-neutral-500 leading-snug"><span className="text-[8px] tracking-wider text-neutral-600 mr-1">CAPTURED</span>{tripForm.dropoffTimestamp}</p>
+            <p className="font-mono-jet text-[10px] text-[#60a5fa] leading-snug"><span className="text-[8px] tracking-wider text-neutral-600 mr-1">LOCATION GPS</span>{dropoffLocationCapture.coordinates.replace(/^GPS\s*/, "")}</p>
+            <p className="font-mono-jet text-[10px] text-neutral-500 leading-snug"><span className="text-[8px] tracking-wider text-neutral-600 mr-1">DATE / TIME</span>{tripForm.dropoffTimestamp || dropoffLocationCapture.timestamp}</p>
           </div>
         )}
         </div>
