@@ -309,6 +309,7 @@ const AIRPORTS = [
 ] as const;
 
 const GPS_RELIABLE_ACCURACY_METERS = 100;
+const GPS_TOLL_MAX_POSITION_AGE_MS = 20_000;
 
 function requestFreshGpsPosition(): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) => {
@@ -1481,6 +1482,7 @@ export default function App() {
     // street-level GPS fix. A weak/stale position must never create a toll.
     if (!shiftActive || gps.lat === null || gps.lng === null) return;
     if (gps.acc === null || gps.acc > GPS_RELIABLE_ACCURACY_METERS) return;
+    if (!gps.timestamp || Date.now() - gps.timestamp > GPS_TOLL_MAX_POSITION_AGE_MS) return;
     const currentGps = { lat: gps.lat, lng: gps.lng };
     const previousGps = tollPreviousGpsRef.current;
     tollPreviousGpsRef.current = currentGps;
