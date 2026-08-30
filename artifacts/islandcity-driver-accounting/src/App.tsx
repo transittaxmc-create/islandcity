@@ -731,13 +731,12 @@ export default function App() {
 
 
   const [tripForm, setTripForm] = useState<TripForm>(() => {
-    const _n = new Date();
     return {
       reference: "", earnings: "", tips: "", extraCash: "", otherCashIncome: "", toll: "",
       platformFee: "", platform: "Uber", pickup: "", dropoff: "",
       pickupTimestamp: "", dropoffTimestamp: "", notes: "",
-      tripDate: toYYYYMMDD(_n),
-      tripTime: _n.toTimeString().slice(0, 5),
+      tripDate: "",
+      tripTime: "",
       tripMiles: "",
     };
   });
@@ -1467,7 +1466,7 @@ export default function App() {
         reference: "", earnings: "", tips: "", extraCash: "", otherCashIncome: "", toll: "",
         platformFee: "", platform: "Uber", pickup: "", dropoff: "",
         pickupTimestamp: "", dropoffTimestamp: "", notes: "",
-        tripDate: todayYMD, tripTime: new Date().toTimeString().slice(0, 5), tripMiles: "",
+        tripDate: "", tripTime: "", tripMiles: "",
       });
       setEditingId(null);
       showToast(`Nuevo día ${todayYMD} · pantallas limpias ✓`);
@@ -1782,7 +1781,6 @@ export default function App() {
   }, [currentTime, grossToday, todayGoal, perHourGross]);
 
   const resetForm = () => {
-    const _nr = new Date();
     // Stop any active trip tracking without saving miles (trip was cancelled/reset)
     if (tripWatchIdRef.current !== null) {
       try { navigator.geolocation.clearWatch(tripWatchIdRef.current); } catch {}
@@ -1794,7 +1792,7 @@ export default function App() {
     setTripMilesDisplay(0);
     setTripForm({ reference: "", earnings: "", tips: "", extraCash: "", otherCashIncome: "", toll: "", platformFee: "", platform: "Uber", pickup: "", dropoff: "",
       pickupTimestamp: "", dropoffTimestamp: "", notes: "",
-      tripDate: toYYYYMMDD(_nr), tripTime: _nr.toTimeString().slice(0, 5), tripMiles: "" });
+      tripDate: "", tripTime: "", tripMiles: "" });
     setPickupLocationCapture(null);
     setDropoffLocationCapture(null);
     setEditingId(null);
@@ -1806,6 +1804,8 @@ export default function App() {
   const handleSave = () => {
     if (!tripForm.earnings && !tripForm.pickup) { showToast("Enter at least earnings or pickup location"); return; }
     const now = new Date();
+    const savedTripDate = tripForm.tripDate || toYYYYMMDD(now);
+    const savedTripTime = tripForm.tripTime || now.toTimeString().slice(0, 5);
     const e   = parseFloat(tripForm.earnings) || 0;
     const t   = parseFloat(tripForm.tips) || 0;
     const ex  = parseFloat(tripForm.extraCash) || 0;
@@ -1822,9 +1822,9 @@ export default function App() {
       dropoff: tripForm.dropoff.trim(),
       notes: tripForm.notes,
       grandTotal: e + t + ex + oci + tl - f,
-      time: (() => { try { return new Date(`${tripForm.tripDate}T${tripForm.tripTime}:00`).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); } catch { return now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); } })(),
-      date: tripForm.tripDate || toYYYYMMDD(now),
-      timestamp: (() => { try { return new Date(`${tripForm.tripDate}T${tripForm.tripTime}:00`).toISOString(); } catch { return now.toISOString(); } })(),
+      time: (() => { try { return new Date(`${savedTripDate}T${savedTripTime}:00`).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); } catch { return now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); } })(),
+      date: savedTripDate,
+      timestamp: (() => { try { return new Date(`${savedTripDate}T${savedTripTime}:00`).toISOString(); } catch { return now.toISOString(); } })(),
       gps: gps.lat && gps.lng ? { lat: gps.lat, lng: gps.lng, acc: gps.acc ?? undefined } : undefined,
       miles: tripMi > 0 ? tripMi : undefined,
       status: "pending" as const,
@@ -3398,14 +3398,29 @@ export default function App() {
   const EntryFormContent = (
     <div id="trip-entry-form" className="w-full max-w-[480px] mx-auto">
 
-      {/* ══ HEADER: title left · live NET TRIP TOTAL right (no box) ══ */}
-      <div className="flex items-start justify-between pb-4">
-        <div>
+      {/* ══ HEADER: title/date/time left · live total right ══ */}
+      <div className="flex items-end justify-between gap-3 pb-3">
+        <div className="flex-1 min-w-0">
           <h2 className="text-white font-black text-[22px] tracking-[0.04em] uppercase leading-none">DAILY ENTRY</h2>
           {editingId && <span className="text-[10px] text-amber-400 font-bold mt-1.5 block">✎ EDITING MODE</span>}
+          <div className="flex gap-1.5 mt-2">
+            <input type="date" value={tripForm.tripDate}
+              aria-label="Trip date"
+              onChange={e => setTripForm(s => ({ ...s, tripDate: e.target.value }))}
+              className={`min-w-0 flex-1 h-9 rounded-lg px-2.5 text-white text-[12px] focus:outline-none border ${
+                editingId ? "bg-amber-400/5 border-amber-400/40 focus:border-amber-400" : "bg-[#111] border-[#333] focus:border-[#555]"
+              }`} />
+            <input type="time" value={tripForm.tripTime}
+              aria-label="Trip time"
+              onChange={e => setTripForm(s => ({ ...s, tripTime: e.target.value }))}
+              className={`w-[92px] h-9 rounded-lg px-2.5 text-white text-[12px] focus:outline-none border ${
+                editingId ? "bg-amber-400/5 border-amber-400/40 focus:border-amber-400" : "bg-[#111] border-[#333] focus:border-[#555]"
+              }`} />
+            {editingId && <span className="self-center text-[9px] text-amber-400 font-bold flex-shrink-0">⚠ LATE?</span>}
+          </div>
         </div>
-        <div className="text-right">
-          <p className="text-[9px] text-neutral-500 uppercase tracking-[0.14em] font-bold">NET TRIP TOTAL</p>
+        <div className="text-right flex-shrink-0 pb-1">
+          <p className="text-[9px] text-neutral-500 uppercase tracking-[0.14em] font-bold">TOTAL</p>
           <p className="font-mono-jet font-black leading-none mt-0.5"
             style={{ fontSize: 26, color: grandTotalLive > 0 ? "#facc15" : "#3a3a3a",
               textShadow: grandTotalLive > 0 ? "0 0 16px rgba(250,204,21,0.55)" : "none" }}>
@@ -3414,23 +3429,8 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── DATE / TIME ── */}
-      <div className="flex gap-2 pb-4">
-        <input type="date" value={tripForm.tripDate}
-          onChange={e => setTripForm(s => ({ ...s, tripDate: e.target.value }))}
-          className={`flex-1 h-10 rounded-xl px-3 text-white text-[13px] focus:outline-none border ${
-            editingId ? "bg-amber-400/5 border-amber-400/40 focus:border-amber-400" : "bg-[#111] border-[#333] focus:border-[#555]"
-          }`} />
-        <input type="time" value={tripForm.tripTime}
-          onChange={e => setTripForm(s => ({ ...s, tripTime: e.target.value }))}
-          className={`w-[108px] h-10 rounded-xl px-3 text-white text-[13px] focus:outline-none border ${
-            editingId ? "bg-amber-400/5 border-amber-400/40 focus:border-amber-400" : "bg-[#111] border-[#333] focus:border-[#555]"
-          }`} />
-        {editingId && <span className="self-center text-[9px] text-amber-400 font-bold flex-shrink-0">⚠ LATE?</span>}
-      </div>
-
       {/* ══ FARE TYPE — quick chips (top 3 platforms by history) ══ */}
-      <div className="border-t border-[#252525] pt-3 pb-3">
+      <div className="pt-1 pb-2">
         <p className="text-[9px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-2">FARE TYPE</p>
         <div className="grid grid-cols-3 gap-2">
           {topPlatforms.map(name => {
@@ -3459,7 +3459,7 @@ export default function App() {
       </div>
 
       {/* ══ REVENUE SOURCE — dropdown ════════════════════════════ */}
-      <div className="border-t border-[#252525] pt-3 pb-3">
+      <div className="pt-2 pb-2">
         <p className="text-[9px] tracking-[0.2em] text-neutral-500 font-bold uppercase mb-2">REVENUE SOURCE</p>
 
         {/* Collapsed trigger */}
@@ -3553,7 +3553,7 @@ export default function App() {
             <span className="text-[#4ade80] text-[18px] flex-shrink-0">📍</span>
             <input value={tripForm.pickup}
               onChange={e => setTripForm(s => ({ ...s, pickup: e.target.value }))}
-              placeholder={gps.lat ? `${gps.lat.toFixed(4)}, ${gps.lng?.toFixed(4)}` : "Street, City"}
+              placeholder="Street, City"
               className="flex-1 bg-transparent text-white text-[15px] placeholder:text-[#444] focus:outline-none min-w-0" />
             <button type="button" onClick={async () => {
               if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
@@ -3704,65 +3704,74 @@ export default function App() {
         )}
       </div>
 
-      {/* ══ TRIP MILEAGE TRACKER ══════════════════════════════════ */}
-      <div className="border-t border-[#252525] pt-3 pb-3">
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-[9px] tracking-[0.2em] text-neutral-500 font-bold uppercase">TRIP MILEAGE</p>
-          {tripTracking && (
-            <span className="flex items-center gap-1 text-[9px] font-bold text-[#4ade80]">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse inline-block" />
-              TRACKING
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Start / Stop button */}
-          {!tripTracking ? (
-            <button type="button" onClick={startTripTracking}
-              className="flex items-center gap-2 h-11 px-4 rounded-xl border border-[#2e2e2e] bg-[#0a0a0a] active:scale-95 transition-all">
-              <span className="text-[#facc15] text-[16px]">▶</span>
-              <span className="text-[11px] font-bold text-white tracking-[0.06em]">START TRACKING</span>
-            </button>
-          ) : (
-            <button type="button" onClick={() => stopTripTracking(true)}
-              className="flex items-center gap-2 h-11 px-4 rounded-xl border border-[#4ade80]/40 bg-[#052e16]/30 active:scale-95 transition-all">
-              <span className="text-[#f87171] text-[16px]">⏹</span>
-              <span className="text-[11px] font-bold text-[#4ade80] tracking-[0.06em]">STOP &amp; SAVE</span>
-            </button>
-          )}
-          {/* Miles display / editable field */}
-          <div className="flex-1 flex items-center gap-1.5 h-11 rounded-xl border bg-[#080808] px-3"
-            style={{ borderColor: parseFloat(tripForm.tripMiles) > 0 ? "#facc15" : "#2e2e2e" }}>
-            <span className="font-mono-jet text-[20px] font-bold"
-              style={{ color: parseFloat(tripForm.tripMiles) > 0 ? "#facc15" : (tripTracking ? "#4ade80" : "#555") }}>
-              {tripTracking ? tripMilesDisplay.toFixed(2) : (tripForm.tripMiles || "0.00")}
-            </span>
-            <span className="text-[11px] text-neutral-500 font-mono-jet">mi</span>
-            {/* Allow manual override when not tracking */}
-            {!tripTracking && (
-              <input
-                inputMode="decimal"
-                value={tripForm.tripMiles}
-                onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, tripMiles: e.target.value })); }}
-                placeholder="0.00"
-                className="absolute opacity-0 w-0 h-0 pointer-events-none"
-                aria-hidden
-              />
-            )}
+      {/* ══ REF + TRIP MILEAGE ═══════════════════════════════════ */}
+      <div className="border-t border-[#252525] pt-2 pb-2">
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-xl border bg-[#080808] px-3 h-[62px] flex flex-col justify-center"
+            style={{ borderColor: "#2e2e2e" }}>
+            <label className="text-[8px] text-neutral-500 font-bold uppercase tracking-wider block mb-1">REF</label>
+            <input value={tripForm.reference}
+              onChange={e => setTripForm(s => ({ ...s, reference: e.target.value }))}
+              placeholder="Invoice / reference"
+              className="w-full bg-transparent text-white text-[13px] placeholder:text-[#333] focus:outline-none min-w-0" />
           </div>
-          {/* Manual edit button — tap to type miles manually */}
-          {!tripTracking && (
-            <button type="button"
-              onClick={() => {
-                const v = window.prompt("Enter miles manually:", tripForm.tripMiles || "0");
-                if (v !== null && numericFilter(v)) setTripForm(s => ({ ...s, tripMiles: v }));
-              }}
-              className="h-11 w-11 rounded-xl border border-[#2e2e2e] bg-[#0a0a0a] flex items-center justify-center active:scale-95 transition-all text-neutral-400 text-[14px]">
-              ✏️
-            </button>
-          )}
+
+          <div className="rounded-xl border bg-[#080808] px-3 h-[62px] flex flex-col justify-center"
+            style={{ borderColor: parseFloat(tripForm.tripMiles) > 0 ? "#facc15" : "#2e2e2e" }}>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-[8px] tracking-[0.12em] text-neutral-500 font-bold uppercase">TRIP MILEAGE</p>
+              {tripTracking && (
+                <span className="flex items-center gap-1 text-[8px] font-bold text-[#4ade80]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse inline-block" />
+                  TRACKING
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="font-mono-jet text-[19px] font-bold"
+                style={{ color: parseFloat(tripForm.tripMiles) > 0 ? "#facc15" : (tripTracking ? "#4ade80" : "#555") }}>
+                {tripTracking ? tripMilesDisplay.toFixed(2) : (tripForm.tripMiles || "—")}
+              </span>
+              <span className="text-[10px] text-neutral-500 font-mono-jet">mi</span>
+              {!tripTracking && (
+                <>
+                  <input
+                    inputMode="decimal"
+                    value={tripForm.tripMiles}
+                    onChange={e => { if (numericFilter(e.target.value)) setTripForm(s => ({ ...s, tripMiles: e.target.value })); }}
+                    placeholder="0.00"
+                    className="absolute opacity-0 w-0 h-0 pointer-events-none"
+                    aria-hidden
+                  />
+                  <button type="button"
+                    onClick={() => {
+                      const v = window.prompt("Enter miles manually:", tripForm.tripMiles || "0");
+                      if (v !== null && numericFilter(v)) setTripForm(s => ({ ...s, tripMiles: v }));
+                    }}
+                    aria-label="Edit trip mileage"
+                    className="ml-auto h-8 w-8 rounded-lg border border-[#2e2e2e] bg-[#0a0a0a] flex items-center justify-center active:scale-95 transition-all text-neutral-400 text-[13px]">
+                    ✏️
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
         </div>
-        <p className="text-[9px] text-neutral-600 mt-1.5 leading-relaxed">
+
+        {!tripTracking ? (
+          <button type="button" onClick={startTripTracking}
+            className="mt-2 w-full flex items-center justify-center gap-2 h-9 px-3 rounded-xl border border-[#2e2e2e] bg-[#0a0a0a] active:scale-[0.99] transition-all">
+            <span className="text-[#facc15] text-[14px]">▶</span>
+            <span className="text-[10px] font-bold text-white tracking-[0.06em]">START TRACKING</span>
+          </button>
+        ) : (
+          <button type="button" onClick={() => stopTripTracking(true)}
+            className="mt-2 w-full flex items-center justify-center gap-2 h-9 px-3 rounded-xl border border-[#4ade80]/40 bg-[#052e16]/30 active:scale-[0.99] transition-all">
+            <span className="text-[#f87171] text-[14px]">⏹</span>
+            <span className="text-[10px] font-bold text-[#4ade80] tracking-[0.06em]">STOP &amp; SAVE</span>
+          </button>
+        )}
+        <p className="text-[8px] text-neutral-600 mt-1 leading-relaxed">
           {tripTracking
             ? "GPS is recording your route. Tap STOP & SAVE when you arrive."
             : "Tap ▶ before you start driving. Or enter miles manually with ✏️."}
@@ -3841,15 +3850,8 @@ export default function App() {
         </div>
       </div>
 
-      {/* ══ REF + NOTES ═══════════════════════════════════════════ */}
-      <div className="border-t border-[#252525] pt-3 pb-3 space-y-2">
-        <div className="flex items-center gap-3 rounded-xl border bg-[#080808] px-3 h-10" style={{ borderColor: "#2e2e2e" }}>
-          <span className="text-[9px] text-neutral-500 font-bold uppercase tracking-wider flex-shrink-0">REF</span>
-          <input value={tripForm.reference}
-            onChange={e => setTripForm(s => ({ ...s, reference: e.target.value }))}
-            placeholder="Invoice / reference (optional)"
-            className="flex-1 bg-transparent text-white text-[13px] placeholder:text-[#333] focus:outline-none min-w-0" />
-        </div>
+      {/* ══ NOTES ═════════════════════════════════════════════════ */}
+      <div className="border-t border-[#252525] pt-2 pb-2">
         <div className="flex items-start gap-3 rounded-xl border bg-[#080808] px-3 py-2.5" style={{ borderColor: "#2e2e2e" }}>
           <span className="text-[9px] text-neutral-500 font-bold uppercase tracking-wider flex-shrink-0 mt-0.5">NOTE</span>
           <textarea value={tripForm.notes} onChange={e => setTripForm(s => ({ ...s, notes: e.target.value }))}
@@ -6788,38 +6790,9 @@ export default function App() {
     <div className="min-h-screen bg-black text-white selection:bg-[#d9b64f]/30">
       <div className="w-full max-w-[480px] mx-auto min-h-screen bg-black border-x border-[#121212] relative">
 
-        {/* Header — paddingTop pushes content below the iOS/Android status bar */}
-        <div className="sticky top-0 z-40 bg-black/95 backdrop-blur-xl border-b border-[#1a1a1a]"
-          style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-        <div className="px-4 h-[68px] flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            {/* Brand mark — bridge + skyline in gold circle */}
-            <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
-              style={{ background: "radial-gradient(circle at 40% 40%, #1a1500, #000)", border: "1px solid #d9b64f44" }}>
-              <LogoIcon className="w-8 h-8" />
-            </div>
-            {/* Brand name */}
-            <div className="flex flex-col leading-none">
-              <span className="font-cinzel text-[22px] tracking-[0.04em] font-bold" style={goldGradientStyle}>
-                ISLANDCITY
-              </span>
-              <span className="text-[7.5px] tracking-[0.38em] text-[#d9b64f] font-semibold mt-[3px] pl-[1px]">
-                TRANSIT SERVICES
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="font-mono-jet text-[10px] text-neutral-400 hidden sm:block">{currentTime.toLocaleTimeString()}</span>
-            <button onClick={() => { setShowSettings(true); setResetStep(0); }}
-              className="w-8 h-8 rounded-full bg-[#141414] border border-[#2e2e2e] flex items-center justify-center text-[12px] font-semibold text-[#f6dd8c] hover:border-[#d9b64f]/50 transition-colors">M</button>
-          </div>
-        </div>{/* end inner h-[68px] row */}
-        </div>{/* end sticky header wrapper */}
-
-        {/* TRIPS sub-navigation — sticky just below header */}
+        {/* TRIPS sub-navigation — directly below the system status bar */}
         {activeTab === "TRIPS" && (
-          <div className="sticky z-20 bg-black border-b border-[#181818] px-4 py-2.5"
-            style={{ top: 'calc(68px + env(safe-area-inset-top))' }}>
+          <div className="sticky top-0 z-20 bg-black px-4 pt-[max(8px,env(safe-area-inset-top))] pb-2">
             <div className="flex gap-2">
               {([
                 { key: "ENTRY",    label: "💰 Daily Entry", badge: 0 },
@@ -6848,7 +6821,7 @@ export default function App() {
         )}
 
         {/* Content */}
-        <div className="px-4 pb-36 pt-5">
+        <div className="px-4 pb-36 pt-3">
           {activeTab === "DASHBOARD" && DashboardContent}
           {activeTab === "FINANCES"  && FinancesContent}
           {activeTab === "TRIPS" && tripsTab === "ENTRY"    && EntryFormContent}
@@ -7646,25 +7619,35 @@ export default function App() {
               const active  = activeTab === key;
               const badge   = key === "TRIPS" ? pendingTrips.length : 0;
               return (
-                <button key={key} onClick={() => setActiveTab(key)}
-                  className={`flex-1 h-[62px] flex flex-col items-center justify-center gap-[3px] relative transition-all ${
-                    active ? "" : "text-neutral-600 hover:text-neutral-400"
-                  }`}
-                  style={active ? { color } : undefined}>
-                  {active && (
-                    <span className="absolute top-1.5 left-1.5 right-1.5 bottom-1.5 rounded-2xl pointer-events-none"
-                      style={{ background: color, opacity: 0.07 }} />
-                  )}
-                  <div className="relative z-10">
-                    <Icon size={active ? 20 : 18} strokeWidth={active ? 2 : 1.5} />
-                    {badge > 0 && (
-                      <span className="absolute -top-[5px] -right-[8px] min-w-[14px] h-[14px] flex items-center justify-center rounded-full text-[7px] font-bold bg-[#facc15]/25 text-[#f6dd8c] px-[3px]">
-                        {badge > 99 ? "99+" : badge}
-                      </span>
+                <span key={key} className="contents">
+                  <button onClick={() => setActiveTab(key)}
+                    className={`flex-1 h-[62px] flex flex-col items-center justify-center gap-[3px] relative transition-all ${
+                      active ? "" : "text-neutral-600 hover:text-neutral-400"
+                    }`}
+                    style={active ? { color } : undefined}>
+                    {active && (
+                      <span className="absolute top-1.5 left-1.5 right-1.5 bottom-1.5 rounded-2xl pointer-events-none"
+                        style={{ background: color, opacity: 0.07 }} />
                     )}
-                  </div>
-                  <span className={`text-[7.5px] tracking-[0.1em] z-10 ${active ? "font-bold" : "font-semibold"}`}>{label}</span>
-                </button>
+                    <div className="relative z-10">
+                      <Icon size={active ? 20 : 18} strokeWidth={active ? 2 : 1.5} />
+                      {badge > 0 && (
+                        <span className="absolute -top-[5px] -right-[8px] min-w-[14px] h-[14px] flex items-center justify-center rounded-full text-[7px] font-bold bg-[#facc15]/25 text-[#f6dd8c] px-[3px]">
+                          {badge > 99 ? "99+" : badge}
+                        </span>
+                      )}
+                    </div>
+                    <span className={`text-[7.5px] tracking-[0.1em] z-10 ${active ? "font-bold" : "font-semibold"}`}>{label}</span>
+                  </button>
+                  {key === "AI" && (
+                    <button onClick={() => { setShowSettings(true); setResetStep(0); }}
+                      aria-label="Open settings"
+                      className="flex-1 h-[62px] flex flex-col items-center justify-center gap-[3px] relative text-neutral-600 hover:text-neutral-400 transition-all">
+                      <span className="relative z-10 w-5 h-5 rounded-full border border-[#d9b64f]/55 flex items-center justify-center text-[10px] font-bold text-[#f6dd8c]">M</span>
+                      <span className="text-[7.5px] tracking-[0.1em] z-10 font-semibold">MENU</span>
+                    </button>
+                  )}
+                </span>
               );
             })}
           </div>
