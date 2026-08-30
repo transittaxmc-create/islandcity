@@ -3489,6 +3489,9 @@ export default function App() {
         </p>
         <div className="rounded-xl bg-[#080808] px-3 border"
           style={{ minHeight: 54, borderColor: "#444" }}>
+          {pickupLocationCapture && (
+            <p className="pt-2.5 text-[13px] font-bold text-white leading-snug">{pickupLocationCapture.poiHeader}</p>
+          )}
           <div className="flex items-center gap-2 min-h-[54px]">
             <span className="text-[#4ade80] text-[18px] flex-shrink-0">📍</span>
             <input value={tripForm.pickup}
@@ -3524,7 +3527,6 @@ export default function App() {
           </div>
         {pickupLocationCapture && (
           <div className="pb-2.5 space-y-1">
-            <p className="text-[13px] font-bold text-white leading-snug">{pickupLocationCapture.poiHeader}</p>
             <p className="font-mono-jet text-[10px] text-[#4ade80] leading-snug">{pickupLocationCapture.coordinates}</p>
             <p className="font-mono-jet text-[10px] text-neutral-500 leading-snug">{tripForm.pickupTimestamp}</p>
           </div>
@@ -3539,6 +3541,9 @@ export default function App() {
         </p>
         <div className="rounded-xl bg-[#080808] px-3 border"
           style={{ minHeight: 54, borderColor: "#444" }}>
+          {dropoffLocationCapture && (
+            <p className="pt-2.5 text-[13px] font-bold text-white leading-snug">{dropoffLocationCapture.poiHeader}</p>
+          )}
           <div className="flex items-center gap-2 min-h-[54px]">
             <span className="text-[#60a5fa] text-[18px] flex-shrink-0">📍</span>
             <input value={tripForm.dropoff}
@@ -3574,7 +3579,6 @@ export default function App() {
           </div>
         {dropoffLocationCapture && (
           <div className="pb-2.5 space-y-1">
-            <p className="text-[13px] font-bold text-white leading-snug">{dropoffLocationCapture.poiHeader}</p>
             <p className="font-mono-jet text-[10px] text-[#60a5fa] leading-snug">{dropoffLocationCapture.coordinates}</p>
             <p className="font-mono-jet text-[10px] text-neutral-500 leading-snug">{tripForm.dropoffTimestamp}</p>
           </div>
