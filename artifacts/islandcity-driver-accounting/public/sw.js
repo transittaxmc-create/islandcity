@@ -1,8 +1,9 @@
 // IslandCity Driver Accounting — Service Worker
-// Cache-first for app shell, network-first for API calls.
-// Falls back to cached shell when offline so the app always loads.
+// Network-first for navigations/API calls, cache-first for versioned assets.
+// This prevents an installed iPhone PWA from pinning an old deployment while
+// preserving an offline shell and cached static assets.
 
-const CACHE_VERSION = 'ic-v1';
+const CACHE_VERSION = 'ic-v2';
 const CACHE_NAME = `islandcity-app-${CACHE_VERSION}`;
 
 // ── Install: open cache and pre-cache the app shell ──────────────
@@ -20,11 +21,29 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(
-        keys.filter(k => k.startsWith('islandcity-app-') && k !== CACHE_NAME)
-            .map(k => caches.delete(k))
-      ))
-      .then(() => self.clients.claim())
+      .then(keys => {
+        const obsoleteKeys = keys.filter(
+          key => key.startsWith('islandcity-app-') && key !== CACHE_NAME
+        );
+
+        return Promise.all(obsoleteKeys.map(key => caches.delete(key)))
+          .then(() => obsoleteKeys.length > 0);
+      })
+      .then(hadObsoleteCache =>
+        self.clients.claim().then(() => hadObsoleteCache)
+      )
+      .then(hadObsoleteCache => {
+        if (!hadObsoleteCache) return;
+
+        // Existing standalone iPhone PWAs can remain open across deployments.
+        // Reload them once after replacing an older cache so they adopt the
+        // newly published HTML and hashed JavaScript bundle immediately.
+        return self.clients
+          .matchAll({ type: 'window', includeUncontrolled: true })
+          .then(clients => Promise.all(
+            clients.map(client => client.navigate(client.url).catch(() => undefined))
+          ));
+      })
   );
 });
 
@@ -53,12 +72,38 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // ── App shell (HTML/CSS/JS/assets): cache-first ───────────────
+  // ── Navigations: network-first so every launch sees the latest publish ──
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(new Request(request, { cache: 'no-store' }))
+        .then(response => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME)
+              .then(cache => cache.put(request, clone))
+              .catch(() => {});
+          }
+          return response;
+        })
+        .catch(() =>
+          caches.match(request).then(response =>
+            response ??
+            caches.match(self.registration.scope).then(shell =>
+              shell ?? new Response('IslandCity is offline. Please reconnect.', {
+                status: 503,
+                headers: { 'Content-Type': 'text/plain' }
+              })
+            )
+          )
+        )
+    );
+    return;
+  }
+
+  // ── Hashed CSS/JS/images: cache-first with background refresh ─
   event.respondWith(
     caches.match(request).then(cached => {
-      // Serve from cache immediately if available
       const networkFetch = fetch(request.clone()).then(response => {
-        // Cache successful same-origin responses
         if (response.ok && response.type !== 'opaque') {
           const clone = response.clone();
           caches.open(CACHE_NAME)
@@ -66,19 +111,8 @@ self.addEventListener('fetch', event => {
             .catch(() => {});
         }
         return response;
-      }).catch(() => {
-        // Network failed — fall back to root page (app shell) for navigation requests
-        if (request.mode === 'navigate') {
-          return caches.match(self.registration.scope)
-            .then(r => r ?? new Response('IslandCity is offline. Please reconnect.', {
-              status: 503, headers: { 'Content-Type': 'text/plain' }
-            }));
-        }
-        // For assets, return a basic 503
-        return new Response('Offline', { status: 503 });
-      });
+      }).catch(() => new Response('Offline', { status: 503 }));
 
-      // Return cached version immediately; update cache in background (stale-while-revalidate)
       return cached ?? networkFetch;
     })
   );

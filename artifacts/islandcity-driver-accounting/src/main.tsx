@@ -9,13 +9,26 @@ import './index.css';
 
 // ── PWA: Register Service Worker for offline support ─────────────
 if ('serviceWorker' in navigator) {
+  const hadServiceWorkerController = Boolean(navigator.serviceWorker.controller);
+  let reloadingForServiceWorkerUpdate = false;
+
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadServiceWorkerController || reloadingForServiceWorkerUpdate) return;
+    reloadingForServiceWorkerUpdate = true;
+    window.location.reload();
+  });
+
   window.addEventListener('load', () => {
     // BASE_URL includes the base path (e.g. /islandcity-driver-accounting/)
     const swUrl = `${import.meta.env.BASE_URL}sw.js`;
     navigator.serviceWorker
-      .register(swUrl, { scope: import.meta.env.BASE_URL })
+      .register(swUrl, {
+        scope: import.meta.env.BASE_URL,
+        updateViaCache: 'none',
+      })
       .then(reg => {
         console.log('[SW] Registered — scope:', reg.scope);
+        void reg.update();
         reg.addEventListener('updatefound', () => {
           console.log('[SW] Update found — installing new version');
         });
