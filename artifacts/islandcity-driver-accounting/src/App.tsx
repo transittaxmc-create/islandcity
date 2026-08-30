@@ -14,9 +14,10 @@ type TollEvent = {
   rate: number;
   at: string;
   timestamp: string;
-  lat: number;
-  lng: number;
-  accuracy: number;
+  lat?: number;
+  lng?: number;
+  accuracy?: number;
+  source?: "auto" | "manual" | "adjustment";
 };
 
 type Trip = {
@@ -211,10 +212,48 @@ function withTollBreakdown(notes: string, events: TollEvent[]): string {
   const total = events.reduce((sum, event) => sum + event.rate, 0);
   const breakdown = [
     TOLL_NOTES_HEADER,
-    ...events.map(event => `• ${event.at} — ${event.plaza} — $${event.rate.toFixed(2)}`),
+    ...events.map(event => {
+      const amount = event.rate < 0 ? `-$${Math.abs(event.rate).toFixed(2)}` : `$${event.rate.toFixed(2)}`;
+      return `• ${event.at} — ${event.plaza} — ${amount}`;
+    }),
     `Total tolls: $${total.toFixed(2)}`,
   ].join("\n");
   return [personalNotes.before, breakdown, personalNotes.after].filter(Boolean).join("\n\n");
+}
+
+function reconcileTollEventsToTotal(events: TollEvent[], targetTotal: number): TollEvent[] {
+  const roundedTarget = Math.max(0, Math.round(targetTotal * 100) / 100);
+  const nonAdjustments = events.filter(event => event.source !== "adjustment");
+  const baseTotal = nonAdjustments.reduce((sum, event) => sum + event.rate, 0);
+  const adjustment = Math.round((roundedTarget - baseTotal) * 100) / 100;
+
+  if (nonAdjustments.length === 0) {
+    if (roundedTarget === 0) return [];
+    const now = new Date();
+    return [{
+      id: `manual-toll-${now.getTime()}`,
+      plaza: "Manual toll",
+      rate: roundedTarget,
+      at: now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+      timestamp: now.toISOString(),
+      source: "manual",
+    }];
+  }
+
+  if (Math.abs(adjustment) < 0.01) return nonAdjustments;
+  const priorAdjustment = events.find(event => event.source === "adjustment");
+  const now = new Date();
+  return [
+    ...nonAdjustments,
+    {
+      id: priorAdjustment?.id ?? `toll-adjustment-${now.getTime()}`,
+      plaza: "Manual adjustment",
+      rate: adjustment,
+      at: priorAdjustment?.at ?? now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+      timestamp: priorAdjustment?.timestamp ?? now.toISOString(),
+      source: "adjustment",
+    },
+  ];
 }
 
 type TollDirectionPoint = { lat: number; lng: number };
