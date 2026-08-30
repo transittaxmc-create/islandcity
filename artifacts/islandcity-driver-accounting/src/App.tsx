@@ -55,6 +55,7 @@ type GpsState = {
   lat: number | null;
   lng: number | null;
   acc: number | null;
+  timestamp?: number;
   status: "inactive" | "searching" | "active" | "error";
 };
 
@@ -68,6 +69,7 @@ type LocationCapture = {
   categoryIcon?: string;
   locationName?: string;
   terminal?: string;
+  accuracyMeters?: number;
 };
 
 type HoursEntry = {
@@ -305,7 +307,8 @@ const STATE_ABBR: Record<string, string> = {
 };
 
 async function reverseGeocodeRich(
-  lat: number, lng: number, signal?: AbortSignal, capturedAt = new Date(), selectedCategory?: string
+  lat: number, lng: number, signal?: AbortSignal, capturedAt = new Date(), selectedCategory?: string,
+  accuracyMeters?: number
 ): Promise<LocationCapture> {
   // 1. Airport proximity (within 5 km → likely at the airport)
   let nearAirport: { name: string; dist: number } | null = null;
@@ -380,10 +383,25 @@ async function reverseGeocodeRich(
   ) || "Dirección no disponible";
 
   const categoryIcon = selectedCategory ? (LOCATION_CATEGORY_ICONS[selectedCategory] || "📌") : poiHeader.split(" ")[0];
+  const categoryTerms: Record<string, string[]> = {
+    Hospital: ["hospital", "clinic", "medical"],
+    Airport: ["airport"],
+    Restaurant: ["restaurant", "food"],
+    "Train/Bus": ["train", "railway", "bus", "transit", "transport"],
+    Hotel: ["hotel", "motel", "hostel"],
+    Tourist: ["tourist", "attraction", "landmark", "museum"],
+    Office: ["office", "business"],
+    Home: ["residential"],
+  };
+  const matchingPoi = selectedCategory && categoryTerms[selectedCategory]
+    ? categories.some(category => categoryTerms[selectedCategory].some(term => category.includes(term)))
+    : false;
   const locationName = selectedCategory
     ? (selectedCategory === "Airport"
-      ? (poi?.name || nearAirport?.name || "Airport")
-      : (poi?.name || selectedCategory))
+      ? (poi && categories.some(category => category.includes("airport"))
+        ? poi.name
+        : (nearAirport && nearAirport.dist < 2 ? nearAirport.name : "Airport"))
+      : (matchingPoi ? poi?.name : undefined) || selectedCategory)
     : poiHeader.replace(/^\S+\s*/, "");
   const terminal = selectedCategory === "Airport"
     ? (extractTerminal(poi?.name || "", physicalAddress) || "Terminal # unavailable")
@@ -399,6 +417,7 @@ async function reverseGeocodeRich(
     categoryIcon,
     locationName,
     terminal,
+    accuracyMeters,
   };
 }
 
@@ -412,7 +431,8 @@ function formatLocationTimestamp(date: Date): string {
 }
 
 function fallbackLocationCapture(
-  lat: number | null, lng: number | null, capturedAt: Date, selectedCategory?: string
+  lat: number | null, lng: number | null, capturedAt: Date, selectedCategory?: string,
+  accuracyMeters?: number | null
 ): LocationCapture {
   const categoryIcon = selectedCategory ? (LOCATION_CATEGORY_ICONS[selectedCategory] || "📌") : "🏡";
   const locationName = selectedCategory || "Residencial";
@@ -427,6 +447,7 @@ function fallbackLocationCapture(
     categoryIcon,
     locationName,
     terminal: selectedCategory === "Airport" ? "Terminal # unavailable" : undefined,
+    accuracyMeters: accuracyMeters ?? undefined,
   };
 }
 
