@@ -1299,15 +1299,31 @@ export default function App() {
           rate = isPeak ? plaza.rate : plaza.offPeak;
         }
 
-        const at = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        const detectedAt = new Date();
+        const at = detectedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        const event: TollEvent = {
+          id: `${plaza.name}-${detectedAt.getTime()}`,
+          plaza: plaza.name,
+          rate,
+          at,
+          timestamp: detectedAt.toISOString(),
+          lat: gps.lat,
+          lng: gps.lng,
+          accuracy: gps.acc,
+        };
+        const nextEvents = [...tripTollEventsRef.current, event];
+        replaceTripTollEvents(nextEvents);
         setDetectedToll({ plaza: plaza.name, rate, at });
-
-        // Auto-fill only if field is empty
         setTripForm(s => {
-          if (!s.toll) return { ...s, toll: String(rate) };
-          return s;
+          const detectedTotal = nextEvents.reduce((sum, tollEvent) => sum + tollEvent.rate, 0);
+          const currentTotal = parseFloat(s.toll) || 0;
+          const nextTotal = tollManuallyEdited ? currentTotal + rate : detectedTotal;
+          return {
+            ...s,
+            toll: nextTotal.toFixed(2),
+            notes: withTollBreakdown(s.notes, nextEvents),
+          };
         });
-        setTollManuallyEdited(false);
         showToast(`⚡ Toll detected · ${plaza.name} · $${rate.toFixed(2)}`);
         return;
       }
