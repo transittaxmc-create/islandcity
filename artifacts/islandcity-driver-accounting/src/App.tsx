@@ -564,6 +564,39 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+type TollDetectionCandidate = {
+  plaza: (typeof TOLL_PLAZAS)[number];
+  currentGps: TollDirectionPoint;
+};
+
+// Keep the historical GPS decision isolated from trip accounting. This
+// returns the first plaza in range, just like the original detector did;
+// callers decide what to do with a confirmed crossing afterward.
+function findTollDetectionCandidate(
+  currentGps: TollDirectionPoint,
+  lastDetectedPlaza: string | null,
+): TollDetectionCandidate | null {
+  const GEOFENCE_KM = 0.35;
+  for (const plaza of TOLL_PLAZAS) {
+    if (haversineKm(currentGps.lat, currentGps.lng, plaza.lat, plaza.lng) > GEOFENCE_KM) continue;
+    if (lastDetectedPlaza === plaza.name) return null;
+    return { plaza, currentGps };
+  }
+  return null;
+}
+
+function rateForTollPlaza(plaza: (typeof TOLL_PLAZAS)[number], now: Date): number {
+  if (plaza.offPeak === undefined) return plaza.rate;
+  const h = now.getHours();
+  const dow = now.getDay();
+  const isWeekday = dow >= 1 && dow <= 5;
+  const isWeekend = dow === 0 || dow === 6;
+  const isPeak =
+    (isWeekday && ((h >= 6 && h < 10) || (h >= 16 && h < 20))) ||
+    (isWeekend && h >= 11 && h < 21);
+  return isPeak ? plaza.rate : plaza.offPeak;
+}
+
 type PlatformMeta = { initial: string; bg: string; tags: string[]; note?: string; logo?: string; logoBg?: string };
 
 const TAG_STYLES: Record<string, string> = {
@@ -1320,71 +1353,65 @@ export default function App() {
     const currentGps = { lat: gps.lat, lng: gps.lng };
     const previousGps = tollPreviousGpsRef.current;
     tollPreviousGpsRef.current = currentGps;
-    const GEOFENCE_KM = 0.35; // ~350 m radius around each plaza
-    for (const plaza of TOLL_PLAZAS) {
-      const d = haversineKm(gps.lat, gps.lng, plaza.lat, plaza.lng);
-      if (d <= GEOFENCE_KM) {
-        // Avoid re-firing for the same plaza
-        if (lastDetectedPlazaRef.current === plaza.name) return;
-        lastDetectedPlazaRef.current = plaza.name;
-
-        if (plaza.directionality === "one-way" && plaza.tollDirection === "eastbound-only") {
-          const isEastbound = inferEastboundTravel(
-            locationCapturePoint(pickupLocationCapture),
-            locationCapturePoint(dropoffLocationCapture),
-            previousGps,
-            currentGps,
-          );
-          if (isEastbound === false) return;
-          // Heading is not persisted by the existing GPS state. If captured
-          // endpoints and recent movement cannot prove direction, preserve the
-          // previous charge behavior rather than risk omitting a real toll.
-        }
-
-        // Port Authority: choose peak vs off-peak by time of day
-        let rate = plaza.rate;
-        if (plaza.offPeak !== undefined) {
-          const now = new Date();
-          const h = now.getHours();
-          const dow = now.getDay(); // 0=Sun 6=Sat
-          const isWeekday = dow >= 1 && dow <= 5;
-          const isWeekend = dow === 0 || dow === 6;
-          const isPeak =
-            (isWeekday && ((h >= 6 && h < 10) || (h >= 16 && h < 20))) ||
-            (isWeekend && h >= 11 && h < 21);
-          rate = isPeak ? plaza.rate : plaza.offPeak;
-        }
-
-        const detectedAt = new Date();
-        const at = detectedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-        const event: TollEvent = {
-          id: `${plaza.name}-${detectedAt.getTime()}`,
-          plaza: plaza.name,
-          rate,
-          at,
-          timestamp: detectedAt.toISOString(),
-          lat: gps.lat,
-          lng: gps.lng,
-          accuracy: gps.acc,
-          source: "auto",
-        };
-        const nextEvents = [...tripTollEventsRef.current, event];
-        replaceTripTollEvents(nextEvents);
-        setDetectedToll({ plaza: plaza.name, rate, at });
-        setTripForm(s => {
-          const nextTotal = nextEvents.reduce((sum, tollEvent) => sum + tollEvent.rate, 0);
-          return {
-            ...s,
-            toll: nextTotal.toFixed(2),
-            notes: withTollBreakdown(s.notes, nextEvents),
-          };
-        });
-        showToast(`⚡ Toll detected · ${plaza.name} · $${rate.toFixed(2)}`);
-        return;
-      }
+    const candidate = findTollDetectionCandidate(
+      currentGps,
+      lastDetectedPlazaRef.current,
+    );
+    if (!candidate) {
+      // Historical behavior: once the driver is outside every plaza, the same
+      // plaza may be detected again on a later re-entry.
+      const remainsInsideLastPlaza = TOLL_PLAZAS.some(plaza =>
+        plaza.name === lastDetectedPlazaRef.current &&
+        haversineKm(currentGps.lat, currentGps.lng, plaza.lat, plaza.lng) <= 0.35
+      );
+      if (!remainsInsideLastPlaza) lastDetectedPlazaRef.current = null;
+      return;
     }
-    // Driver moved away from all plazas — clear the "last detected" so re-entry fires again
-    lastDetectedPlazaRef.current = null;
+
+    const { plaza } = candidate;
+    lastDetectedPlazaRef.current = plaza.name;
+
+    if (plaza.directionality === "one-way" && plaza.tollDirection === "eastbound-only") {
+      const isEastbound = inferEastboundTravel(
+        locationCapturePoint(pickupLocationCapture),
+        locationCapturePoint(dropoffLocationCapture),
+        previousGps,
+        currentGps,
+      );
+      if (isEastbound === false) return;
+      // As before, an unknown heading preserves the charge rather than
+      // silently omitting a real Port Authority crossing.
+    }
+
+    const detectedAt = new Date();
+    const rate = rateForTollPlaza(plaza, detectedAt);
+    const at = detectedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const event: TollEvent = {
+      id: `${plaza.name}-${detectedAt.getTime()}`,
+      plaza: plaza.name,
+      rate,
+      at,
+      timestamp: detectedAt.toISOString(),
+      lat: candidate.currentGps.lat,
+      lng: candidate.currentGps.lng,
+      accuracy: gps.acc,
+      source: "auto",
+    };
+
+    // Multiple-toll accounting remains separate from the restored GPS
+    // detector: every confirmed crossing is appended after detection.
+    const nextEvents = [...tripTollEventsRef.current, event];
+    replaceTripTollEvents(nextEvents);
+    setDetectedToll({ plaza: plaza.name, rate, at });
+    setTripForm(s => {
+      const nextTotal = nextEvents.reduce((sum, tollEvent) => sum + tollEvent.rate, 0);
+      return {
+        ...s,
+        toll: nextTotal.toFixed(2),
+        notes: withTollBreakdown(s.notes, nextEvents),
+      };
+    });
+    showToast(`⚡ Toll detected · ${plaza.name} · $${rate.toFixed(2)}`);
   }, [gps.lat, gps.lng, gps.acc, shiftActive, pickupLocationCapture, dropoffLocationCapture]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // GPS airport + reverse geocode
