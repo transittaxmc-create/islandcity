@@ -667,6 +667,8 @@ export default function App() {
     try { const r = localStorage.getItem("ic-last-github-push"); return r ? new Date(r) : null; } catch { return null; }
   });
   const [githubPushing, setGithubPushing] = useState(false);
+  const [claimingLegacyBackups, setClaimingLegacyBackups] = useState(false);
+  const [legacyClaimResolved, setLegacyClaimResolved] = useState(false);
   const [documents,    setDocuments]    = useState<DocEntry[]>([]);
   const [docsLoading,  setDocsLoading]  = useState(false);
   const [showDocuments, setShowDocuments] = useState(false);
@@ -1249,6 +1251,32 @@ export default function App() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     showToast("Backup downloaded ✓");
+  };
+
+  const handleClaimLegacyBackups = async () => {
+    if (claimingLegacyBackups || legacyClaimResolved) return;
+    setClaimingLegacyBackups(true);
+    try {
+      const res = await fetch("/api/claim-legacy-backups", { method: "POST" });
+      const data = await res.json() as {
+        ok: boolean;
+        claimedCount?: number;
+        message?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.ok) {
+        showToast(data.error || "No se pudieron reclamar los respaldos");
+        return;
+      }
+      setLegacyClaimResolved(true);
+      showToast(data.claimedCount
+        ? `🔓 ${data.claimedCount} respaldo${data.claimedCount === 1 ? "" : "s"} reclamado${data.claimedCount === 1 ? "" : "s"} ✓`
+        : (data.message || "No hay datos pendientes de reclamar"));
+    } catch {
+      showToast("No se pudieron reclamar los respaldos");
+    } finally {
+      setClaimingLegacyBackups(false);
+    }
   };
 
   // ── #8 — Restore backup from file ───────────────────────────────
@@ -7658,6 +7686,19 @@ export default function App() {
                   className="w-full h-11 rounded-full bg-[#facc15] text-black text-[12px] font-bold tracking-[0.1em] hover:bg-[#fde047] transition-colors">
                   ⬇ Download full backup
                 </button>
+                 {!legacyClaimResolved && (
+                   <div className="border-t border-[#2a2a2a] pt-3">
+                     <p className="text-[10px] text-neutral-500 mb-2">
+                       ¿Tienes respaldos antiguos sin asignar a tu cuenta?
+                     </p>
+                     <button
+                       disabled={claimingLegacyBackups}
+                       onClick={handleClaimLegacyBackups}
+                       className="w-full h-10 rounded-full border border-[#facc15]/25 text-[#d9b64f] text-[11px] font-bold tracking-[0.06em] hover:bg-[#facc15]/10 transition-colors disabled:opacity-50">
+                       {claimingLegacyBackups ? "Reclamando…" : "🔓 Reclamar mis respaldos anteriores"}
+                     </button>
+                   </div>
+                 )}
                 {/* Restore from backup */}
                 <div className="border-t border-[#2a2a2a] pt-3">
                   <p className="text-[10px] text-neutral-400 mb-2">Have a saved backup? Restore it here:</p>

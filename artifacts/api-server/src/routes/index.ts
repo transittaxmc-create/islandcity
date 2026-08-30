@@ -11,6 +11,7 @@ import geminiChatRouter from "./gemini-chat";
 import limosysEvalRouter from "./limosys-eval";
 import tripsRouter from "./trips";
 import meRouter from "./me";
+import claimLegacyBackupsRouter from "./claim-legacy-backups";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(geminiChatRouter);
 router.use(limosysEvalRouter);
 router.use(tripsRouter);
 router.use(meRouter);
+router.use(claimLegacyBackupsRouter);
 
 export default router;
