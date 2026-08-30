@@ -8,6 +8,17 @@ type TurnStatus = "START" | "BREAK" | "END";
 type Tab      = "DASHBOARD" | "TRIPS" | "EXPENSES" | "FINANCES" | "REPORTS" | "AI" | "INVENTORY";
 type TripsTab = "ENTRY" | "REGISTER" | "LEDGER";
 
+type TollEvent = {
+  id: string;
+  plaza: string;
+  rate: number;
+  at: string;
+  timestamp: string;
+  lat: number;
+  lng: number;
+  accuracy: number;
+};
+
 type Trip = {
   id: string;
   reference: string;
@@ -27,6 +38,7 @@ type Trip = {
   timestamp: string;
   gps?: { lat: number; lng: number; acc?: number };
   miles?: number;    // GPS miles tracked during this trip via watchPosition polyline
+  tollEvents?: TollEvent[];
   status: "pending" | "posted";
   reviewed: boolean;
   postedAt?: string;
@@ -145,6 +157,7 @@ type DocEntry = {
 const TOLL_YEAR = 2026;
 const TOLL_RATES_LAST_VERIFIED = "2026-08-30";
 const TOLL_RATE_REVIEW_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;
+const TOLL_NOTES_HEADER = "E-ZPASS TOLLS:";
 const TOLL_PLAZAS: {
   name: string; lat: number; lng: number;
   rate: number; offPeak?: number; type: string;
@@ -169,6 +182,23 @@ const TOLL_PLAZAS: {
   { name: "Bayonne Bridge",             lat: 40.6400, lng: -74.1100, rate: 16.79, offPeak: 14.79, type: "Port Authority", directionality: "one-way", tollDirection: "eastbound-only" },
   { name: "Outerbridge Crossing",       lat: 40.5200, lng: -74.2500, rate: 16.79, offPeak: 14.79, type: "Port Authority", directionality: "one-way", tollDirection: "eastbound-only" },
 ];
+
+function stripManagedTollNotes(notes: string): string {
+  const markerIndex = notes.indexOf(TOLL_NOTES_HEADER);
+  return (markerIndex >= 0 ? notes.slice(0, markerIndex) : notes).trimEnd();
+}
+
+function withTollBreakdown(notes: string, events: TollEvent[]): string {
+  const personalNotes = stripManagedTollNotes(notes);
+  if (events.length === 0) return personalNotes;
+  const total = events.reduce((sum, event) => sum + event.rate, 0);
+  const breakdown = [
+    TOLL_NOTES_HEADER,
+    ...events.map(event => `• ${event.at} — ${event.plaza} — $${event.rate.toFixed(2)}`),
+    `Total tolls: $${total.toFixed(2)}`,
+  ].join("\n");
+  return personalNotes ? `${personalNotes}\n\n${breakdown}` : breakdown;
+}
 
 type TollDirectionPoint = { lat: number; lng: number };
 
