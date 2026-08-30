@@ -183,10 +183,10 @@ const TOLL_PLAZAS: {
   { name: "Outerbridge Crossing",       lat: 40.5200, lng: -74.2500, rate: 16.79, offPeak: 14.79, type: "Port Authority", directionality: "one-way", tollDirection: "eastbound-only" },
 ];
 
-function stripManagedTollNotes(notes: string): string {
+function splitManagedTollNotes(notes: string): { before: string; after: string } {
   const lines = notes.split("\n");
   const headerIndex = lines.findIndex(line => line.trim() === TOLL_NOTES_HEADER);
-  if (headerIndex < 0) return notes.trimEnd();
+  if (headerIndex < 0) return { before: notes.trim(), after: "" };
 
   const totalIndex = lines.findIndex(
     (line, index) => index > headerIndex && /^Total tolls:\s*\$\d+(?:\.\d{1,2})?\s*$/.test(line.trim())
@@ -199,22 +199,22 @@ function stripManagedTollNotes(notes: string): string {
     }
   }
 
-  return [...lines.slice(0, headerIndex), ...lines.slice(endIndex + 1)]
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  return {
+    before: lines.slice(0, headerIndex).join("\n").trim(),
+    after: lines.slice(endIndex + 1).join("\n").trim(),
+  };
 }
 
 function withTollBreakdown(notes: string, events: TollEvent[]): string {
-  const personalNotes = stripManagedTollNotes(notes);
-  if (events.length === 0) return personalNotes;
+  const personalNotes = splitManagedTollNotes(notes);
+  if (events.length === 0) return [personalNotes.before, personalNotes.after].filter(Boolean).join("\n\n");
   const total = events.reduce((sum, event) => sum + event.rate, 0);
   const breakdown = [
     TOLL_NOTES_HEADER,
     ...events.map(event => `• ${event.at} — ${event.plaza} — $${event.rate.toFixed(2)}`),
     `Total tolls: $${total.toFixed(2)}`,
   ].join("\n");
-  return personalNotes ? `${personalNotes}\n\n${breakdown}` : breakdown;
+  return [personalNotes.before, breakdown, personalNotes.after].filter(Boolean).join("\n\n");
 }
 
 type TollDirectionPoint = { lat: number; lng: number };
