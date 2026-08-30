@@ -3525,7 +3525,6 @@ export default function App() {
         {pickupLocationCapture && (
           <div className="pb-2.5 space-y-1">
             <p className="text-[13px] font-bold text-white leading-snug">{pickupLocationCapture.poiHeader}</p>
-            <p className="text-[11px] text-neutral-300 leading-snug">{pickupLocationCapture.physicalAddress}</p>
             <p className="font-mono-jet text-[10px] text-[#4ade80] leading-snug">{pickupLocationCapture.coordinates}</p>
             <p className="font-mono-jet text-[10px] text-neutral-500 leading-snug">{tripForm.pickupTimestamp}</p>
           </div>
@@ -3576,7 +3575,6 @@ export default function App() {
         {dropoffLocationCapture && (
           <div className="pb-2.5 space-y-1">
             <p className="text-[13px] font-bold text-white leading-snug">{dropoffLocationCapture.poiHeader}</p>
-            <p className="text-[11px] text-neutral-300 leading-snug">{dropoffLocationCapture.physicalAddress}</p>
             <p className="font-mono-jet text-[10px] text-[#60a5fa] leading-snug">{dropoffLocationCapture.coordinates}</p>
             <p className="font-mono-jet text-[10px] text-neutral-500 leading-snug">{tripForm.dropoffTimestamp}</p>
           </div>
