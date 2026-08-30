@@ -51,7 +51,7 @@ router.get("/geocode", requireAuth, async (req, res): Promise<void> => {
     key: apiKey,
     lat: String(lat),
     lon: String(lng),
-    radius: "250",
+    radius: "42",
     limit: "5",
   });
 

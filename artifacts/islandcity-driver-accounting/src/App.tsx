@@ -310,6 +310,17 @@ const AIRPORTS = [
 
 const GPS_RELIABLE_ACCURACY_METERS = 100;
 const GPS_TOLL_MAX_POSITION_AGE_MS = 20_000;
+const POI_MATCH_MAX_DISTANCE_METERS = 42;
+const RECOGNIZED_POI_CATEGORY_TERMS = [
+  "airport", "hospital", "clinic", "medical",
+  "hotel", "motel", "hostel",
+  "restaurant", "food", "cafe", "bar",
+  "train", "railway", "bus", "transit", "transport",
+  "business", "office", "company", "corporate", "commercial",
+  "professional", "services", "store", "shop", "retail",
+  "financial", "bank", "legal", "government", "school",
+  "university", "college", "industrial",
+];
 
 function requestFreshGpsPosition(): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) => {
@@ -452,7 +463,12 @@ async function reverseGeocodeRich(
   const addr = data.address || {};
   const poi = data.poi;
   const categories = (poi?.categories || []).map(category => category.toLowerCase());
-  const poiIsAtCapturedPoint = Boolean(poi && (poi.distanceMeters ?? Infinity) <= 80);
+  const poiIsAtCapturedPoint = Boolean(
+    poi && (poi.distanceMeters ?? Infinity) <= POI_MATCH_MAX_DISTANCE_METERS
+  );
+  const poiIsRecognizedVenue = categories.some(category =>
+    RECOGNIZED_POI_CATEGORY_TERMS.some(term => category.includes(term))
+  );
   const coordText = `GPS ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 
   // 3. Build the independent POI/category header.
@@ -473,7 +489,7 @@ async function reverseGeocodeRich(
     resolvedCategory = "Hospital";
     resolvedIcon = "🏥";
     resolvedLocationName = poi!.name;
-  } else if (poiIsAtCapturedPoint) {
+  } else if (poiIsAtCapturedPoint && poiIsRecognizedVenue) {
     resolvedCategory =
       categories.some(category => category.includes("hotel")) ? "Hotel" :
       categories.some(category => category.includes("restaurant") || category.includes("food")) ? "Restaurant" :
