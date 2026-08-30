@@ -824,8 +824,15 @@ export default function App() {
   // Toll detection
   const [detectedToll, setDetectedToll] = useState<{ plaza: string; rate: number; at: string } | null>(null);
   const [tollManuallyEdited, setTollManuallyEdited] = useState(false);
+  const [tripTollEvents, setTripTollEvents] = useState<TollEvent[]>([]);
+  const tripTollEventsRef = useRef<TollEvent[]>([]);
   const lastDetectedPlazaRef = useRef<string | null>(null);
   const tollPreviousGpsRef = useRef<TollDirectionPoint | null>(null);
+
+  const replaceTripTollEvents = (events: TollEvent[]) => {
+    tripTollEventsRef.current = events;
+    setTripTollEvents(events);
+  };
 
   // Refs that always hold the latest state — used by the iOS pagehide/
   // visibilitychange listener so it never captures a stale closure.
@@ -870,7 +877,9 @@ export default function App() {
   const [docsLoading,  setDocsLoading]  = useState(false);
   const [showDocuments, setShowDocuments] = useState(false);
   const [viewingDoc,   setViewingDoc]   = useState<DocEntry | null>(null);
-  const [inlineForm, setInlineForm] = useState({ pickup: "", dropoff: "", earnings: "", reference: "" });
+  const [inlineForm, setInlineForm] = useState({
+    pickup: "", dropoff: "", earnings: "", reference: "", toll: "", notes: "",
+  });
 
   // Expense form
   const [showExpenseForm, setShowExpenseForm] = useState(false);
