@@ -318,8 +318,14 @@ const RECOGNIZED_POI_CATEGORY_TERMS = [
   "train", "railway", "bus", "transit", "transport",
   "business", "office", "company", "corporate", "commercial",
   "professional", "services", "store", "shop", "retail",
-  "financial", "bank", "legal", "government", "school",
+  "financial", "bank", "legal", "school",
   "university", "college", "industrial",
+];
+const NON_VENUE_POI_CATEGORY_TERMS = [
+  "non governmental organization",
+  "residential",
+  "private residence",
+  "home",
 ];
 
 function requestFreshGpsPosition(): Promise<GeolocationPosition> {
@@ -466,7 +472,10 @@ async function reverseGeocodeRich(
   const poiIsAtCapturedPoint = Boolean(
     poi && (poi.distanceMeters ?? Infinity) <= POI_MATCH_MAX_DISTANCE_METERS
   );
-  const poiIsRecognizedVenue = categories.some(category =>
+  const poiIsNonVenue = categories.some(category =>
+    NON_VENUE_POI_CATEGORY_TERMS.some(term => category.includes(term))
+  );
+  const poiIsRecognizedVenue = !poiIsNonVenue && categories.some(category =>
     RECOGNIZED_POI_CATEGORY_TERMS.some(term => category.includes(term))
   );
   const coordText = `GPS ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
