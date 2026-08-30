@@ -3602,29 +3602,32 @@ export default function App() {
         <div className="rounded-xl bg-[#080808] px-3 border"
           style={{ minHeight: 54, borderColor: "#444" }}>
           {pickupLocationCapture && (
-            <div className="pt-2.5 pb-1.5 flex items-start gap-2">
-              <span className="text-[18px] leading-none">{pickupLocationCapture.categoryIcon ?? pickupLocationCapture.poiHeader.split(" ")[0]}</span>
-              <div className="min-w-0">
-                <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider leading-none mb-1">
-                  {pickupLocationCapture.category ?? "LOCATION"}
-                </p>
-                <p className="text-[13px] font-bold text-white leading-snug">
-                  {pickupLocationCapture.locationName ?? pickupLocationCapture.poiHeader.replace(/^\S+\s*/, "")}
-                </p>
-                {pickupLocationCapture.terminal && (
-                  <p className="text-[10px] text-[#facc15] font-semibold leading-snug mt-0.5">{pickupLocationCapture.terminal}</p>
-                )}
-                <p className="text-[10px] text-neutral-400 leading-snug mt-0.5">{pickupLocationCapture.cityState}</p>
+            <div className="py-1.5 flex items-center gap-2 min-w-0">
+              <span className="text-[17px] leading-none flex-shrink-0">{pickupLocationCapture.categoryIcon ?? pickupLocationCapture.poiHeader.split(" ")[0]}</span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 min-w-0 leading-tight">
+                  <span className="text-[8px] text-neutral-500 font-bold uppercase tracking-wider flex-shrink-0">
+                    {pickupLocationCapture.category ?? "LOCATION"}
+                  </span>
+                  <p className="text-[12px] font-bold text-white truncate">
+                    {pickupLocationCapture.locationName ?? pickupLocationCapture.poiHeader.replace(/^\S+\s*/, "")}
+                  </p>
+                  {pickupLocationCapture.terminal && (
+                    <span className="text-[9px] text-[#facc15] font-semibold truncate flex-shrink-0">· {pickupLocationCapture.terminal}</span>
+                  )}
+                </div>
+                <p className="text-[9px] text-neutral-400 leading-tight truncate">{pickupLocationCapture.cityState}</p>
               </div>
             </div>
           )}
-          {pickupLocationCapture && <p className="text-[8px] tracking-[0.16em] text-neutral-600 font-bold uppercase pb-0.5">DIRECTIONS</p>}
-          <div className="flex items-center gap-2 min-h-[54px]">
-            <span className="text-[#4ade80] text-[18px] flex-shrink-0">📍</span>
+          <div className={`flex items-center gap-2 ${pickupLocationCapture ? "min-h-[36px] border-t border-[#1e1e1e]" : "min-h-[54px]"}`}>
+            {pickupLocationCapture
+              ? <span className="text-[8px] tracking-[0.12em] text-neutral-600 font-bold uppercase flex-shrink-0">DIRECTIONS</span>
+              : <span className="text-[#4ade80] text-[18px] flex-shrink-0">📍</span>}
             <input value={tripForm.pickup}
               onChange={e => setTripForm(s => ({ ...s, pickup: e.target.value }))}
               placeholder="Directions / street, city"
-              className="flex-1 bg-transparent text-white text-[15px] placeholder:text-[#444] focus:outline-none min-w-0" />
+              className="flex-1 bg-transparent text-white text-[13px] placeholder:text-[#444] focus:outline-none min-w-0 truncate" />
             <button type="button" onClick={async () => {
               if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
               const capturedAt = new Date();
@@ -3648,14 +3651,14 @@ export default function App() {
                 }));
                 showToast("GPS coordinates saved (offline)");
               } finally { setPickupResolving(false); }
-            }} className="flex-shrink-0 w-10 h-10 rounded-xl bg-[#052e16] border border-[#166534] flex items-center justify-center text-[11px] font-bold text-[#4ade80] active:scale-90 transition-all">
+            }} className="flex-shrink-0 w-9 h-8 rounded-lg bg-[#052e16] border border-[#166534] flex items-center justify-center text-[10px] font-bold text-[#4ade80] active:scale-90 transition-all">
               {pickupResolving ? <span className="animate-spin text-[10px]">⏳</span> : "GPS"}
             </button>
           </div>
         {pickupLocationCapture && (
-          <div className="pb-2.5 pt-1.5 space-y-1">
-            <p className="font-mono-jet text-[10px] text-[#4ade80] leading-snug"><span className="text-[8px] tracking-wider text-neutral-600 mr-1">LOCATION GPS</span>{pickupLocationCapture.coordinates.replace(/^GPS\s*/, "")}</p>
-            <p className="font-mono-jet text-[10px] text-neutral-500 leading-snug"><span className="text-[8px] tracking-wider text-neutral-600 mr-1">DATE / TIME</span>{tripForm.pickupTimestamp || pickupLocationCapture.timestamp}</p>
+          <div className="border-t border-[#1e1e1e] py-1 grid grid-cols-2 gap-2">
+            <p className="font-mono-jet text-[9px] text-[#4ade80] leading-tight truncate"><span className="text-[7px] tracking-wider text-neutral-600 mr-1">GPS</span>{pickupLocationCapture.coordinates.replace(/^GPS\s*/, "")}</p>
+            <p className="font-mono-jet text-[9px] text-neutral-500 leading-tight truncate"><span className="text-[7px] tracking-wider text-neutral-600 mr-1">DATE / TIME</span>{tripForm.pickupTimestamp || pickupLocationCapture.timestamp}</p>
           </div>
         )}
         </div>
@@ -3669,29 +3672,32 @@ export default function App() {
         <div className="rounded-xl bg-[#080808] px-3 border"
           style={{ minHeight: 54, borderColor: "#444" }}>
           {dropoffLocationCapture && (
-            <div className="pt-2.5 pb-1.5 flex items-start gap-2">
-              <span className="text-[18px] leading-none">{dropoffLocationCapture.categoryIcon ?? dropoffLocationCapture.poiHeader.split(" ")[0]}</span>
-              <div className="min-w-0">
-                <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider leading-none mb-1">
-                  {dropoffLocationCapture.category ?? "LOCATION"}
-                </p>
-                <p className="text-[13px] font-bold text-white leading-snug">
-                  {dropoffLocationCapture.locationName ?? dropoffLocationCapture.poiHeader.replace(/^\S+\s*/, "")}
-                </p>
-                {dropoffLocationCapture.terminal && (
-                  <p className="text-[10px] text-[#facc15] font-semibold leading-snug mt-0.5">{dropoffLocationCapture.terminal}</p>
-                )}
-                <p className="text-[10px] text-neutral-400 leading-snug mt-0.5">{dropoffLocationCapture.cityState}</p>
+            <div className="py-1.5 flex items-center gap-2 min-w-0">
+              <span className="text-[17px] leading-none flex-shrink-0">{dropoffLocationCapture.categoryIcon ?? dropoffLocationCapture.poiHeader.split(" ")[0]}</span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 min-w-0 leading-tight">
+                  <span className="text-[8px] text-neutral-500 font-bold uppercase tracking-wider flex-shrink-0">
+                    {dropoffLocationCapture.category ?? "LOCATION"}
+                  </span>
+                  <p className="text-[12px] font-bold text-white truncate">
+                    {dropoffLocationCapture.locationName ?? dropoffLocationCapture.poiHeader.replace(/^\S+\s*/, "")}
+                  </p>
+                  {dropoffLocationCapture.terminal && (
+                    <span className="text-[9px] text-[#facc15] font-semibold truncate flex-shrink-0">· {dropoffLocationCapture.terminal}</span>
+                  )}
+                </div>
+                <p className="text-[9px] text-neutral-400 leading-tight truncate">{dropoffLocationCapture.cityState}</p>
               </div>
             </div>
           )}
-          {dropoffLocationCapture && <p className="text-[8px] tracking-[0.16em] text-neutral-600 font-bold uppercase pb-0.5">DIRECTIONS</p>}
-          <div className="flex items-center gap-2 min-h-[54px]">
-            <span className="text-[#60a5fa] text-[18px] flex-shrink-0">📍</span>
+          <div className={`flex items-center gap-2 ${dropoffLocationCapture ? "min-h-[36px] border-t border-[#1e1e1e]" : "min-h-[54px]"}`}>
+            {dropoffLocationCapture
+              ? <span className="text-[8px] tracking-[0.12em] text-neutral-600 font-bold uppercase flex-shrink-0">DIRECTIONS</span>
+              : <span className="text-[#60a5fa] text-[18px] flex-shrink-0">📍</span>}
             <input value={tripForm.dropoff}
               onChange={e => setTripForm(s => ({ ...s, dropoff: e.target.value }))}
               placeholder="Directions / street, city"
-              className="flex-1 bg-transparent text-white text-[15px] placeholder:text-[#444] focus:outline-none min-w-0" />
+              className="flex-1 bg-transparent text-white text-[13px] placeholder:text-[#444] focus:outline-none min-w-0 truncate" />
             <button type="button" onClick={async () => {
               if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
               const capturedAt = new Date();
@@ -3715,14 +3721,14 @@ export default function App() {
                 }));
                 showToast("GPS coordinates saved (offline)");
               } finally { setDropoffResolving(false); }
-            }} className="flex-shrink-0 w-10 h-10 rounded-xl bg-[#0c1a33] border border-[#1e3a8a] flex items-center justify-center text-[11px] font-bold text-[#60a5fa] active:scale-90 transition-all">
+            }} className="flex-shrink-0 w-9 h-8 rounded-lg bg-[#0c1a33] border border-[#1e3a8a] flex items-center justify-center text-[10px] font-bold text-[#60a5fa] active:scale-90 transition-all">
               {dropoffResolving ? <span className="animate-spin text-[10px]">⏳</span> : "GPS"}
             </button>
           </div>
         {dropoffLocationCapture && (
-          <div className="pb-2.5 pt-1.5 space-y-1">
-            <p className="font-mono-jet text-[10px] text-[#60a5fa] leading-snug"><span className="text-[8px] tracking-wider text-neutral-600 mr-1">LOCATION GPS</span>{dropoffLocationCapture.coordinates.replace(/^GPS\s*/, "")}</p>
-            <p className="font-mono-jet text-[10px] text-neutral-500 leading-snug"><span className="text-[8px] tracking-wider text-neutral-600 mr-1">DATE / TIME</span>{tripForm.dropoffTimestamp || dropoffLocationCapture.timestamp}</p>
+          <div className="border-t border-[#1e1e1e] py-1 grid grid-cols-2 gap-2">
+            <p className="font-mono-jet text-[9px] text-[#60a5fa] leading-tight truncate"><span className="text-[7px] tracking-wider text-neutral-600 mr-1">GPS</span>{dropoffLocationCapture.coordinates.replace(/^GPS\s*/, "")}</p>
+            <p className="font-mono-jet text-[9px] text-neutral-500 leading-tight truncate"><span className="text-[7px] tracking-wider text-neutral-600 mr-1">DATE / TIME</span>{tripForm.dropoffTimestamp || dropoffLocationCapture.timestamp}</p>
           </div>
         )}
         </div>
