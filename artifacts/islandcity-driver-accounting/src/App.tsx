@@ -731,15 +731,19 @@ export default function App() {
 
 
   const [tripForm, setTripForm] = useState<TripForm>(() => {
+    const _n = new Date();
     return {
       reference: "", earnings: "", tips: "", extraCash: "", otherCashIncome: "", toll: "",
       platformFee: "", platform: "Uber", pickup: "", dropoff: "",
       pickupTimestamp: "", dropoffTimestamp: "", notes: "",
-      tripDate: "",
-      tripTime: "",
+      tripDate: toYYYYMMDD(_n),
+      tripTime: _n.toTimeString().slice(0, 5),
       tripMiles: "",
     };
   });
+  const entryDateManuallySetRef = useRef(false);
+  const entryTimeManuallySetRef = useRef(false);
+  const entryAutoDayRef = useRef(toYYYYMMDD(new Date()));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showPlatformDropdown, setShowPlatformDropdown] = useState(false);
   const [inlineEditId, setInlineEditId] = useState<string | null>(null);
@@ -922,6 +926,20 @@ export default function App() {
     const id = window.setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(id);
   }, []);
+
+  // Keep a fresh automatic date/time for a new entry when the calendar day
+  // changes, without overwriting a date/time the driver chose explicitly.
+  useEffect(() => {
+    const today = toYYYYMMDD(currentTime);
+    if (today === entryAutoDayRef.current) return;
+    entryAutoDayRef.current = today;
+    if (editingId) return;
+    setTripForm(s => ({
+      ...s,
+      ...(entryDateManuallySetRef.current ? {} : { tripDate: today }),
+      ...(entryTimeManuallySetRef.current ? {} : { tripTime: currentTime.toTimeString().slice(0, 5) }),
+    }));
+  }, [currentTime, editingId]);
 
   // Persist trips
   useEffect(() => {
@@ -1462,11 +1480,14 @@ export default function App() {
 
     if (isNewDay) {
       // New day — reset entry form so the screen starts clean
+      entryDateManuallySetRef.current = false;
+      entryTimeManuallySetRef.current = false;
+      entryAutoDayRef.current = todayYMD;
       setTripForm({
         reference: "", earnings: "", tips: "", extraCash: "", otherCashIncome: "", toll: "",
         platformFee: "", platform: "Uber", pickup: "", dropoff: "",
         pickupTimestamp: "", dropoffTimestamp: "", notes: "",
-        tripDate: "", tripTime: "", tripMiles: "",
+        tripDate: todayYMD, tripTime: now.toTimeString().slice(0, 5), tripMiles: "",
       });
       setEditingId(null);
       showToast(`Nuevo día ${todayYMD} · pantallas limpias ✓`);
@@ -1781,6 +1802,7 @@ export default function App() {
   }, [currentTime, grossToday, todayGoal, perHourGross]);
 
   const resetForm = () => {
+    const _nr = new Date();
     // Stop any active trip tracking without saving miles (trip was cancelled/reset)
     if (tripWatchIdRef.current !== null) {
       try { navigator.geolocation.clearWatch(tripWatchIdRef.current); } catch {}
@@ -1790,9 +1812,12 @@ export default function App() {
     tripMilesRef.current   = 0;
     setTripTracking(false);
     setTripMilesDisplay(0);
+    entryDateManuallySetRef.current = false;
+    entryTimeManuallySetRef.current = false;
+    entryAutoDayRef.current = toYYYYMMDD(_nr);
     setTripForm({ reference: "", earnings: "", tips: "", extraCash: "", otherCashIncome: "", toll: "", platformFee: "", platform: "Uber", pickup: "", dropoff: "",
       pickupTimestamp: "", dropoffTimestamp: "", notes: "",
-      tripDate: "", tripTime: "", tripMiles: "" });
+      tripDate: toYYYYMMDD(_nr), tripTime: _nr.toTimeString().slice(0, 5), tripMiles: "" });
     setPickupLocationCapture(null);
     setDropoffLocationCapture(null);
     setEditingId(null);
@@ -1850,6 +1875,8 @@ export default function App() {
 
   const handleEditToEntry = (trip: Trip) => {
     setEditingId(trip.id);
+    entryDateManuallySetRef.current = true;
+    entryTimeManuallySetRef.current = true;
     const _tsDt = (() => { try { return new Date(trip.timestamp || (trip.date + 'T12:00:00')); } catch { return new Date(); } })();
     setTripForm({
       reference: trip.reference, earnings: String(trip.earnings), tips: String(trip.tips),
@@ -3406,13 +3433,19 @@ export default function App() {
           <div className="flex gap-1.5 mt-2">
             <input type="date" value={tripForm.tripDate}
               aria-label="Trip date"
-              onChange={e => setTripForm(s => ({ ...s, tripDate: e.target.value }))}
+              onChange={e => {
+                entryDateManuallySetRef.current = true;
+                setTripForm(s => ({ ...s, tripDate: e.target.value }));
+              }}
               className={`min-w-0 flex-1 h-9 rounded-lg px-2.5 text-white text-[12px] focus:outline-none border ${
                 editingId ? "bg-amber-400/5 border-amber-400/40 focus:border-amber-400" : "bg-[#111] border-[#333] focus:border-[#555]"
               }`} />
             <input type="time" value={tripForm.tripTime}
               aria-label="Trip time"
-              onChange={e => setTripForm(s => ({ ...s, tripTime: e.target.value }))}
+              onChange={e => {
+                entryTimeManuallySetRef.current = true;
+                setTripForm(s => ({ ...s, tripTime: e.target.value }));
+              }}
               className={`w-[92px] h-9 rounded-lg px-2.5 text-white text-[12px] focus:outline-none border ${
                 editingId ? "bg-amber-400/5 border-amber-400/40 focus:border-amber-400" : "bg-[#111] border-[#333] focus:border-[#555]"
               }`} />
