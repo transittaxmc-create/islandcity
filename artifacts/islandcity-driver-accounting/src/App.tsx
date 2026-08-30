@@ -4314,7 +4314,8 @@ export default function App() {
                   const pm    = getPlatformMeta(t.platform);
                   const isSel = selectedForPost.has(t.id);
                   const liveFare = parseFloat(inlineEditId === t.id ? inlineForm.earnings : String(t.earnings)) || 0;
-                  const liveTotal = liveFare + t.tips + t.extra + (t.otherCash||0) + t.toll - t.fee;
+                   const liveToll = parseFloat(inlineEditId === t.id ? inlineForm.toll : String(t.toll)) || 0;
+                   const liveTotal = liveFare + t.tips + t.extra + (t.otherCash||0) + liveToll - t.fee;
 
                   return (
                     <div key={t.id} className={`border rounded-2xl p-4 space-y-3 transition-all duration-150 ${isSel ? "bg-[#141410] border-[#facc15]/30" : "bg-[#141414] border-[#2e2e2e]"}`}>
@@ -4362,7 +4363,7 @@ export default function App() {
                             {t.miles && t.miles > 0 && <span className="text-[#facc15]">🛣 {t.miles.toFixed(2)} mi</span>}
                             {t.gps       && <span>📍 {t.gps.lat.toFixed(4)},{t.gps.lng.toFixed(4)}</span>}
                           </div>
-                          {t.notes && <p className="text-[11px] text-neutral-400 mt-1 leading-[1.4] break-words">{t.notes}</p>}
+                          {t.notes && <p className="text-[11px] text-neutral-400 mt-1 leading-[1.4] break-words whitespace-pre-line">{t.notes}</p>}
                         </div>
                       </div>
 
@@ -4380,10 +4381,19 @@ export default function App() {
                             onChange={e => setInlineForm(s => ({ ...s, earnings: e.target.value }))}
                             placeholder="Earnings"
                             className="w-full h-10 rounded-lg bg-black border border-[#262626] px-3 text-[13px] text-white font-mono-jet placeholder:text-[#6b7280] focus:outline-none" />
+                          <input value={inlineForm.toll} inputMode="decimal"
+                            onChange={e => { if (numericFilter(e.target.value)) setInlineForm(s => ({ ...s, toll: e.target.value })); }}
+                            placeholder="Toll total"
+                            className="w-full h-10 rounded-lg bg-black border border-[#262626] px-3 text-[13px] text-white font-mono-jet placeholder:text-[#6b7280] focus:outline-none" />
+                          <textarea value={inlineForm.notes}
+                            onChange={e => setInlineForm(s => ({ ...s, notes: e.target.value }))}
+                            placeholder="Notes and E-ZPass toll breakdown"
+                            rows={4}
+                            className="w-full min-h-[88px] rounded-lg bg-black border border-[#262626] px-3 py-2 text-[12px] leading-relaxed text-white placeholder:text-[#6b7280] focus:outline-none resize-y" />
                           {/* Live total preview */}
                           <div className="flex items-center justify-between bg-black rounded-lg px-3 py-2 border border-[#2e2e2e]">
                             <span className="font-mono-jet text-[9px] text-neutral-400 truncate pr-2">
-                              ${liveFare.toFixed(2)} fare + ${t.tips.toFixed(2)} tips + ${t.extra.toFixed(2)} extra + ${t.toll.toFixed(2)} toll − ${t.fee.toFixed(2)} fee
+                              ${liveFare.toFixed(2)} fare + ${t.tips.toFixed(2)} tips + ${t.extra.toFixed(2)} extra + ${liveToll.toFixed(2)} toll − ${t.fee.toFixed(2)} fee
                             </span>
                             <span className="font-mono-jet text-[15px] font-bold text-[#facc15] flex-shrink-0">
                               = ${liveTotal.toFixed(2)}
@@ -4541,7 +4551,7 @@ export default function App() {
                         {t.fee > 0   && <span>Fee −${t.fee.toFixed(2)}</span>}
                         {t.postedAt  && <span>📋 Posted {new Date(t.postedAt).toLocaleDateString()}</span>}
                       </div>
-                      {t.notes && <p className="text-[11px] text-neutral-400 leading-[1.4] break-words">{t.notes}</p>}
+                      {t.notes && <p className="text-[11px] text-neutral-400 leading-[1.4] break-words whitespace-pre-line">{t.notes}</p>}
                       {/* Ledger actions */}
                       <div className="flex gap-2 pt-1">
                         <button onClick={() => handleUnpostTrip(t.id)}
