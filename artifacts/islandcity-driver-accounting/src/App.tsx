@@ -3496,23 +3496,38 @@ export default function App() {
             className="flex-1 bg-transparent text-white text-[15px] placeholder:text-[#444] focus:outline-none min-w-0" />
           <button type="button" onClick={async () => {
             if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
+            const capturedAt = new Date();
             setPickupResolving(true);
             try {
-              const rich = await reverseGeocodeRich(gps.lat, gps.lng);
-              setTripForm(s => ({ ...s, pickup: rich }));
+              const capture = await reverseGeocodeRich(gps.lat, gps.lng, undefined, capturedAt);
+              setPickupLocationCapture(capture);
+              setTripForm(s => ({
+                ...s,
+                pickup: capture.physicalAddress,
+                pickupTimestamp: capture.timestamp,
+              }));
               showToast("Pickup resolved ✓");
             } catch {
-              setTripForm(s => ({ ...s, pickup: `${gps.lat!.toFixed(5)},${gps.lng!.toFixed(5)}` }));
+              const capture = fallbackLocationCapture(gps.lat, gps.lng, capturedAt);
+              setPickupLocationCapture(capture);
+              setTripForm(s => ({
+                ...s,
+                pickup: capture.physicalAddress,
+                pickupTimestamp: capture.timestamp,
+              }));
               showToast("GPS coordinates saved (offline)");
             } finally { setPickupResolving(false); }
           }} className="flex-shrink-0 w-10 h-10 rounded-xl bg-[#052e16] border border-[#166534] flex items-center justify-center text-[11px] font-bold text-[#4ade80] active:scale-90 transition-all">
             {pickupResolving ? <span className="animate-spin text-[10px]">⏳</span> : "GPS"}
           </button>
         </div>
-        {gps.lat && (
-          <p className="font-mono-jet text-[9px] text-[#4ade80] mt-1 truncate px-1">
-            {gps.lat.toFixed(5)}, {gps.lng?.toFixed(5)} · ±{gps.acc ? Math.round(gps.acc) : "?"}m{gpsAddress ? ` · ${gpsAddress}` : ""}{gpsAirport ? ` · ✈ ${gpsAirport}` : ""}
-          </p>
+        {pickupLocationCapture && (
+          <div className="mt-2 rounded-xl border border-[#1e3a24] bg-[#07100a] px-3 py-2.5 space-y-1">
+            <p className="text-[13px] font-bold text-white leading-snug">{pickupLocationCapture.poiHeader}</p>
+            <p className="text-[11px] text-neutral-300 leading-snug">{pickupLocationCapture.physicalAddress}</p>
+            <p className="font-mono-jet text-[10px] text-[#4ade80] leading-snug">{pickupLocationCapture.coordinates}</p>
+            <p className="font-mono-jet text-[10px] text-neutral-500 leading-snug">{tripForm.pickupTimestamp}</p>
+          </div>
         )}
       </div>
 
@@ -3530,19 +3545,39 @@ export default function App() {
             className="flex-1 bg-transparent text-white text-[15px] placeholder:text-[#444] focus:outline-none min-w-0" />
           <button type="button" onClick={async () => {
             if (!gps.lat || !gps.lng) { startGPS(); showToast("GPS searching… tap again when ready"); return; }
+            const capturedAt = new Date();
             setDropoffResolving(true);
             try {
-              const rich = await reverseGeocodeRich(gps.lat, gps.lng);
-              setTripForm(s => ({ ...s, dropoff: rich }));
+              const capture = await reverseGeocodeRich(gps.lat, gps.lng, undefined, capturedAt);
+              setDropoffLocationCapture(capture);
+              setTripForm(s => ({
+                ...s,
+                dropoff: capture.physicalAddress,
+                dropoffTimestamp: capture.timestamp,
+              }));
               showToast("Drop-off resolved ✓");
             } catch {
-              setTripForm(s => ({ ...s, dropoff: `${gps.lat!.toFixed(5)},${gps.lng!.toFixed(5)}` }));
+              const capture = fallbackLocationCapture(gps.lat, gps.lng, capturedAt);
+              setDropoffLocationCapture(capture);
+              setTripForm(s => ({
+                ...s,
+                dropoff: capture.physicalAddress,
+                dropoffTimestamp: capture.timestamp,
+              }));
               showToast("GPS coordinates saved (offline)");
             } finally { setDropoffResolving(false); }
           }} className="flex-shrink-0 w-10 h-10 rounded-xl bg-[#0c1a33] border border-[#1e3a8a] flex items-center justify-center text-[11px] font-bold text-[#60a5fa] active:scale-90 transition-all">
             {dropoffResolving ? <span className="animate-spin text-[10px]">⏳</span> : "GPS"}
           </button>
         </div>
+        {dropoffLocationCapture && (
+          <div className="mt-2 rounded-xl border border-[#172844] bg-[#070c14] px-3 py-2.5 space-y-1">
+            <p className="text-[13px] font-bold text-white leading-snug">{dropoffLocationCapture.poiHeader}</p>
+            <p className="text-[11px] text-neutral-300 leading-snug">{dropoffLocationCapture.physicalAddress}</p>
+            <p className="font-mono-jet text-[10px] text-[#60a5fa] leading-snug">{dropoffLocationCapture.coordinates}</p>
+            <p className="font-mono-jet text-[10px] text-neutral-500 leading-snug">{tripForm.dropoffTimestamp}</p>
+          </div>
+        )}
       </div>
 
       {/* ══ LOCATION CATEGORY ════════════════════════════════════ */}
@@ -3575,13 +3610,16 @@ export default function App() {
               <button key={cat} type="button" onClick={() => {
                 const coord = gps.lat ? ` (${gps.lat.toFixed(4)},${gps.lng?.toFixed(4)})` : "";
                 if (showPickupMenu) {
-                  setTripForm(s => ({ ...s, pickup: `${cat}${coord}` }));
+                  setPickupLocationCapture(null);
+                  setTripForm(s => ({ ...s, pickup: `${cat}${coord}`, pickupTimestamp: "" }));
                   setShowPickupMenu(false); showToast(`Pickup: ${cat}`);
                 } else if (showDropoffMenu) {
-                  setTripForm(s => ({ ...s, dropoff: `${cat}${coord}` }));
+                  setDropoffLocationCapture(null);
+                  setTripForm(s => ({ ...s, dropoff: `${cat}${coord}`, dropoffTimestamp: "" }));
                   setShowDropoffMenu(false); showToast(`Drop-off: ${cat}`);
                 } else {
-                  setTripForm(s => ({ ...s, dropoff: `${cat}${coord}` }));
+                  setDropoffLocationCapture(null);
+                  setTripForm(s => ({ ...s, dropoff: `${cat}${coord}`, dropoffTimestamp: "" }));
                   showToast(`Drop-off: ${cat}`);
                 }
               }}
