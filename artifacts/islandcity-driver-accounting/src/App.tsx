@@ -668,6 +668,8 @@ export default function App() {
   const [showDropoffMenu, setShowDropoffMenu] = useState(false);
   const [pickupResolving, setPickupResolving] = useState(false);
   const [dropoffResolving, setDropoffResolving] = useState(false);
+  const [pickupLocationCapture, setPickupLocationCapture] = useState<LocationCapture | null>(null);
+  const [dropoffLocationCapture, setDropoffLocationCapture] = useState<LocationCapture | null>(null);
   const [selectedForPost, setSelectedForPost] = useState<Set<string>>(new Set());
 
   // Toll detection
@@ -693,7 +695,8 @@ export default function App() {
     const _n = new Date();
     return {
       reference: "", earnings: "", tips: "", extraCash: "", otherCashIncome: "", toll: "",
-      platformFee: "", platform: "Uber", pickup: "", dropoff: "", notes: "",
+      platformFee: "", platform: "Uber", pickup: "", dropoff: "",
+      pickupTimestamp: "", dropoffTimestamp: "", notes: "",
       tripDate: toYYYYMMDD(_n),
       tripTime: _n.toTimeString().slice(0, 5),
       tripMiles: "",
@@ -1133,7 +1136,7 @@ export default function App() {
     (async () => {
       try {
         const rich = await reverseGeocodeRich(gps.lat!, gps.lng!, controller.signal);
-        setGpsAddress(rich);
+        setGpsAddress(rich.physicalAddress);
       } catch {}
     })();
     return () => controller.abort();
