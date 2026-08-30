@@ -256,44 +256,61 @@ async function reverseGeocodeRich(
       nearAirport = { name: ap.name, dist: d };
   }
 
-  // 2. Nominatim reverse geocode – zoom 18 = building level
-  const url =
-    `https://nominatim.openstreetmap.org/reverse?format=jsonv2` +
-    `&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
-  const res = await fetch(url, {
-    signal,
-    headers: { "User-Agent": "IslandCity-Driver-App/1.0" },
-  });
+  // 2. TomTom runs server-side so its API key never reaches the browser.
+  const params = new URLSearchParams({ lat: String(lat), lng: String(lng) });
+  const res = await fetch(`/api/geocode?${params.toString()}`, { signal });
   if (!res.ok) return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-  const data = await res.json();
-  const addr: Record<string, string> = data.address || {};
-  const placeName: string = data.name || "";
+  const data = await res.json() as {
+    ok: boolean;
+    address?: {
+      freeformAddress?: string;
+      streetName?: string;
+      municipality?: string;
+      municipalitySubdivision?: string;
+      countrySubdivision?: string;
+    };
+    poi?: {
+      name: string;
+      categories: string[];
+      distanceMeters?: number;
+    } | null;
+  };
+  if (!data.ok) return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+
+  const addr = data.address || {};
+  const poi = data.poi;
+  const categories = (poi?.categories || []).map(category => category.toLowerCase());
 
   const parts: string[] = [];
-  const city = addr.city || addr.town || addr.village || addr.county || "";
-  const road  = addr.road || addr.pedestrian || addr.footway || addr.path || "";
+  const city = addr.municipality || addr.municipalitySubdivision || addr.countrySubdivision || "";
+  const road = addr.streetName || "";
 
   // 3. Branch by location type
-  if (addr.aeroway === "terminal" && placeName) {
-    // Airport terminal → full name
-    const airport = addr.aerodrome || nearAirport?.name || "Airport";
-    parts.push(`${airport} – ${placeName}`);
-  } else if (addr.aeroway === "aerodrome" || addr.aerodrome) {
-    // Aerodrome → airport name
-    parts.push(nearAirport?.name || addr.aerodrome || placeName || "Airport");
-  } else if (nearAirport && nearAirport.dist < 2) {
+  if (nearAirport && nearAirport.dist < 2) {
     // Within 2 km of known airport → airport name
-    parts.push(nearAirport.name);
-  } else if (placeName && addr.amenity === "hospital") {
-    // Hospital → name + city
-    parts.push(placeName);
+    parts.push(`✈ ${nearAirport.name}`);
+  } else if (poi && categories.some(category => category.includes("airport"))) {
+    parts.push(`✈ ${poi.name}`);
+  } else if (poi && categories.some(category => category.includes("hospital"))) {
+    parts.push(`🏥 ${poi.name}`);
+    if (city) parts.push(city);
+  } else if (poi && (poi.distanceMeters ?? Infinity) <= 80) {
+    const icon =
+      categories.some(category => category.includes("hotel")) ? "🏨" :
+      categories.some(category => category.includes("restaurant") || category.includes("food")) ? "🍽" :
+      categories.some(category => category.includes("gas") || category.includes("petrol")) ? "⛽" :
+      categories.some(category => category.includes("parking")) ? "🅿" :
+      "📍";
+    parts.push(`${icon} ${poi.name}`);
     if (city) parts.push(city);
   } else {
-    // Everything else (house, business, office, restaurant…) → street + city only
+    // Residential/street fallback when there is no nearby POI.
     if (road) {
-      parts.push(road);          // no house number
-    } else if (placeName) {
-      parts.push(placeName);     // last resort fallback
+      parts.push(`🏡 ${road}`);
+    } else if (addr.freeformAddress) {
+      parts.push(`🏡 ${addr.freeformAddress}`);
+    } else {
+      parts.push("🏡 Residencial");
     }
     if (city) parts.push(city);
   }
@@ -303,7 +320,6 @@ async function reverseGeocodeRich(
 
   const label =
     parts.filter(Boolean).join(", ") ||
-    data.display_name?.split(",").slice(0, 3).join(",").trim() ||
     coord;
 
   return `${label} · ${coord}`;
@@ -1268,10 +1284,15 @@ export default function App() {
         showToast(data.error || "No se pudieron reclamar los respaldos");
         return;
       }
-      setLegacyClaimResolved(true);
-      showToast(data.claimedCount
-        ? `🔓 ${data.claimedCount} respaldo${data.claimedCount === 1 ? "" : "s"} reclamado${data.claimedCount === 1 ? "" : "s"} ✓`
-        : (data.message || "No hay datos pendientes de reclamar"));
+      const claimedCount = Number.isInteger(data.claimedCount) && data.claimedCount! > 0
+        ? data.claimedCount!
+        : 0;
+      if (claimedCount > 0) {
+        setLegacyClaimResolved(true);
+        showToast(`🔓 ${claimedCount} respaldo${claimedCount === 1 ? "" : "s"} reclamado${claimedCount === 1 ? "" : "s"} ✓`);
+      } else {
+        showToast("No se reclamó ningún respaldo. El botón seguirá disponible para reintentar.");
+      }
     } catch {
       showToast("No se pudieron reclamar los respaldos");
     } finally {
