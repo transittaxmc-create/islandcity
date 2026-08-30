@@ -3745,31 +3745,35 @@ export default function App() {
         </div>
         <div className="grid grid-cols-5 gap-1.5">
           {LOCATION_CATEGORIES.map(cat => {
-            const ICONS: Record<string,string> = {
-              "Hospital":"🏥","City":"🏙","Home":"🏠","Suburbs":"🌳",
-              "Office":"🏢","Airport":"✈️","Restaurant":"🍽","Train/Bus":"🚉",
-              "Hotel":"🏨","Tourist":"🌍",
-            };
-            const icon = ICONS[cat] || "📌";
-            const isPickupSet = tripForm.pickup.startsWith(cat);
-            const isDropSet   = tripForm.dropoff.startsWith(cat);
+            const icon = LOCATION_CATEGORY_ICONS[cat] || "📌";
+            const isPickupSet = pickupLocationCapture?.category === cat || tripForm.pickup.startsWith(cat);
+            const isDropSet   = dropoffLocationCapture?.category === cat || tripForm.dropoff.startsWith(cat);
             const isSet = isPickupSet || isDropSet;
             return (
               <button key={cat} type="button" onClick={() => {
-                const coord = gps.lat ? ` (${gps.lat.toFixed(4)},${gps.lng?.toFixed(4)})` : "";
-                if (showPickupMenu) {
-                  setPickupLocationCapture(null);
-                  setTripForm(s => ({ ...s, pickup: `${cat}${coord}`, pickupTimestamp: "" }));
-                  setShowPickupMenu(false); showToast(`Pickup: ${cat}`);
-                } else if (showDropoffMenu) {
-                  setDropoffLocationCapture(null);
-                  setTripForm(s => ({ ...s, dropoff: `${cat}${coord}`, dropoffTimestamp: "" }));
-                  setShowDropoffMenu(false); showToast(`Drop-off: ${cat}`);
-                } else {
-                  setDropoffLocationCapture(null);
-                  setTripForm(s => ({ ...s, dropoff: `${cat}${coord}`, dropoffTimestamp: "" }));
-                  showToast(`Drop-off: ${cat}`);
+                const target = showPickupMenu ? "pickup" : "dropoff";
+                const capturedAt = new Date();
+                const immediateCapture = fallbackLocationCapture(gps.lat, gps.lng, capturedAt, cat);
+                const applyCapture = (capture: LocationCapture) => {
+                  if (target === "pickup") {
+                    setPickupLocationCapture(capture);
+                    setTripForm(s => ({ ...s, pickup: capture.physicalAddress, pickupTimestamp: capture.timestamp }));
+                  } else {
+                    setDropoffLocationCapture(capture);
+                    setTripForm(s => ({ ...s, dropoff: capture.physicalAddress, dropoffTimestamp: capture.timestamp }));
+                  }
+                };
+
+                applyCapture(immediateCapture);
+                if (gps.lat !== null && gps.lng !== null) {
+                  reverseGeocodeRich(gps.lat, gps.lng, undefined, capturedAt, cat)
+                    .then(applyCapture)
+                    .catch(() => { /* the immediate GPS/category card remains visible offline */ });
                 }
+
+                if (target === "pickup") setShowPickupMenu(false);
+                else setShowDropoffMenu(false);
+                showToast(`${target === "pickup" ? "Pickup" : "Drop-off"}: ${cat}`);
               }}
                 className="h-[52px] rounded-xl flex flex-col items-center justify-center gap-0.5 border-2 transition-all active:scale-95"
                 style={{
