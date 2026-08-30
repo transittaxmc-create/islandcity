@@ -2754,14 +2754,31 @@ export default function App() {
 
   const handleInlineEditStart = (trip: Trip) => {
     setInlineEditId(trip.id);
-    setInlineForm({ pickup: trip.pickup, dropoff: trip.dropoff, earnings: String(trip.earnings), reference: trip.reference });
+    setInlineForm({
+      pickup: trip.pickup,
+      dropoff: trip.dropoff,
+      earnings: String(trip.earnings),
+      reference: trip.reference,
+      toll: String(trip.toll),
+      notes: trip.notes,
+    });
   };
 
   const handleInlineSave = (id: string) => {
     const newEarnings = parseFloat(inlineForm.earnings) || 0;
+    const newToll = parseFloat(inlineForm.toll) || 0;
     syncSaveTrips(trips.map(t => {
       if (t.id !== id) return t;
-      return { ...t, pickup: inlineForm.pickup, dropoff: inlineForm.dropoff, earnings: newEarnings, reference: inlineForm.reference, grandTotal: newEarnings + t.tips + t.extra + (t.otherCash||0) + t.toll - t.fee };
+      return {
+        ...t,
+        pickup: inlineForm.pickup,
+        dropoff: inlineForm.dropoff,
+        earnings: newEarnings,
+        reference: inlineForm.reference,
+        toll: newToll,
+        notes: inlineForm.notes,
+        grandTotal: newEarnings + t.tips + t.extra + (t.otherCash || 0) + newToll - t.fee,
+      };
     }));
     setInlineEditId(null);
     showToast("Trip updated ✓");
