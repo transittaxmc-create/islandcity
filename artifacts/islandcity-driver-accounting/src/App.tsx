@@ -1000,6 +1000,7 @@ export default function App() {
   const [viewingDoc,   setViewingDoc]   = useState<DocEntry | null>(null);
   const [inlineForm, setInlineForm] = useState({
     pickup: "", dropoff: "", earnings: "", reference: "", toll: "", notes: "",
+    tollEvents: [] as TollEvent[],
   });
 
   // Expense form
@@ -3034,6 +3035,9 @@ export default function App() {
   };
 
   const handleInlineEditStart = (trip: Trip) => {
+    const tollEvents = Array.isArray(trip.tollEvents)
+      ? trip.tollEvents
+      : reconcileTollEventsToTotal([], trip.toll);
     setInlineEditId(trip.id);
     setInlineForm({
       pickup: trip.pickup,
@@ -3042,7 +3046,42 @@ export default function App() {
       reference: trip.reference,
       toll: String(trip.toll),
       notes: trip.notes,
+      tollEvents,
     });
+  };
+
+  const updateInlineTollEvents = (events: TollEvent[]) => {
+    const toll = Math.round(events.reduce((sum, event) => sum + event.rate, 0) * 100) / 100;
+    setInlineForm(current => ({
+      ...current,
+      toll: toll > 0 ? toll.toFixed(2) : "",
+      tollEvents: events,
+    }));
+  };
+
+  const addInlineTollEvent = () => {
+    const now = new Date();
+    updateInlineTollEvents([
+      ...inlineForm.tollEvents,
+      {
+        id: `manual-toll-${now.getTime()}`,
+        plaza: "Manual toll",
+        rate: 0,
+        at: now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+        timestamp: now.toISOString(),
+        source: "manual",
+      },
+    ]);
+  };
+
+  const updateInlineTollEvent = (id: string, patch: Partial<Pick<TollEvent, "plaza" | "rate">>) => {
+    updateInlineTollEvents(inlineForm.tollEvents.map(event =>
+      event.id === id ? { ...event, ...patch, source: "manual" as const } : event
+    ));
+  };
+
+  const removeInlineTollEvent = (id: string) => {
+    updateInlineTollEvents(inlineForm.tollEvents.filter(event => event.id !== id));
   };
 
   const handleInlineSave = (id: string) => {
@@ -3050,7 +3089,7 @@ export default function App() {
     const newToll = parseFloat(inlineForm.toll) || 0;
     syncSaveTrips(trips.map(t => {
       if (t.id !== id) return t;
-      const nextTollEvents = reconcileTollEventsToTotal(t.tollEvents ?? [], newToll);
+      const nextTollEvents = reconcileTollEventsToTotal(inlineForm.tollEvents, newToll);
       const reconciledToll = Math.round(nextTollEvents.reduce((sum, event) => sum + event.rate, 0) * 100) / 100;
       return {
         ...t,
@@ -4678,9 +4717,9 @@ export default function App() {
                       {/* Inline edit form */}
                       {inlineEditId === t.id ? (
                         <div className="bg-[#0a0a0a] border border-[#2e2e2e] rounded-xl p-3 space-y-2">
-                          {[["Reference", "reference"], ["Pickup", "pickup"], ["Drop-off", "dropoff"]].map(([ph, key]) => (
+                          {([["Reference", "reference"], ["Pickup", "pickup"], ["Drop-off", "dropoff"]] as const).map(([ph, key]) => (
                             <input key={key}
-                              value={inlineForm[key as keyof typeof inlineForm]}
+                              value={inlineForm[key]}
                               onChange={e => setInlineForm(s => ({ ...s, [key]: e.target.value }))}
                               placeholder={ph}
                               className="w-full h-10 rounded-lg bg-black border border-[#262626] px-3 text-[13px] text-white placeholder:text-[#6b7280] focus:outline-none" />
@@ -4690,9 +4729,58 @@ export default function App() {
                             placeholder="Earnings"
                             className="w-full h-10 rounded-lg bg-black border border-[#262626] px-3 text-[13px] text-white font-mono-jet placeholder:text-[#6b7280] focus:outline-none" />
                           <input value={inlineForm.toll} inputMode="decimal"
-                            onChange={e => { if (numericFilter(e.target.value)) setInlineForm(s => ({ ...s, toll: e.target.value })); }}
+                            onChange={e => {
+                              if (!numericFilter(e.target.value)) return;
+                              const toll = parseFloat(e.target.value) || 0;
+                              setInlineForm(s => ({
+                                ...s,
+                                toll: e.target.value,
+                                tollEvents: reconcileTollEventsToTotal(s.tollEvents, toll),
+                              }));
+                            }}
                             placeholder="Toll total"
                             className="w-full h-10 rounded-lg bg-black border border-[#262626] px-3 text-[13px] text-white font-mono-jet placeholder:text-[#6b7280] focus:outline-none" />
+                          <div className="rounded-xl border border-[#2e2e2e] bg-black p-2.5 space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <div>
+                                <p className="text-[9px] text-neutral-400 font-bold uppercase tracking-wider">Toll corrections</p>
+                                <p className="text-[8px] text-neutral-600 mt-0.5">Add or correct a crossing missed by GPS.</p>
+                              </div>
+                              <button type="button" onClick={addInlineTollEvent}
+                                className="h-7 px-3 rounded-full border border-[#365314] text-[#bef264] text-[9px] font-bold whitespace-nowrap">
+                                + ADD TOLL
+                              </button>
+                            </div>
+                            {inlineForm.tollEvents.length === 0 ? (
+                              <p className="text-[9px] text-neutral-600 py-1">No toll crossings recorded.</p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {inlineForm.tollEvents.map((event, index) => (
+                                  <div key={event.id} className="grid grid-cols-[1fr_76px_28px] gap-1.5 items-center">
+                                    <input value={event.plaza}
+                                      onChange={e => updateInlineTollEvent(event.id, { plaza: e.target.value })}
+                                      aria-label={`Toll ${index + 1} plaza`}
+                                      className="h-8 min-w-0 rounded-lg bg-[#080808] border border-[#262626] px-2 text-[10px] text-white focus:outline-none focus:border-[#facc15]/40" />
+                                    <div className="h-8 rounded-lg bg-[#080808] border border-[#262626] px-2 flex items-center">
+                                      <span className="text-[10px] text-neutral-500 mr-1">$</span>
+                                      <input value={String(event.rate)} inputMode="decimal"
+                                        onChange={e => {
+                                          if (!/^\d*\.?\d{0,2}$/.test(e.target.value)) return;
+                                          updateInlineTollEvent(event.id, { rate: parseFloat(e.target.value) || 0 });
+                                        }}
+                                        aria-label={`Toll ${index + 1} amount`}
+                                        className="w-full min-w-0 bg-transparent text-[10px] text-white font-mono-jet focus:outline-none" />
+                                    </div>
+                                    <button type="button" onClick={() => removeInlineTollEvent(event.id)}
+                                      aria-label={`Remove toll ${index + 1}`}
+                                      className="h-7 w-7 rounded-full border border-[#3a1010] text-[#f87171] text-[11px]">
+                                      ×
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                           <textarea value={inlineForm.notes}
                             onChange={e => setInlineForm(s => ({ ...s, notes: e.target.value }))}
                             placeholder="Notes and E-ZPass toll breakdown"
