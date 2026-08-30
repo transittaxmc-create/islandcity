@@ -3716,7 +3716,15 @@ export default function App() {
           </div>
         {pickupLocationCapture && (
           <div className="border-t border-[#1e1e1e] py-1 grid grid-cols-2 gap-2">
-            <p className="font-mono-jet text-[9px] text-[#4ade80] leading-tight truncate"><span className="text-[7px] tracking-wider text-neutral-600 mr-1">GPS</span>{pickupLocationCapture.coordinates.replace(/^GPS\s*/, "")}</p>
+            <p className="font-mono-jet text-[9px] text-[#4ade80] leading-tight truncate">
+              <span className="text-[7px] tracking-wider text-neutral-600 mr-1">GPS</span>
+              {pickupLocationCapture.coordinates.replace(/^GPS\s*/, "")}
+              {pickupLocationCapture.accuracyMeters !== undefined && (
+                <span className={pickupLocationCapture.accuracyMeters <= GPS_RELIABLE_ACCURACY_METERS ? "text-[#4ade80]" : "text-[#f87171]"}>
+                  {" "}±{Math.round(pickupLocationCapture.accuracyMeters)}m
+                </span>
+              )}
+            </p>
             <p className="font-mono-jet text-[9px] text-neutral-500 leading-tight truncate"><span className="text-[7px] tracking-wider text-neutral-600 mr-1">DATE / TIME</span>{tripForm.pickupTimestamp || pickupLocationCapture.timestamp}</p>
           </div>
         )}
@@ -3808,7 +3816,15 @@ export default function App() {
           </div>
         {dropoffLocationCapture && (
           <div className="border-t border-[#1e1e1e] py-1 grid grid-cols-2 gap-2">
-            <p className="font-mono-jet text-[9px] text-[#60a5fa] leading-tight truncate"><span className="text-[7px] tracking-wider text-neutral-600 mr-1">GPS</span>{dropoffLocationCapture.coordinates.replace(/^GPS\s*/, "")}</p>
+            <p className="font-mono-jet text-[9px] text-[#60a5fa] leading-tight truncate">
+              <span className="text-[7px] tracking-wider text-neutral-600 mr-1">GPS</span>
+              {dropoffLocationCapture.coordinates.replace(/^GPS\s*/, "")}
+              {dropoffLocationCapture.accuracyMeters !== undefined && (
+                <span className={dropoffLocationCapture.accuracyMeters <= GPS_RELIABLE_ACCURACY_METERS ? "text-[#4ade80]" : "text-[#f87171]"}>
+                  {" "}±{Math.round(dropoffLocationCapture.accuracyMeters)}m
+                </span>
+              )}
+            </p>
             <p className="font-mono-jet text-[9px] text-neutral-500 leading-tight truncate"><span className="text-[7px] tracking-wider text-neutral-600 mr-1">DATE / TIME</span>{tripForm.dropoffTimestamp || dropoffLocationCapture.timestamp}</p>
           </div>
         )}
