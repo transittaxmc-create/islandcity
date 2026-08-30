@@ -447,26 +447,43 @@ async function reverseGeocodeRich(
   const addr = data.address || {};
   const poi = data.poi;
   const categories = (poi?.categories || []).map(category => category.toLowerCase());
+  const poiIsAtCapturedPoint = Boolean(poi && (poi.distanceMeters ?? Infinity) <= 80);
   const coordText = `GPS ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 
   // 3. Build the independent POI/category header.
-  let poiHeader = "🏡 Residencial";
-  if (poi && categories.some(category => category.includes("airport"))) {
-    poiHeader = `✈️ ${poi.name}`;
+  let resolvedCategory = "Residence";
+  let resolvedIcon = "🏠";
+  let resolvedLocationName = "Residence";
+  if (poiIsAtCapturedPoint && categories.some(category => category.includes("airport"))) {
+    resolvedCategory = "Airport";
+    resolvedIcon = "✈️";
+    resolvedLocationName = poi!.name;
   } else if (nearAirport && nearAirport.dist < 2) {
-    // Within 2 km of known airport → airport name
-    poiHeader = `✈️ ${nearAirport.name}`;
-  } else if (poi && categories.some(category => category.includes("hospital"))) {
-    poiHeader = `🏥 ${poi.name}`;
-  } else if (poi && (poi.distanceMeters ?? Infinity) <= 80) {
-    const icon =
-      categories.some(category => category.includes("hotel")) ? "🏨" :
-      categories.some(category => category.includes("restaurant") || category.includes("food")) ? "🍽" :
+    resolvedCategory = "Airport";
+    resolvedIcon = "✈️";
+    resolvedLocationName = nearAirport.name;
+  } else if (poiIsAtCapturedPoint && categories.some(category =>
+    category.includes("hospital") || category.includes("clinic") || category.includes("medical")
+  )) {
+    resolvedCategory = "Hospital";
+    resolvedIcon = "🏥";
+    resolvedLocationName = poi!.name;
+  } else if (poiIsAtCapturedPoint) {
+    resolvedCategory =
+      categories.some(category => category.includes("hotel")) ? "Hotel" :
+      categories.some(category => category.includes("restaurant") || category.includes("food")) ? "Restaurant" :
+      categories.some(category => category.includes("train") || category.includes("bus") || category.includes("transit")) ? "Train/Bus" :
+      "Business";
+    resolvedIcon =
+      resolvedCategory === "Hotel" ? "🏨" :
+      resolvedCategory === "Restaurant" ? "🍽" :
+      resolvedCategory === "Train/Bus" ? "🚉" :
       categories.some(category => category.includes("gas") || category.includes("petrol")) ? "⛽" :
       categories.some(category => category.includes("parking")) ? "🅿" :
       "🏬";
-    poiHeader = `${icon} ${poi.name}`;
+    resolvedLocationName = poi!.name;
   }
+  const poiHeader = `${resolvedIcon} ${resolvedLocationName}`;
 
   // 4. Build the complete physical address independently of the header.
   const street = [addr.streetNumber, addr.streetName].filter(Boolean).join(" ");
@@ -484,7 +501,8 @@ async function reverseGeocodeRich(
     street ? structuredAddress : (addr.freeformAddress || [...locality, region].filter(Boolean).join(", "))
   ) || "Dirección no disponible";
 
-  const categoryIcon = selectedCategory ? (LOCATION_CATEGORY_ICONS[selectedCategory] || "📌") : poiHeader.split(" ")[0];
+  const selectedDisplayCategory = selectedCategory === "Home" ? "Residence" : selectedCategory;
+  const categoryIcon = selectedCategory ? (LOCATION_CATEGORY_ICONS[selectedCategory] || "📌") : resolvedIcon;
   const categoryTerms: Record<string, string[]> = {
     Hospital: ["hospital", "clinic", "medical"],
     Airport: ["airport"],
@@ -495,18 +513,22 @@ async function reverseGeocodeRich(
     Office: ["office", "business"],
     Home: ["residential"],
   };
-  const matchingPoi = selectedCategory && categoryTerms[selectedCategory]
+  const matchingPoi = selectedCategory && categoryTerms[selectedCategory] && poiIsAtCapturedPoint
     ? categories.some(category => categoryTerms[selectedCategory].some(term => category.includes(term)))
     : false;
   const locationName = selectedCategory
     ? (selectedCategory === "Airport"
-      ? (poi && categories.some(category => category.includes("airport"))
-        ? poi.name
+      ? (poiIsAtCapturedPoint && categories.some(category => category.includes("airport"))
+        ? poi!.name
         : (nearAirport && nearAirport.dist < 2 ? nearAirport.name : "Airport"))
-      : (matchingPoi ? poi?.name : undefined) || selectedCategory)
-    : poiHeader.replace(/^\S+\s*/, "");
+      : selectedCategory === "Home"
+        ? "Residence"
+        : (matchingPoi ? poi?.name : undefined) || selectedCategory)
+    : resolvedLocationName;
   const terminal = selectedCategory === "Airport"
     ? (extractTerminal(poi?.name || "", physicalAddress) || "Terminal # unavailable")
+    : resolvedCategory === "Airport"
+      ? extractTerminal(poi?.name || "", physicalAddress)
     : undefined;
 
   return {
@@ -515,7 +537,7 @@ async function reverseGeocodeRich(
     physicalAddress,
     coordinates: coordText,
     timestamp: formatLocationTimestamp(capturedAt),
-    category: selectedCategory,
+    category: selectedDisplayCategory || resolvedCategory,
     categoryIcon,
     locationName,
     terminal,
@@ -908,6 +930,7 @@ export default function App() {
   const [dropoffResolving, setDropoffResolving] = useState(false);
   const [pickupLocationCapture, setPickupLocationCapture] = useState<LocationCapture | null>(null);
   const [dropoffLocationCapture, setDropoffLocationCapture] = useState<LocationCapture | null>(null);
+  const locationCaptureRequestRef = useRef({ pickup: 0, dropoff: 0 });
   const [selectedForPost, setSelectedForPost] = useState<Set<string>>(new Set());
 
   // Toll detection
@@ -3893,6 +3916,7 @@ export default function App() {
               placeholder="Directions / street, city"
               className="flex-1 bg-transparent text-white text-[13px] placeholder:text-[#444] focus:outline-none min-w-0 truncate" />
             <button type="button" onClick={async () => {
+              const requestId = ++locationCaptureRequestRef.current.pickup;
               setPickupResolving(true);
               let lat: number;
               let lng: number;
@@ -3900,12 +3924,14 @@ export default function App() {
               let capturedAt: Date;
               try {
                 const position = await requestFreshGpsPosition();
+                if (requestId !== locationCaptureRequestRef.current.pickup) return;
                 lat = position.coords.latitude;
                 lng = position.coords.longitude;
                 accuracy = position.coords.accuracy ?? 999;
                 capturedAt = new Date(position.timestamp || Date.now());
                 setGps({ lat, lng, acc: accuracy, timestamp: position.timestamp, status: "active" });
               } catch {
+                if (requestId !== locationCaptureRequestRef.current.pickup) return;
                 setGps(s => ({ ...s, status: "error" }));
                 showToast("Unable to confirm a fresh GPS location");
                 setPickupResolving(false);
@@ -3918,6 +3944,7 @@ export default function App() {
               }
               try {
                 const capture = await reverseGeocodeRich(lat, lng, undefined, capturedAt, undefined, accuracy);
+                if (requestId !== locationCaptureRequestRef.current.pickup) return;
                 setPickupLocationCapture(capture);
                 setTripForm(s => ({
                   ...s,
@@ -3926,6 +3953,7 @@ export default function App() {
                 }));
                 showToast("Pickup resolved ✓");
               } catch {
+                if (requestId !== locationCaptureRequestRef.current.pickup) return;
                 const capture = fallbackLocationCapture(lat, lng, capturedAt, undefined, accuracy);
                 setPickupLocationCapture(capture);
                 setTripForm(s => ({
@@ -3993,6 +4021,7 @@ export default function App() {
               placeholder="Directions / street, city"
               className="flex-1 bg-transparent text-white text-[13px] placeholder:text-[#444] focus:outline-none min-w-0 truncate" />
             <button type="button" onClick={async () => {
+              const requestId = ++locationCaptureRequestRef.current.dropoff;
               setDropoffResolving(true);
               let lat: number;
               let lng: number;
@@ -4000,12 +4029,14 @@ export default function App() {
               let capturedAt: Date;
               try {
                 const position = await requestFreshGpsPosition();
+                if (requestId !== locationCaptureRequestRef.current.dropoff) return;
                 lat = position.coords.latitude;
                 lng = position.coords.longitude;
                 accuracy = position.coords.accuracy ?? 999;
                 capturedAt = new Date(position.timestamp || Date.now());
                 setGps({ lat, lng, acc: accuracy, timestamp: position.timestamp, status: "active" });
               } catch {
+                if (requestId !== locationCaptureRequestRef.current.dropoff) return;
                 setGps(s => ({ ...s, status: "error" }));
                 showToast("Unable to confirm a fresh GPS location");
                 setDropoffResolving(false);
@@ -4018,6 +4049,7 @@ export default function App() {
               }
               try {
                 const capture = await reverseGeocodeRich(lat, lng, undefined, capturedAt, undefined, accuracy);
+                if (requestId !== locationCaptureRequestRef.current.dropoff) return;
                 setDropoffLocationCapture(capture);
                 setTripForm(s => ({
                   ...s,
@@ -4026,6 +4058,7 @@ export default function App() {
                 }));
                 showToast("Drop-off resolved ✓");
               } catch {
+                if (requestId !== locationCaptureRequestRef.current.dropoff) return;
                 const capture = fallbackLocationCapture(lat, lng, capturedAt, undefined, accuracy);
                 setDropoffLocationCapture(capture);
                 setTripForm(s => ({
@@ -4080,7 +4113,9 @@ export default function App() {
             return (
               <button key={cat} type="button" onClick={async () => {
                 const target = showPickupMenu ? "pickup" : "dropoff";
+                const requestId = ++locationCaptureRequestRef.current[target];
                 const applyCapture = (capture: LocationCapture) => {
+                  if (requestId !== locationCaptureRequestRef.current[target]) return;
                   if (target === "pickup") {
                     setPickupLocationCapture(capture);
                     setTripForm(s => ({ ...s, pickup: capture.physicalAddress, pickupTimestamp: capture.timestamp }));
