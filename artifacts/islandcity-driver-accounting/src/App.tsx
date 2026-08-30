@@ -1366,14 +1366,13 @@ export default function App() {
           lat: gps.lat,
           lng: gps.lng,
           accuracy: gps.acc,
+          source: "auto",
         };
         const nextEvents = [...tripTollEventsRef.current, event];
         replaceTripTollEvents(nextEvents);
         setDetectedToll({ plaza: plaza.name, rate, at });
         setTripForm(s => {
-          const detectedTotal = nextEvents.reduce((sum, tollEvent) => sum + tollEvent.rate, 0);
-          const currentTotal = parseFloat(s.toll) || 0;
-          const nextTotal = tollManuallyEdited ? currentTotal + rate : detectedTotal;
+          const nextTotal = nextEvents.reduce((sum, tollEvent) => sum + tollEvent.rate, 0);
           return {
             ...s,
             toll: nextTotal.toFixed(2),
