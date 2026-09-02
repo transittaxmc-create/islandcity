@@ -10,7 +10,11 @@
   },
   "private": true,
   "dependencies": {
-    "@replit/connectors-sdk": "^0.4.1"
+    "@esbuild/win32-x64": "0.27.3",
+    "@replit/connectors-sdk": "^0.4.1",
+    "@rollup/rollup-win32-x64-msvc": "4.62.3",
+    "@tailwindcss/oxide-win32-x64-msvc": "4.3.3",
+    "lightningcss-win32-x64-msvc": "1.32.0"
   },
   "devDependencies": {
     "prettier": "^3.9.6",

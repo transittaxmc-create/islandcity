@@ -1,514 +1,658 @@
-import { useState, useEffect, useMemo, useRef } from "react";
-import { Home, Banknote, Receipt, BarChart2, FileText, Brain } from "lucide-react";
+// ── IslandCity Tip Tracker · PHASE 1 ────────────────────────────────
+// App shell: state, GPS + toll auto-detection (v8.0), shift, mileage
+// tracking, and all PHASE-1 handlers. Source: SPEC-MASTER-tip-tracker.md
 
-type Tab = "DASHBOARD" | "TRIPS" | "EXPENSES" | "FINANCES" | "REPORTS" | "AI";
-type TripsTab = "ENTRY" | "REGISTER" | "LEDGER";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Banknote, ClipboardList, Home, Receipt } from "lucide-react";
+import {
+  calcNet,
+  draftNums,
+  emptyEntryDraft,
+  fmt,
+  headerDateTime,
+  nowLabel,
+  todayStr,
+  tripDate,
+  uid,
+  type AppState,
+  type EntryDraft,
+  type LedgerTx,
+  type TollHit,
+  type Trip,
+} from "./lib/domain";
+import { detectToll, haversineMiles, isPeak, tollAmount } from "./lib/tolls";
+import { downloadTripAuditJson, loadState, saveState, wipeAll } from "./lib/storage";
+import { fileToDataUrl, getPhoto, ocrReceipt, putPhoto } from "./lib/receipts";
+import { useWakeLock } from "./hooks/useWakeLock";
+import { CARD, INPUT_SM, LABEL, pillCls } from "./lib/ui";
+import EntryScreen from "./screens/EntryScreen";
+import QueueScreen, { type QuickState } from "./screens/QueueScreen";
+import LedgerScreen from "./screens/LedgerScreen";
+import DashboardScreen from "./screens/DashboardScreen";
 
-interface Trip {
-  id: string;
-  reference: string;
-  earnings: number;
-  tips: number;
-  extra: number;
-  toll: number;
-  fee: number;
-  platform: string;
-  pickup: string;
-  dropoff: string;
-  notes: string;
-  date: string;
-  time: string;
-  status: "pending" | "posted";
-}
-
-interface HoursEntry {
-  date: string;
-  hours: number;
-  clockIn: string;
-  clockOut: string;
-  breakMs: number;
-}
-
-function toYYYYMMDD(d: Date) {
-  return d.toISOString().slice(0, 10);
-}
-
-const PLATFORMS = ["Uber", "Lyft", "EcoRide", "Empower", "Gallant", "Aventus Ride", "Classic Ryde", "Aki Technology", "Street Hail", "Island City Transit", "Other"];
+type Tab = "ENTRY" | "QUEUE" | "LEDGER" | "DASH";
+type GpsFix = { lat: number; lng: number; acc: number };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>("DASHBOARD");
-  const [tripsTab, setTripsTab] = useState<TripsTab>("ENTRY");
+  const [state, setState] = useState<AppState>(() => loadState());
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const [tab, setTab] = useState<Tab>("ENTRY");
+  const [clock, setClock] = useState(() => new Date());
+  const [draft, setDraft] = useState<EntryDraft>(() => emptyEntryDraft());
+  const [gpsFix, setGpsFix] = useState<GpsFix | null>(null);
+  const [gpsStatus, setGpsStatus] = useState<"searching" | "active" | "error" | "off">("off");
   const [toast, setToast] = useState<string | null>(null);
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [confirmBox, setConfirmBox] = useState<{ msg: string; label: string; action: () => void } | null>(null);
+  const [quick, setQuick] = useState<QuickState | null>(null);
+  const [editing, setEditing] = useState<Trip | null>(null);
+  const [editForm, setEditForm] = useState<EntryDraft | null>(null);
+  const [tracking, setTracking] = useState(false);
+  const trackingRef = useRef(false);
+  const lastGps = useRef<{ lat: number; lng: number } | null>(null);
+  const milesRun = useRef(0);
+  const [liveMiles, setLiveMiles] = useState("0.00");
+  const toastTimer = useRef<number | null>(null);
+  const wake = useWakeLock();
 
-  const [goal, setGoal] = useState<number>(() => {
-    try { return parseInt(localStorage.getItem("ic-hourly-goal") || "60") || 60; } catch { return 60; }
-  });
-  const [dailyGoal] = useState<number>(() => {
-    try { return parseInt(localStorage.getItem("ic-daily-goal") || "400") || 400; } catch { return 400; }
-  });
-
-  const [trips, setTrips] = useState<Trip[]>(() => {
-    try {
-      const raw = localStorage.getItem("island-city-trips");
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed.map((t: any) => ({ ...t, status: t.status ?? "pending" }));
-      }
-    } catch {}
-    return [];
-  });
-
-  const [hoursLog, setHoursLog] = useState<HoursEntry[]>(() => {
-    try {
-      const raw = localStorage.getItem("island-city-hours");
-      if (raw) return JSON.parse(raw);
-    } catch {}
-    return [];
-  });
-
-  // Shift clock state (date-guarded so it resets each day)
-  const today = toYYYYMMDD(new Date());
-  const [shiftActive, setShiftActive] = useState<boolean>(() => {
-    try {
-      if (localStorage.getItem("ic-shift-date") !== today) return false;
-      return localStorage.getItem("ic-shift-active") === "true";
-    } catch { return false; }
-  });
-  const [isOnBreak, setIsOnBreak] = useState<boolean>(() => {
-    try {
-      if (localStorage.getItem("ic-shift-date") !== today) return false;
-      return localStorage.getItem("ic-shift-on-break") === "true";
-    } catch { return false; }
-  });
-  const [clockInTime, setClockInTime] = useState<Date | null>(() => {
-    try {
-      if (localStorage.getItem("ic-shift-date") !== today) return null;
-      const ci = localStorage.getItem("ic-shift-clock-in");
-      return ci ? new Date(ci) : null;
-    } catch { return null; }
-  });
-  const [breakStart, setBreakStart] = useState<Date | null>(() => {
-    try {
-      if (localStorage.getItem("ic-shift-date") !== today) return null;
-      const bs = localStorage.getItem("ic-shift-break-start");
-      return bs ? new Date(bs) : null;
-    } catch { return null; }
-  });
-  const [totalBreakMs, setTotalBreakMs] = useState<number>(() => {
-    try {
-      if (localStorage.getItem("ic-shift-date") !== today) return 0;
-      return parseInt(localStorage.getItem("ic-shift-break-ms") || "0") || 0;
-    } catch { return 0; }
-  });
-
-  const [gps, setGps] = useState<{ lat: number | null; lng: number | null; status: "inactive" | "searching" | "active" | "error" }>({ lat: null, lng: null, status: "inactive" });
-
-  // Trip entry form
-  const emptyForm = () => {
-    const n = new Date();
-    return {
-      reference: "", earnings: "", tips: "", extra: "", toll: "", fee: "",
-      platform: "Uber", pickup: "", dropoff: "", notes: "",
-      date: toYYYYMMDD(n), time: n.toTimeString().slice(0, 5),
-    };
-  };
-  const [tripForm, setTripForm] = useState(emptyForm());
-
-  const tripsRef = useRef<Trip[]>(trips);
-  useEffect(() => { tripsRef.current = trips; }, [trips]);
-
-  // Live clock
-  useEffect(() => {
-    const id = window.setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  // Persist trips / hours
-  useEffect(() => {
-    try { localStorage.setItem("island-city-trips", JSON.stringify(trips)); } catch {}
-  }, [trips]);
-  useEffect(() => {
-    try { localStorage.setItem("island-city-hours", JSON.stringify(hoursLog)); } catch {}
-  }, [hoursLog]);
-
-  // Persist shift state
-  useEffect(() => {
-    try {
-      localStorage.setItem("ic-shift-date", today);
-      localStorage.setItem("ic-shift-active", String(shiftActive));
-      localStorage.setItem("ic-shift-on-break", String(isOnBreak));
-      localStorage.setItem("ic-shift-break-ms", String(totalBreakMs));
-      if (clockInTime) localStorage.setItem("ic-shift-clock-in", clockInTime.toISOString());
-      else localStorage.removeItem("ic-shift-clock-in");
-      if (breakStart) localStorage.setItem("ic-shift-break-start", breakStart.toISOString());
-      else localStorage.removeItem("ic-shift-break-start");
-    } catch {}
-  }, [shiftActive, isOnBreak, clockInTime, breakStart, totalBreakMs, today]);
-
-  // One-shot GPS on mount
-  useEffect(() => {
-    if (!navigator.geolocation) return;
-    setGps((s) => ({ ...s, status: "searching" }));
-    navigator.geolocation.getCurrentPosition(
-      (pos) => setGps({ lat: pos.coords.latitude, lng: pos.coords.longitude, status: "active" }),
-      () => setGps((s) => ({ ...s, status: "error" })),
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 }
-    );
-  }, []);
-
-  const showToast = (msg: string, ms = 2500) => {
+  const showToast = useCallback((msg: string, ms = 3200) => {
     setToast(msg);
-    setTimeout(() => setToast(null), ms);
-  };
+    if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), ms);
+  }, []);
 
-  const handleClockIn = () => {
-    setClockInTime(new Date());
-    setTotalBreakMs(0);
-    setIsOnBreak(false);
-    setBreakStart(null);
-    setShiftActive(true);
-    showToast("Clock In · " + new Date().toLocaleTimeString());
-  };
+  const update = useCallback((fn: (s: AppState) => AppState) => {
+    setState((s) => {
+      const n = fn(s);
+      saveState(n);
+      return n;
+    });
+  }, []);
 
-  const handleBreakToggle = () => {
-    if (!shiftActive || !clockInTime) return;
-    const now = new Date();
-    if (!isOnBreak) {
-      setIsOnBreak(true);
-      setBreakStart(now);
-      showToast("Break started");
-    } else if (breakStart) {
-      setTotalBreakMs((p) => p + (now.getTime() - breakStart.getTime()));
-      setIsOnBreak(false);
-      setBreakStart(null);
-      showToast("Back on route");
+  // ── Derived ───────────────────────────────────────────────────────
+  const today = todayStr(clock);
+  const todayLabel = headerDateTime(clock);
+  const todayTrips = useMemo(() => state.trips.filter((t) => tripDate(t) === today), [state.trips, today]);
+  const grandToday = todayTrips.filter((t) => t.status === "posted").reduce((s, t) => s + t.net, 0);
+  const pendingCount = state.trips.filter((t) => t.status !== "posted").length;
+  const shiftOn = state.shiftStartedAt != null;
+  const hoursWorked = shiftOn ? Math.max(0, (clock.getTime() - state.shiftStartedAt!) / 3600000) : 0;
+  const rate = hoursWorked >= 1 / 60 && grandToday > 0 ? grandToday / hoursWorked : grandToday > 0 ? grandToday / Math.max(hoursWorked, 1 / 60) : null;
+
+  const last7 = useMemo(() => {
+    const days: { label: string; rate: number | null }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(clock);
+      d.setDate(d.getDate() - i);
+      const key = todayStr(d);
+      const trips = state.trips.filter((t) => tripDate(t) === key && t.status === "posted");
+      const sum = trips.reduce((s, t) => s + t.net, 0);
+      days.push({ label: d.toLocaleDateString("en-US", { weekday: "narrow" }), rate: sum > 0 ? sum : null });
     }
-  };
+    return days;
+  }, [state.trips, clock]);
 
-  const handleClockOut = () => {
-    if (!shiftActive || !clockInTime) return;
-    const now = new Date();
-    let breakMs = totalBreakMs;
-    if (isOnBreak && breakStart) breakMs += now.getTime() - breakStart.getTime();
-    const activeMs = now.getTime() - clockInTime.getTime() - breakMs;
-    const hours = Math.max(0, activeMs / 3600000);
-    setHoursLog((p) => [{ date: today, hours, clockIn: clockInTime.toISOString(), clockOut: now.toISOString(), breakMs }, ...p].slice(0, 90));
-    setShiftActive(false);
-    setIsOnBreak(false);
-    setBreakStart(null);
-    setTotalBreakMs(0);
-    setClockInTime(null);
-    showToast("Clock Out · " + hours.toFixed(2) + "h saved");
-  };
+  const advisor = useMemo(() => {
+    if (!shiftOn) return { text: "Start your shift to see real-time advisory recommendations.", rec: "" };
+    if (rate == null || rate <= 0) return { text: "Log your first trip to start calculating.", rec: "" };
+    if (rate >= state.goal) return { text: `Great! ${fmt(rate)}/h exceeds your goal of $${state.goal}/h.`, rec: "Stay in current zone. Doing great!" };
+    return { text: `${fmt(rate)}/h — below $${state.goal}/h.`, rec: "Move to Manhattan · Activate Lyft for more demand." };
+  }, [shiftOn, rate, state.goal]);
 
-  const grandTotalLive = useMemo(() => {
-    const e = parseFloat(tripForm.earnings) || 0;
-    const t = parseFloat(tripForm.tips) || 0;
-    const ex = parseFloat(tripForm.extra) || 0;
-    const tl = parseFloat(tripForm.toll) || 0;
-    const f = parseFloat(tripForm.fee) || 0;
-    return e + t + ex + tl - f;
-  }, [tripForm]);
+  // ── clock tick + autosave ─────────────────────────────────────────
+  useEffect(() => {
+    const id = window.setInterval(() => setClock(new Date()), 1000);
+    const onSave = () => saveState(stateRef.current);
+    const onVis = () => document.visibilityState === "hidden" && onSave();
+    window.addEventListener("beforeunload", onSave);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("beforeunload", onSave);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
 
-  const handleSaveTrip = () => {
-    if (!tripForm.earnings && !tripForm.tips) {
-      showToast("Add at least an earnings or tip amount");
+  // ── GPS watch + toll detection (v8.0 offline) ─────────────────────
+  const milesRef = useRef(0);
+  const lastFix = useRef<GpsFix | null>(null);
+
+  const handleFix = useCallback(
+    (lat: number, lng: number, acc: number) => {
+      setGpsFix({ lat, lng, acc });
+      if (lastFix.current) {
+        const d = haversineMiles(lastFix.current.lat, lastFix.current.lng, lat, lng);
+        if (trackingRef.current && d > 0.005) {
+          milesRef.current += d;
+          setDraft((prev) => ({ ...prev, miles: milesRef.current.toFixed(1) }));
+          setLiveMiles(milesRef.current.toFixed(1));
+        }
+      }
+      lastFix.current = { lat, lng, acc };
+
+      const s = stateRef.current;
+      const toll = detectToll(lat, lng, s.lastTollTimes, new Date());
+      if (toll) {
+        const amount = tollAmount(toll, new Date());
+        const hit: TollHit = {
+          id: uid(),
+          name: toll.name,
+          amount,
+          timestamp: Date.now(),
+          date: todayStr(),
+          displayTime: nowLabel(),
+          lat,
+          lng,
+          peak: isPeak(),
+        };
+        update((st) => ({
+          ...st,
+          tollLog: [hit, ...st.tollLog].slice(0, 60),
+          lastTollTimes: { ...st.lastTollTimes, [toll.name]: Date.now() },
+        }));
+        setDraft((prev) => ({ ...prev, tollReimb: ((parseFloat(prev.tollReimb) || 0) + amount).toFixed(2) }));
+        if (navigator.vibrate) navigator.vibrate(120);
+        showToast(`Toll detectado: ${toll.name} ${fmt(amount)} E-ZPass`);
+      }
+    },
+    [showToast, update],
+  );
+
+  useEffect(() => {
+    if (!("geolocation" in navigator)) {
+      setGpsStatus("off");
       return;
     }
-    const newTrip: Trip = {
-      id: Date.now().toString(),
-      reference: tripForm.reference,
-      earnings: parseFloat(tripForm.earnings) || 0,
-      tips: parseFloat(tripForm.tips) || 0,
-      extra: parseFloat(tripForm.extra) || 0,
-      toll: parseFloat(tripForm.toll) || 0,
-      fee: parseFloat(tripForm.fee) || 0,
-      platform: tripForm.platform,
-      pickup: tripForm.pickup,
-      dropoff: tripForm.dropoff,
-      notes: tripForm.notes,
-      date: tripForm.date,
-      time: tripForm.time,
-      status: "pending",
-    };
-    setTrips((p) => [newTrip, ...p]);
-    setTripForm(emptyForm());
-    showToast("Trip saved to Register");
-    setTripsTab("REGISTER");
-  };
-
-  const postTrip = (id: string) => {
-    setTrips((p) => p.map((t) => (t.id === id ? { ...t, status: "posted" } : t)));
-    showToast("Posted to Ledger");
-  };
-
-  const pendingTrips = trips.filter((t) => t.status === "pending");
-  const postedTrips = trips.filter((t) => t.status === "posted");
-  const todayTrips = trips.filter((t) => t.date === today);
-  const grossToday = todayTrips.reduce((a, t) => a + t.earnings + t.tips + t.extra + t.toll, 0);
-  const activeMsNow = clockInTime ? currentTime.getTime() - clockInTime.getTime() - totalBreakMs - (isOnBreak && breakStart ? currentTime.getTime() - breakStart.getTime() : 0) : 0;
-  const activeHoursDecimal = Math.max(0, activeMsNow / 3600000);
-  const perHourGross = activeHoursDecimal > 0 ? grossToday / activeHoursDecimal : 0;
-  const goalPct = dailyGoal > 0 ? Math.min((grossToday / dailyGoal) * 100, 100) : 0;
-
-  const shiftStatusLabel = shiftActive ? (isOnBreak ? "On break" : "On duty") : "Shift ended";
-
-  const tripFormInput = (label: string, key: keyof typeof tripForm, placeholder = "0.00", isText = false) => (
-    <div>
-      <label className="text-[9px] text-neutral-500 uppercase tracking-wider block mb-1">{label}</label>
-      <input
-        type={isText ? "text" : "number"}
-        value={tripForm[key]}
-        onChange={(e) => setTripForm((s) => ({ ...s, [key]: e.target.value }))}
-        placeholder={placeholder}
-        className="w-full bg-[#111] border border-[#2a2a2a] rounded-lg px-3 py-2.5 font-mono text-[14px] text-white outline-none focus:border-[#d9b64f60]"
-      />
-    </div>
-  );
-
-  const DashboardContent = () => (
-    <div className="space-y-5">
-      <div>
-        <h2 className="text-[24px] font-bold leading-tight">Hola, Miguel.</h2>
-        <p className="text-[11px] tracking-[0.18em] mt-1.5 uppercase text-[#f6dd8c]">
-          {currentTime.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).toUpperCase()}
-        </p>
-        <p className="text-[10px] text-neutral-400 mt-1">
-          {currentTime.toLocaleTimeString()} {gps.status === "active" && gps.lat && gps.lng ? `· ${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)}` : gps.status === "searching" ? "· Locating…" : ""}
-        </p>
-      </div>
-
-      <div className="rounded-[20px] px-4 pt-3.5 pb-3 relative" style={{ background: "#0d0d0d", border: "1px solid #1e1e1e" }}>
-        <div className="flex items-center justify-between">
-          <p className="font-mono text-[10px] text-neutral-400">
-            {currentTime.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · {currentTime.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-          </p>
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[9px] font-bold" style={{
-            background: shiftActive && !isOnBreak ? "#052e16" : shiftActive && isOnBreak ? "#1c0d00" : "#111",
-            borderColor: shiftActive && !isOnBreak ? "#4ade8066" : shiftActive && isOnBreak ? "#f9731666" : "#2a2a2a",
-            color: shiftActive && !isOnBreak ? "#4ade80" : shiftActive && isOnBreak ? "#f97316" : "#737373",
-          }}>{shiftStatusLabel}</span>
-        </div>
-        <p className="font-mono text-[32px] font-black mt-2 tracking-tight text-[#f6dd8c]">${grossToday.toFixed(2)}</p>
-        <p className="font-mono text-[10px] text-neutral-400 mt-0.5">{todayTrips.length} {todayTrips.length === 1 ? "trip" : "trips"} today</p>
-
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          {(["START", "BREAK", "END"] as const).map((s) => {
-            const isActive = (s === "START" && shiftActive && !isOnBreak) || (s === "BREAK" && isOnBreak) || (s === "END" && !shiftActive);
-            const disabled = s === "BREAK" && !shiftActive;
-            return (
-              <button key={s} disabled={disabled}
-                onClick={() => (s === "START" ? (!shiftActive ? handleClockIn() : handleBreakToggle()) : s === "BREAK" ? handleBreakToggle() : handleClockOut())}
-                className="h-[38px] rounded-full border text-[11px] tracking-[0.12em] font-bold transition-all disabled:cursor-not-allowed"
-                style={disabled ? { background: "#0a0a0a", border: "1px solid #1a1a1a", color: "#444" }
-                  : isActive ? { background: "linear-gradient(90deg,#f6dd8c,#d9b64f)", border: "1px solid #d9b64f", color: "#000" }
-                  : { background: "transparent", border: "1px solid #d9b64f99", color: "#f6dd8c" }}>
-                {s === "START" ? "START" : s === "BREAK" ? (isOnBreak ? "RESUME" : "BREAK") : "END SHIFT"}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="rounded-[20px] p-4 space-y-3" style={{ background: "#0d0d0d", border: "1px solid #1e1e1e" }}>
-        <div className="flex items-center justify-between">
-          <h3 className="text-[11px] tracking-[0.18em] font-bold text-[#f6dd8c]">HOY · DAILY GOAL</h3>
-          <span className="font-mono text-[13px] font-black text-[#f6dd8c]">{goalPct.toFixed(0)}%</span>
-        </div>
-        <div className="w-full h-2 rounded-full bg-[#1e1e1e] overflow-hidden">
-          <div className="h-full rounded-full transition-all" style={{ width: `${goalPct}%`, background: goalPct >= 100 ? "#4ade80" : "#f6dd8c" }} />
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          <div className="rounded-xl p-3" style={{ background: "#080808", border: "1px solid #1e1e1e" }}>
-            <p className="text-[9px] text-neutral-400 tracking-wider">EARNED</p>
-            <p className="font-mono text-[15px] font-black mt-1 text-[#f6dd8c]">${grossToday.toFixed(2)}</p>
-          </div>
-          <div className="rounded-xl p-3" style={{ background: "#080808", border: "1px solid #1e1e1e" }}>
-            <p className="text-[9px] text-neutral-400 tracking-wider">ACTIVE HRS</p>
-            <p className="font-mono text-[15px] font-black mt-1 text-[#f6dd8c]">{activeHoursDecimal.toFixed(1)}h</p>
-          </div>
-          <div className="rounded-xl p-3" style={{ background: "#080808", border: "1px solid #1e1e1e" }}>
-            <p className="text-[9px] text-neutral-400 tracking-wider">$/HOUR</p>
-            <p className="font-mono text-[15px] font-black mt-1 text-[#f6dd8c]">{perHourGross > 0 ? `$${perHourGross.toFixed(2)}` : "—"}</p>
-          </div>
-        </div>
-        <div>
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-neutral-400">Gross hourly rate target</span>
-            <span className="font-mono text-[18px] font-black text-[#f6dd8c]">${goal}/h</span>
-          </div>
-          <input type="range" min={30} max={100} step={1} value={goal} onChange={(e) => { setGoal(parseInt(e.target.value)); try { localStorage.setItem("ic-hourly-goal", e.target.value); } catch {} }} className="w-full mt-2" />
-        </div>
-      </div>
-    </div>
-  );
-
-  const EntryFormContent = () => (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
-        {tripFormInput("Reference #", "reference", "e.g. 1234", true)}
-        <div>
-          <label className="text-[9px] text-neutral-500 uppercase tracking-wider block mb-1">Platform</label>
-          <select value={tripForm.platform} onChange={(e) => setTripForm((s) => ({ ...s, platform: e.target.value }))}
-            className="w-full bg-[#111] border border-[#2a2a2a] rounded-lg px-3 py-2.5 text-[13px] text-white outline-none">
-            {PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
-        </div>
-      </div>
-      {tripFormInput("Pickup", "pickup", "Origin", true)}
-      {tripFormInput("Dropoff", "dropoff", "Destination", true)}
-      <div className="grid grid-cols-2 gap-3">
-        {tripFormInput("Earnings", "earnings")}
-        {tripFormInput("Tips", "tips")}
-        {tripFormInput("Extra Cash", "extra")}
-        {tripFormInput("Toll", "toll")}
-        {tripFormInput("Platform Fee", "fee")}
-        <div>
-          <label className="text-[9px] text-neutral-500 uppercase tracking-wider block mb-1">Date</label>
-          <input type="date" value={tripForm.date} onChange={(e) => setTripForm((s) => ({ ...s, date: e.target.value }))}
-            className="w-full bg-[#111] border border-[#2a2a2a] rounded-lg px-3 py-2.5 text-[13px] text-white outline-none" />
-        </div>
-      </div>
-      <div>
-        <label className="text-[9px] text-neutral-500 uppercase tracking-wider block mb-1">Notes</label>
-        <textarea value={tripForm.notes} onChange={(e) => setTripForm((s) => ({ ...s, notes: e.target.value }))}
-          className="w-full bg-[#111] border border-[#2a2a2a] rounded-lg px-3 py-2.5 text-[13px] text-white outline-none" rows={2} />
-      </div>
-      <div className="rounded-xl p-4 text-center" style={{ background: "#0a0a0a", border: "1px solid #1e1e1e" }}>
-        <p className="text-[10px] text-neutral-500 uppercase tracking-wider">Net Trip Total</p>
-        <p className="font-mono text-[28px] font-black mt-1" style={{ color: grandTotalLive > 0 ? "#facc15" : "#3a3a3a" }}>${grandTotalLive.toFixed(2)}</p>
-      </div>
-      <button onClick={handleSaveTrip} className="w-full h-12 rounded-full text-[13px] font-black tracking-wider text-black" style={{ background: "linear-gradient(90deg,#f6dd8c,#d9b64f)" }}>
-        SAVE TRIP
-      </button>
-    </div>
-  );
-
-  const RegisterContent = () => (
-    <div className="space-y-3">
-      {pendingTrips.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-[13px] text-neutral-400">All trips posted ✓</p>
-          <p className="text-[11px] text-neutral-600 mt-1">Queue is clear — all revenue is in the Ledger</p>
-        </div>
-      ) : pendingTrips.map((t) => (
-        <div key={t.id} className="rounded-xl p-3.5" style={{ background: "#0a0a0a", border: "1px solid #1e1e1e" }}>
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-[12px] font-semibold text-white">{t.platform} · REF: {t.reference || "—"}</p>
-              <p className="text-[11px] text-neutral-400 mt-0.5">{t.pickup || "—"} → {t.dropoff || "—"}</p>
-              <p className="text-[10px] text-neutral-600 mt-0.5">{t.date} {t.time}</p>
-            </div>
-            <p className="font-mono text-[15px] font-bold text-[#f6dd8c]">${(t.earnings + t.tips + t.extra + t.toll - t.fee).toFixed(2)}</p>
-          </div>
-          <button onClick={() => postTrip(t.id)} className="w-full mt-2.5 h-9 rounded-full text-[11px] font-bold text-black" style={{ background: "#4ade80" }}>
-            POST TO LEDGER
-          </button>
-        </div>
-      ))}
-    </div>
-  );
-
-  const LedgerContent = () => {
-    const total = postedTrips.reduce((a, t) => a + t.earnings + t.tips + t.extra + t.toll - t.fee, 0);
-    return (
-      <div className="space-y-3">
-        <div className="rounded-xl p-4 text-center" style={{ background: "#0a0a0a", border: "1px solid #1e1e1e" }}>
-          <p className="text-[10px] text-neutral-500 uppercase tracking-wider">Ledger Total</p>
-          <p className="font-mono text-[26px] font-black text-[#4ade80]">${total.toFixed(2)}</p>
-          <p className="text-[10px] text-neutral-600 mt-1">{postedTrips.length} posted trips</p>
-        </div>
-        {postedTrips.length === 0 ? (
-          <div className="text-center py-10">
-            <p className="text-[13px] text-neutral-400">Ledger is empty</p>
-            <p className="text-[11px] text-neutral-600 mt-1">Review and approve trips in the Register first</p>
-          </div>
-        ) : postedTrips.map((t) => (
-          <div key={t.id} className="rounded-xl p-3.5" style={{ background: "#0a0a0a", border: "1px solid #1e1e1e" }}>
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-[12px] font-semibold text-white">{t.platform} · REF: {t.reference || "—"}</p>
-                <p className="text-[11px] text-neutral-400 mt-0.5">{t.pickup || "—"} → {t.dropoff || "—"}</p>
-                <p className="text-[10px] text-neutral-600 mt-0.5">{t.date} {t.time}</p>
-              </div>
-              <p className="font-mono text-[15px] font-bold text-[#4ade80]">${(t.earnings + t.tips + t.extra + t.toll - t.fee).toFixed(2)}</p>
-            </div>
-          </div>
-        ))}
-      </div>
+    setGpsStatus("searching");
+    let cancelled = false;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => handleFix(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
+      () => {
+        if (!cancelled) setGpsStatus("error");
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 },
     );
-  };
+    return () => {
+      cancelled = true;
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [handleFix]);
 
-  const BlankTab = ({ label }: { label: string }) => (
-    <div className="flex flex-col items-center justify-center py-24 text-center">
-      <p className="text-[14px] font-bold text-neutral-400">{label}</p>
-      <p className="text-[11px] text-neutral-600 mt-1">Próximamente — esta sección se construirá después</p>
-    </div>
+  const toggleTracking = useCallback(() => {
+    if (!trackingRef.current) {
+      trackingRef.current = true;
+      milesRef.current = draftNums(draft).miles || 0;
+      setTracking(true);
+      showToast("▶ START TRACKING — tap before you start driving");
+    } else {
+      trackingRef.current = false;
+      setTracking(false);
+      showToast(`⏹ tracking detenido · ${milesRef.current.toFixed(1)} mi`);
+    }
+  }, [draft, showToast]);
+
+  const capture = useCallback(
+    (kind: "origin" | "destination") => {
+      if (!gpsFix) {
+        showToast("GPS no activo — espera a que se fije la posición");
+        return;
+      }
+      const tag = `${gpsFix.lat.toFixed(4)}, ${gpsFix.lng.toFixed(4)}`;
+      setDraft((prev) =>
+        kind === "origin" ? { ...prev, origin: tag, originTag: `±${Math.round(gpsFix.acc)}m` } : { ...prev, destination: tag, destTag: `±${Math.round(gpsFix.acc)}m` },
+      );
+      showToast(`${kind === "origin" ? "Origen" : "Destino"} capturado · ${tag}`);
+    },
+    [gpsFix, showToast],
   );
+
+  // ── shift ─────────────────────────────────────────────────────────
+  const startShift = useCallback(() => {
+    update((s) => ({ ...s, shiftStartedAt: Date.now() }));
+    void wake.request();
+    showToast("Shift started · Clock In");
+  }, [showToast, update, wake]);
+
+  const endShift = useCallback(() => {
+    update((s) => ({ ...s, shiftStartedAt: null }));
+    void wake.release();
+    showToast("Shift ended");
+  }, [showToast, update, wake]);
+
+  // ── trip save ─────────────────────────────────────────────────────
+  const saveTrip = useCallback(() => {
+    if (stateRef.current.closedDays[todayStr()]) {
+      showToast("🔒 Día cerrado — viajes bloqueados");
+      return;
+    }
+    const n = draftNums(draft);
+    if (n.gross <= 0) {
+      showToast("Ingresa un monto de Gross Fare válido");
+      return;
+    }
+    const trip: Trip = {
+      id: uid(),
+      ref: `IC-${String(stateRef.current.refCounter).padStart(4, "0")}`,
+      fareType: draft.fareType,
+      platform: draft.platform,
+      gross: n.gross,
+      tips: n.tips,
+      cashRec: n.cashRec,
+      tollReimb: n.tollReimb,
+      comm: n.comm,
+      net: calcNet(n.gross, n.tips, n.cashRec, n.tollReimb, n.comm),
+      date: todayStr(),
+      displayTime: nowLabel(),
+      timestamp: Date.now(),
+      origin: { text: draft.origin, lat: null, lng: null, acc: null },
+      destination: { text: draft.destination, lat: null, lng: null, acc: null },
+      tripMiles: n.miles,
+      notes: draft.notes.trim(),
+      receipts: [],
+      status: "queued",
+    };
+    update((s) => ({ ...s, trips: [trip, ...s.trips], refCounter: s.refCounter + 1 }));
+    if (stateRef.current.autoDownloadJson) downloadTripAuditJson(trip);
+    milesRef.current = 0;
+    setLiveMiles("0.00");
+    setTracking(false);
+    trackingRef.current = false;
+    setDraft(emptyEntryDraft());
+    showToast(`Grabado ${fmt(trip.net)} · ${trip.ref} · ${trip.platform}`);
+  }, [draft, showToast, update]);
+
+  // ── Queue handlers ────────────────────────────────────────────────
+  const quickSave = useCallback(
+    (id: string) => {
+      if (!quick) return;
+      const gross = parseFloat(quick.gross) || 0;
+      const tips = parseFloat(quick.tips) || 0;
+      const cashRec = parseFloat(quick.cashRec) || 0;
+      const tollReimb = parseFloat(quick.tollReimb) || 0;
+      const comm = parseFloat(quick.comm) || 0;
+      update((s) => ({
+        ...s,
+        trips: s.trips.map((t) =>
+          t.id === id
+            ? { ...t, gross, tips, cashRec, tollReimb, comm, net: calcNet(gross, tips, cashRec, tollReimb, comm) }
+            : t,
+        ),
+      }));
+      setQuick(null);
+      showToast("✓ Viaje actualizado");
+    },
+    [quick, showToast, update],
+  );
+
+  const openFullEdit = useCallback((t: Trip) => {
+    setEditing(t);
+    setEditForm({
+      fareType: t.fareType,
+      platform: t.platform,
+      gross: String(t.gross),
+      tips: String(t.tips),
+      cashRec: String(t.cashRec),
+      tollReimb: String(t.tollReimb),
+      comm: String(t.comm),
+      origin: t.origin.text,
+      originTag: t.origin.acc != null ? String(t.origin.acc) : "",
+      destination: t.destination.text,
+      destTag: "",
+      miles: String(t.tripMiles),
+      notes: t.notes,
+    });
+  }, []);
+
+  const saveFullEdit = useCallback(() => {
+    if (!editing || !editForm) return;
+    const n = draftNums(editForm);
+    update((s) => ({
+      ...s,
+      trips: s.trips.map((t) =>
+        t.id === editing.id
+          ? {
+              ...t,
+              fareType: editForm.fareType,
+              platform: editForm.platform,
+              gross: n.gross,
+              tips: n.tips,
+              cashRec: n.cashRec,
+              tollReimb: n.tollReimb,
+              comm: n.comm,
+              net: calcNet(n.gross, n.tips, n.cashRec, n.tollReimb, n.comm),
+              origin: { ...t.origin, text: editForm.origin },
+              destination: { ...t.destination, text: editForm.destination },
+              tripMiles: n.miles,
+              notes: editForm.notes.trim(),
+            }
+          : t,
+      ),
+    }));
+    setEditing(null);
+    setEditForm(null);
+    showToast("✓ Full edit guardado");
+  }, [editing, editForm, showToast, update]);
+
+  const deleteTrip = useCallback(
+    (id: string) => {
+      const t = stateRef.current.trips.find((x) => x.id === id);
+      if (t && stateRef.current.closedDays[tripDate(t)]) {
+        showToast("🔒 Día cerrado — no se puede borrar");
+        return;
+      }
+      setConfirmBox({
+        msg: `¿Borrar viaje ${t?.ref ?? ""} (${t ? fmt(t.net) : ""})?`,
+        label: "🗑 DELETE",
+        action: () => {
+          update((s) => ({ ...s, trips: s.trips.filter((x) => x.id !== id) }));
+          showToast("Viaje eliminado");
+        },
+      });
+    },
+    [showToast, update],
+  );
+
+  const postTrip = useCallback(
+    (id: string) => {
+      update((s) => ({ ...s, trips: s.trips.map((t) => (t.id === id ? { ...t, status: "posted" } : t)) }));
+      showToast("✓ POSTED — ya cuenta en Dashboard");
+    },
+    [showToast, update],
+  );
+
+  // ── Ledger handlers ───────────────────────────────────────────────
+  const closeDay = useCallback(() => {
+    const s = stateRef.current;
+    const today = todayStr();
+    const total = s.tollLog.filter((h) => h.date === today).reduce((acc, h) => acc + h.amount, 0);
+    if (total <= 0) {
+      showToast("No hay tolls GPS hoy para cerrar");
+      return;
+    }
+    if (s.txs.some((t) => t.type === "EZPASS_DAILY" && t.sourceDate === today && t.status === "POR_PAGAR")) {
+      showToast("Ya existe E-ZPass POR PAGAR para hoy");
+      return;
+    }
+    const count = s.tollLog.filter((h) => h.date === today).length;
+    const tx: LedgerTx = {
+      id: uid(),
+      type: "EZPASS_DAILY",
+      title: "E-ZPass NY",
+      amount: total,
+      status: "POR_PAGAR",
+      date: today,
+      displayTime: nowLabel(),
+      notes: `${count} peajes GPS`,
+      sourceDate: today,
+    };
+    update((st) => ({ ...st, txs: [tx, ...st.txs], closedDays: { ...st.closedDays, [today]: true } }));
+    showToast(`🔒 Día cerrado · E-ZPass POR PAGAR ${fmt(total)}`);
+  }, [showToast, update]);
+
+  const scanEzPass = useCallback(
+    async (tx: LedgerTx, file: File) => {
+      try {
+        const dataUrl = await fileToDataUrl(file);
+        const photoKey = `receipt-${tx.id}-${Date.now()}`;
+        await putPhoto(photoKey, dataUrl);
+        const ocr = await ocrReceipt(dataUrl);
+        let amount = ocr?.amount;
+        let notes = ocr?.vendor ? `OCR: ${ocr.vendor}` : "";
+        if (amount == null) {
+          const v = window.prompt("No se pudo leer el monto. Ingresa el total E-ZPass:");
+          if (v == null) {
+            showToast("Escaneo cancelado");
+            return;
+          }
+          amount = parseFloat(v) || 0;
+          notes += " (manual)";
+        }
+        update((s) => ({
+          ...s,
+          txs: s.txs.map((x) => (x.id === tx.id ? { ...x, status: "PAGADO", amount, notes, photoKey } : x)),
+        }));
+        showToast(`✓ E-ZPass PAGADO · ${fmt(amount)}`);
+      } catch (e) {
+        showToast("Error al procesar el recibo");
+        console.warn(e);
+      }
+    },
+    [showToast, update],
+  );
+
+  const addReceipt = useCallback(
+    async (file: File) => {
+      try {
+        const dataUrl = await fileToDataUrl(file);
+        const photoKey = `receipt-${uid()}-${Date.now()}`;
+        await putPhoto(photoKey, dataUrl);
+        const ocr = await ocrReceipt(dataUrl);
+        let amount = ocr?.amount;
+        let notes = ocr?.vendor ? `OCR: ${ocr.vendor}` : "";
+        if (amount == null) {
+          const v = window.prompt("Monto del recibo:");
+          if (v == null) {
+            showToast("Cancelado");
+            return;
+          }
+          amount = parseFloat(v) || 0;
+          notes += " (manual)";
+        }
+        const tx: LedgerTx = {
+          id: uid(),
+          type: "RECEIPT",
+          title: ocr?.vendor || "Recibo",
+          amount,
+          status: "PAID",
+          date: todayStr(),
+          displayTime: nowLabel(),
+          notes,
+          photoKey,
+        };
+        update((s) => ({ ...s, txs: [tx, ...s.txs] }));
+        showToast(`📎 Recibo agregado · ${fmt(amount)}`);
+      } catch (e) {
+        showToast("Error al procesar el recibo");
+        console.warn(e);
+      }
+    },
+    [showToast, update],
+  );
+
+  const nextRef = `IC-${String(state.refCounter).padStart(4, "0")}`;
 
   return (
-    <div className="min-h-screen bg-black text-white pb-20" style={{ maxWidth: 480, margin: "0 auto" }}>
+    <div className="min-h-screen bg-[#0A0A0A] text-white pb-24" style={{ maxWidth: 480, margin: "0 auto" }}>
       {toast && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-[#1a1a1a] border border-[#333] rounded-full px-4 py-2 text-[12px]">
+        <div className="fixed left-1/2 top-4 z-50 -translate-x-1/2 rounded-full border border-[#FFD70055] bg-[#1a1a1a] px-4 py-2 text-[12px] font-bold text-white">
           {toast}
         </div>
       )}
 
-      {activeTab === "TRIPS" && (
-        <div className="sticky top-0 z-20 bg-black border-b border-[#181818] px-4 py-2.5">
-          <div className="flex gap-2">
-            {([
-              { key: "ENTRY", label: "Daily Entry" },
-              { key: "REGISTER", label: "Queue", badge: pendingTrips.length },
-              { key: "LEDGER", label: "Ledger", badge: postedTrips.length },
-            ] as const).map(({ key, label, badge }) => {
-              const active = tripsTab === key;
-              return (
-                <button key={key} onClick={() => setTripsTab(key as TripsTab)}
-                  className="flex-1 h-8 rounded-full text-[9px] font-bold tracking-[0.1em] border transition-all relative"
-                  style={active ? { background: "#1a1200", borderColor: "#f6dd8c40", color: "#f6dd8c" } : { background: "transparent", borderColor: "#2a2a2a", color: "#737373" }}>
-                  {label}{badge ? ` (${badge})` : ""}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      <div className="px-4 pb-6 pt-5">
-        {activeTab === "DASHBOARD" && <DashboardContent />}
-        {activeTab === "TRIPS" && tripsTab === "ENTRY" && <EntryFormContent />}
-        {activeTab === "TRIPS" && tripsTab === "REGISTER" && <RegisterContent />}
-        {activeTab === "TRIPS" && tripsTab === "LEDGER" && <LedgerContent />}
-        {activeTab === "EXPENSES" && <BlankTab label="Expenses" />}
-        {activeTab === "FINANCES" && <BlankTab label="Finances" />}
-        {activeTab === "REPORTS" && <BlankTab label="Reports" />}
-        {activeTab === "AI" && <BlankTab label="AI Assistant" />}
+      <div className="px-3 pt-3">
+        {tab === "ENTRY" && (
+          <EntryScreen
+            draft={draft}
+            setDraft={setDraft}
+            todayLabel={todayLabel}
+            nextRef={nextRef}
+            gpsFix={gpsFix}
+            tracking={tracking}
+            liveMiles={liveMiles}
+            onToggleTracking={toggleTracking}
+            onCapture={capture}
+            onSave={saveTrip}
+            dayClosed={!!state.closedDays[today]}
+            shiftOn={shiftOn}
+          />
+        )}
+        {tab === "QUEUE" && (
+          <QueueScreen
+            trips={state.trips}
+            closedDays={state.closedDays}
+            quick={quick}
+            setQuick={setQuick}
+            onQuickSave={quickSave}
+            onFullEdit={openFullEdit}
+            onDelete={deleteTrip}
+            onPost={postTrip}
+            pendingCount={pendingCount}
+          />
+        )}
+        {tab === "LEDGER" && (
+          <LedgerScreen
+            txs={state.txs}
+            tollLog={state.tollLog}
+            today={today}
+            getPhoto={getPhoto}
+            onScanEzPass={scanEzPass}
+            onAddReceipt={addReceipt}
+            onCloseDay={closeDay}
+          />
+        )}
+        {tab === "DASH" && (
+          <DashboardScreen
+            todayLabel={todayLabel}
+            shiftOn={shiftOn}
+            rate={rate}
+            grandToday={grandToday}
+            target={state.goal}
+            hoursWorked={hoursWorked}
+            last7={last7}
+            advisor={advisor}
+            onStartShift={startShift}
+            onEndShift={endShift}
+          />
+        )}
       </div>
 
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] z-40 bg-[#030303] border-t border-[#1c1c1c]">
+      {/* bottom nav */}
+      <div className="fixed bottom-0 left-1/2 z-40 w-full max-w-[480px] -translate-x-1/2 border-t border-[#1c1c1c] bg-[#030303]">
         <div className="flex">
-          {([
-            { key: "DASHBOARD", Icon: Home, label: "DASH", color: "#f6dd8c" },
-            { key: "TRIPS", Icon: Banknote, label: "TRIPS", color: "#fbbf24" },
-            { key: "EXPENSES", Icon: Receipt, label: "EXPENSES", color: "#fb923c" },
-            { key: "FINANCES", Icon: BarChart2, label: "FINANCE", color: "#60a5fa" },
-            { key: "REPORTS", Icon: FileText, label: "REPORTS", color: "#a78bfa" },
-            { key: "AI", Icon: Brain, label: "AI", color: "#4ade80" },
-          ] as const).map(({ key, Icon, label, color }) => {
-            const active = activeTab === key;
+          {(
+            [
+              { key: "ENTRY", label: "ENTRY", Icon: Banknote },
+              { key: "QUEUE", label: "QUEUE", Icon: ClipboardList },
+              { key: "LEDGER", label: "LEDGER", Icon: Receipt },
+              { key: "DASH", label: "DASH", Icon: Home },
+            ] as const
+          ).map(({ key, label, Icon }) => {
+            const active = tab === key;
             return (
-              <button key={key} onClick={() => setActiveTab(key as Tab)}
-                className="flex-1 h-[62px] flex flex-col items-center justify-center gap-[3px] relative transition-all"
-                style={{ color: active ? color : "#525252" }}>
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className="flex h-[62px] flex-1 flex-col items-center justify-center gap-[3px]"
+                style={{ color: active ? "#FFD700" : "#525252" }}
+              >
                 <Icon size={active ? 20 : 18} strokeWidth={active ? 2 : 1.5} />
-                <span className="text-[8px] font-bold tracking-wider">{label}</span>
+                <span className="text-[8px] font-black tracking-wider">{label}</span>
               </button>
             );
           })}
         </div>
       </div>
+
+      {/* full edit modal */}
+      {editing && editForm && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70">
+          <div className="w-full max-w-[480px] rounded-t-2xl border-t border-[#FFD70055] bg-[#0e0e0e] p-4">
+            <div className="flex items-center justify-between">
+              <span className={LABEL}>FULL EDIT · {editing.ref}</span>
+              <button onClick={() => { setEditing(null); setEditForm(null); }} className="text-[20px] text-[#8a8a8a]">✕</button>
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {(
+                [
+                  ["gross", "GROSS"],
+                  ["tips", "TIPS"],
+                  ["cashRec", "CASH"],
+                  ["tollReimb", "TOLL R."],
+                  ["comm", "COMM"],
+                  ["miles", "MILES"],
+                ] as const
+              ).map(([k, lbl]) => (
+                <div key={k}>
+                  <div className="text-[9px] font-black text-[#6f6f6f]">{lbl}</div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editForm[k]}
+                    onChange={(e) => setEditForm({ ...editForm, [k]: e.target.value })}
+                    className="w-full rounded-lg border border-[#2a2a2a] bg-black px-2 py-2 font-mono text-[15px] font-black text-white outline-none"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="mt-2">
+              <div className="text-[9px] font-black text-[#6f6f6f]">PLATFORM</div>
+              <input
+                value={editForm.platform}
+                onChange={(e) => setEditForm({ ...editForm, platform: e.target.value })}
+                className="w-full rounded-lg border border-[#2a2a2a] bg-black px-2 py-2 text-[14px] font-bold text-white outline-none"
+              />
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <div>
+                <div className="text-[9px] font-black text-[#6f6f6f]">ORIGIN</div>
+                <input
+                  value={editForm.origin}
+                  onChange={(e) => setEditForm({ ...editForm, origin: e.target.value })}
+                  className="w-full rounded-lg border border-[#2a2a2a] bg-black px-2 py-2 text-[12px] text-white outline-none"
+                />
+              </div>
+              <div>
+                <div className="text-[9px] font-black text-[#6f6f6f]">DESTINATION</div>
+                <input
+                  value={editForm.destination}
+                  onChange={(e) => setEditForm({ ...editForm, destination: e.target.value })}
+                  className="w-full rounded-lg border border-[#2a2a2a] bg-black px-2 py-2 text-[12px] text-white outline-none"
+                />
+              </div>
+            </div>
+            <div className="mt-2">
+              <div className="text-[9px] font-black text-[#6f6f6f]">NOTES</div>
+              <input
+                value={editForm.notes}
+                onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                className="w-full rounded-lg border border-[#2a2a2a] bg-black px-2 py-2 text-[12px] text-white outline-none"
+              />
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button onClick={() => { setEditing(null); setEditForm(null); }} className="h-12 rounded-xl border border-[#2a2a2a] text-[12px] font-black text-[#8a8a8a]">
+                CANCEL
+              </button>
+              <button onClick={saveFullEdit} className="h-12 rounded-xl bg-[#FFD700] text-[12px] font-black text-black">
+                ✓ SAVE
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* confirm box */}
+      {confirmBox && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-6">
+          <div className="w-full max-w-[400px] rounded-2xl border border-[#2a2a2a] bg-[#0e0e0e] p-5">
+            <div className="text-[14px] font-bold text-white">{confirmBox.msg}</div>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button onClick={() => setConfirmBox(null)} className="h-12 rounded-xl border border-[#2a2a2a] text-[12px] font-black text-[#8a8a8a]">
+                CANCEL
+              </button>
+              <button
+                onClick={() => {
+                  confirmBox.action();
+                  setConfirmBox(null);
+                }}
+                className="h-12 rounded-xl bg-[#f87171] text-[12px] font-black text-black"
+              >
+                {confirmBox.label}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

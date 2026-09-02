@@ -1,0 +1,193 @@
+// ── PDF report generation (jsPDF) ───────────────────────────────────
+// Ported from EI Program v2.0: Financial Statement, Tolls Report,
+// Income & Expense Report. Dark header bars + brand footer.
+import { jsPDF } from "jspdf";
+import { fmt, fmtDate, MONTHS_ES, tripDate, type AppState } from "./domain";
+import { irsRate } from "./irs";
+
+interface RowOpts {
+  bold?: boolean;
+  size?: number;
+  color?: [number, number, number];
+  gap?: number;
+}
+
+function pdfHeader(doc: jsPDF, title: string): void {
+  doc.setFillColor(5, 5, 5);
+  doc.rect(0, 0, 210, 30, "F");
+  doc.setFillColor(255, 214, 10);
+  doc.rect(0, 30, 210, 1.2, "F");
+  doc.setTextColor(255, 214, 10);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.text("IslandCity Transport", 15, 13);
+  doc.setFontSize(9);
+  doc.setTextColor(160, 160, 160);
+  doc.text("EI Program · Driver Accounting System", 15, 19);
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(12);
+  doc.text(title, 15, 26);
+}
+
+function pdfSectionBar(doc: jsPDF, y: number, text: string): number {
+  doc.setFillColor(20, 29, 46);
+  doc.rect(15, y - 5, 180, 8, "F");
+  doc.setTextColor(255, 214, 10);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.text(text, 20, y);
+  return y + 12;
+}
+
+function pdfRow(doc: jsPDF, y: number, label: string, value: string, opts: RowOpts = {}): number {
+  const size = opts.size ?? 10;
+  doc.setFont("helvetica", opts.bold ? "bold" : "normal");
+  doc.setFontSize(size);
+  doc.setTextColor(60, 60, 60);
+  doc.text(label, 20, y);
+  if (opts.color) doc.setTextColor(...opts.color);
+  else doc.setTextColor(20, 20, 20);
+  doc.text(value, 195, y, { align: "right" });
+  return y + (opts.gap ?? 8);
+}
+
+function pdfFooter(doc: jsPDF, dateStr: string): void {
+  doc.setFontSize(8);
+  doc.setTextColor(150, 150, 150);
+  doc.text(
+    `IslandCity Transport Services · EI Program Accounting · Generated ${fmtDate(dateStr)}`,
+    105,
+    290,
+    { align: "center" },
+  );
+}
+
+export type ReportType = "financial" | "tolls" | "income_expense";
+
+export function generateReport(type: ReportType, state: AppState, selMonthKey?: string): string {
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10);
+  const doc = new jsPDF();
+  const rate = irsRate(now);
+  if (type === "financial") {
+    const selM = selMonthKey ?? now.toISOString().slice(0, 7);
+    const periodTrips = state.trips.filter((t) => tripDate(t).slice(0, 7) === selM);
+    const periodExpenses = state.expenses.filter((e) => (e.date || "").slice(0, 7) === selM);
+    const ym = selM.split("-");
+    const monthName = MONTHS_ES[ym[1]] ?? selM;
+    pdfHeader(doc, `FINANCIAL STATEMENT · ${monthName} ${ym[0]}`);
+    let y = 42;
+    const totalIncome = periodTrips.reduce((s, t) => s + t.grand, 0);
+    const totalExpenses = periodExpenses.reduce((s, e) => s + e.amount, 0);
+    const netProfit = totalIncome - totalExpenses;
+    const irsCredit = state.totalMiles * rate;
+    y = pdfRow(doc, y, "Report Period", dateStr, { bold: true, size: 11, gap: 10 });
+    y = pdfSectionBar(doc, y, "SUMMARY");
+    y = pdfRow(doc, y, "Total Income", fmt(totalIncome), { color: [0, 140, 80] });
+    y = pdfRow(doc, y, "Total Expenses", fmt(totalExpenses), { color: [200, 40, 40] });
+    y = pdfRow(doc, y, "Net Profit", fmt(netProfit), { bold: true });
+    y = pdfRow(doc, y, "IRS Mileage Credit", fmt(irsCredit), { color: [0, 140, 80] });
+    y = pdfRow(doc, y, "Net Profit + IRS Credit", fmt(netProfit + irsCredit), { bold: true, size: 12, gap: 12 });
+    y = pdfSectionBar(doc, y, "ACTIVITY DETAIL");
+    y = pdfRow(doc, y, "Total Trips", String(periodTrips.length));
+    y = pdfRow(doc, y, "Total Miles Driven (lifetime GPS)", state.totalMiles.toFixed(1) + " mi");
+    y = pdfRow(doc, y, "IRS Rate Applied", (rate * 100).toFixed(1) + "¢ / mi");
+    y = pdfRow(doc, y, "Total Tolls", fmt(periodTrips.reduce((s, t) => s + (t.toll || 0), 0)));
+    y = pdfRow(doc, y, "Total Platform Fees", fmt(periodTrips.reduce((s, t) => s + (t.fee || 0), 0)), { gap: 12 });
+    const platforms: Record<string, { income: number; trips: number }> = {};
+    periodTrips.forEach((t) => {
+      if (!platforms[t.platform]) platforms[t.platform] = { income: 0, trips: 0 };
+      platforms[t.platform].income += t.grand;
+      platforms[t.platform].trips++;
+    });
+    if (Object.keys(platforms).length > 0) {
+      y = pdfSectionBar(doc, y, "INCOME BY PLATFORM");
+      Object.entries(platforms)
+        .sort((a, b) => b[1].income - a[1].income)
+        .forEach(([p, d]) => {
+          y = pdfRow(doc, y, `${p} (${d.trips} trips)`, fmt(d.income), { gap: 6 });
+        });
+    }
+    pdfFooter(doc, dateStr);
+    doc.save(`Financial_Statement_${dateStr}.pdf`);
+    return "✓ Financial Statement PDF downloaded";
+  }
+  if (type === "tolls") {
+    pdfHeader(doc, "TOLLS REPORT");
+    let y = 42;
+    y = pdfRow(doc, y, "Report Period", dateStr, { bold: true, size: 11, gap: 10 });
+    y = pdfSectionBar(doc, y, "GPS-DETECTED TOLLS");
+    if (state.tollHits.length === 0) y = pdfRow(doc, y, "No GPS tolls recorded", "—", { gap: 6 });
+    state.tollHits.slice(0, 25).forEach((t) => {
+      y = pdfRow(doc, y, `${t.name} · ${t.displayTime}`, fmt(t.amount), { size: 9, gap: 6 });
+      if (y > 270) {
+        doc.addPage();
+        y = 20;
+      }
+    });
+    const tollExpenses = state.expenses.filter((e) => e.category === "Tolls");
+    if (tollExpenses.length > 0) {
+      y += 4;
+      y = pdfSectionBar(doc, y, "MANUALLY LOGGED TOLLS");
+      tollExpenses.forEach((e) => {
+        y = pdfRow(doc, y, e.notes || "Manual toll", fmt(e.amount), { size: 9, gap: 6 });
+      });
+    }
+    const total =
+      state.tollHits.reduce((s, t) => s + t.amount, 0) + tollExpenses.reduce((s, e) => s + e.amount, 0);
+    y += 6;
+    y = pdfRow(doc, y, "TOTAL TOLLS", fmt(total), { bold: true, size: 12 });
+    pdfFooter(doc, dateStr);
+    doc.save(`Tolls_Report_${dateStr}.pdf`);
+    return "✓ Tolls Report PDF downloaded";
+  }
+
+  // income_expense
+  pdfHeader(doc, "INCOME & EXPENSE REPORT");
+  let y = 42;
+  y = pdfRow(doc, y, "Report Period", dateStr, { bold: true, size: 11, gap: 10 });
+  y = pdfSectionBar(doc, y, "INCOME · TRIPS");
+  if (state.trips.length === 0) y = pdfRow(doc, y, "No trips recorded", "—", { gap: 6 });
+  state.trips.slice(0, 20).forEach((t) => {
+    y = pdfRow(doc, y, `${t.platform} · ${t.displayTime}`, fmt(t.grand), {
+      size: 9,
+      gap: 6,
+      color: [0, 120, 70],
+    });
+    if (y > 260) {
+      doc.addPage();
+      y = 20;
+    }
+  });
+  y += 4;
+  if (y > 250) {
+    doc.addPage();
+    y = 20;
+  }
+  y = pdfSectionBar(doc, y, "EXPENSES");
+  if (state.expenses.length === 0) y = pdfRow(doc, y, "No expenses recorded", "—", { gap: 6 });
+  state.expenses.slice(0, 20).forEach((e) => {
+    y = pdfRow(doc, y, `${e.category} · ${e.notes || e.frequency}`, fmt(e.amount), {
+      size: 9,
+      gap: 6,
+      color: [190, 40, 40],
+    });
+    if (y > 270) {
+      doc.addPage();
+      y = 20;
+    }
+  });
+  const totalIncome = state.trips.reduce((s, t) => s + t.grand, 0);
+  const totalExpenses = state.expenses.reduce((s, e) => s + e.amount, 0);
+  y += 6;
+  if (y > 260) {
+    doc.addPage();
+    y = 20;
+  }
+  y = pdfRow(doc, y, "TOTAL INCOME", fmt(totalIncome), { bold: true, color: [0, 120, 70] });
+  y = pdfRow(doc, y, "TOTAL EXPENSES", fmt(totalExpenses), { bold: true, color: [190, 40, 40] });
+  y = pdfRow(doc, y, "NET", fmt(totalIncome - totalExpenses), { bold: true, size: 12 });
+  pdfFooter(doc, dateStr);
+  doc.save(`Income_Expense_Report_${dateStr}.pdf`);
+  return "✓ Income & Expense Report PDF downloaded";
+}
