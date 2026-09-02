@@ -1,285 +1,230 @@
-// ── Daily Entry · main income entry (spec PAGE 1) ───────────────────
+// ── Daily Entry · main income entry (spec DOC FINAL) ────────────────
+// Spec DOC: DAILY Entry + Queue + Mileage GPS + Break/Lunch logic
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { FARE_TYPES, PLATFORMS, draftNums, fmt, platformLogo, platformPills, type EntryDraft } from "../lib/domain";
-import { CARD, INPUT, INPUT_SM, LABEL, pillCls } from "../lib/ui";
+import { PLATFORMS, calcGross, calcNet, fmt, platformLogo, type EntryRecord, type PlatformType } from "../lib/domain";
+import { useLocation } from "../hooks/useLocation";
+import { getPlaceIcon } from "../lib/mileage";
 
 interface Props {
-  draft: EntryDraft;
-  setDraft: (d: EntryDraft) => void;
+  addEntry: (e: EntryRecord) => void;
   todayLabel: string;
-  nextRef: string;
-  gpsFix: { lat: number; lng: number; acc: number } | null;
-  tracking: boolean;
-  liveMiles: string;
-  onToggleTracking: () => void;
-  onCapture: (kind: "origin" | "destination") => void;
-  onSave: () => void;
+  onCapture: (kind: "pickup" | "dropoff") => void;
   dayClosed: boolean;
-  shiftOn: boolean;
+  onBreakStart: () => void;
+  onBreakEnd: () => void;
+  isOnBreak: boolean;
+  detectedToll: {toll: string; amount: number; details: {name: string; price: number}[]} | null;
 }
 
-export default function EntryScreen({
-  draft,
-  setDraft,
-  todayLabel,
-  nextRef,
-  gpsFix,
-  tracking,
-  liveMiles,
-  onToggleTracking,
-  onCapture,
-  onSave,
-  dayClosed,
-  shiftOn,
-}: Props) {
+export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed, onBreakStart, onBreakEnd, isOnBreak }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
+  const [platform, setPlatform] = useState("Uber");
+  const [earnings, setEarnings] = useState("");
+  const [extraCash, setExtraCash] = useState("");
+  const [tips, setTips] = useState("");
+  const [toll, setToll] = useState("");
+  const [fee, setFee] = useState("");
+  const [pickup, setPickup] = useState("");
+  const [dropoff, setDropoff] = useState("");
+  const [invoiceRef, setInvoiceRef] = useState("");
+  const [notes, setNotes] = useState("");
+  const [tollDetails, setTollDetails] = useState<{name: string; price: number}[]>([]);
+  
+  const { getCurrentLocation } = useLocation();
+
+    useEffect(() => {
+    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
-  const { gross, tips, cashRec, tollReimb, comm } = draftNums(draft);
-  const net = gross + tips + cashRec + tollReimb - comm;
-  const set = (k: keyof EntryDraft, v: string) => setDraft({ ...draft, [k]: v });
+  // Auto-fill toll from GPS detection
+  useEffect(() => {
+    if (!detectedToll) return;
+    const currentToll = parseFloat(toll) || 0;
+    const newTollAmount = currentToll + detectedToll.amount;
+    setToll(newTollAmount.toFixed(2));
+    setTollDetails(prev => [...prev, ...detectedToll.details.filter(d => !prev.some(p => p.name === d.name))]);
+    
+    // Auto-fill notes with toll breakdown
+    const allDetails = [...tollDetails, ...detectedToll.details.filter(d => !tollDetails.some(p => p.name === d.name))];
+    const breakdown = allDetails.map(td => `${td.name} $${td.price.toFixed(2)}`).join('\n');
+    const notesText = allDetails.length > 1
+      ? `TOLLS:\n${breakdown}\nTotal: $${allDetails.reduce((sum, td) => sum + td.price, 0).toFixed(2)}`
+      : `TOLL: ${breakdown}`;
+    setNotes(notesText);
+  }, [detectedToll]);
 
+
+  const platformType: PlatformType = PLATFORMS.find((p) => p.name === platform)?.type ?? "RIDESHARE";
+  const showInvoice = platformType === "VOUCHER" || platformType === "ACCESS";
+  const nEarnings = parseFloat(earnings) || 0;
+  const nExtra = parseFloat(extraCash) || 0;
+  const nTips = parseFloat(tips) || 0;
+  const nToll = parseFloat(toll) || 0;
+  const nFee = parseFloat(fee) || 0;
+  const net = calcNet(gross, nFee);
+  
+  const captureLocation = async (kind: "pickup" | "dropoff") => {
+    try {
+      const gpsPoint = await getCurrentLocation();
+      const placeIcon = getPlaceIcon(gpsPoint.placeType || 'business');
+      const locationString = `${placeIcon} ${gpsPoint.businessName || 'Detected Location'}\n${gpsPoint.address || ''}`;
+      
+      if (kind === "pickup") {
+        setPickup(locationString);
+      } else {
+        setDropoff(locationString);
+      }
+    } catch (err) {
+      console.error("GPS error:", err);
+    }
+  };
+
+  const autoFillToll = (tollName: string, amount: number) => {
+    const newTollDetails = [...tollDetails, { name: tollName, price: amount }];
+    setTollDetails(newTollDetails);
+    setToll((nToll + amount).toFixed(2));
+    
+    const breakdown = newTollDetails.map(td => `${td.name} $${td.price.toFixed(2)}`).join('\n');
+    const notesText = newTollDetails.length > 1 
+      ? `TOLLS:\n${breakdown}\nTotal: $${newTollDetails.reduce((sum, td) => sum + td.price, 0).toFixed(2)}`
+      : `TOLL: ${breakdown}`;
+    setNotes(notesText);
+  };
+
+  const submit = () => {
+    if (!earnings || nEarnings <= 0) return;
+    addEntry({
+      id: Math.random().toString(36).slice(2), datetime: new Date().toISOString(), platform, platformType,
+      earnings: nEarnings, extraCash: nExtra, tips: nTips, toll: nToll, tollDetails, platformFee: nFee,
+      grossIncome: gross, netPayout: net,
+      pickup: { address: pickup, businessName: "", lat: 0, lng: 0, type: "", icon: "", timestamp: "" },
+      dropoff: { address: dropoff, businessName: "", lat: 0, lng: 0, type: "", icon: "", timestamp: "" },
+      invoiceRef: showInvoice ? invoiceRef : undefined, notes, status: "open",
+    });
+    setEarnings(""); setExtraCash(""); setTips(""); setToll(""); setFee(""); setPickup(""); setDropoff(""); setInvoiceRef(""); setNotes("");
+    setTollDetails([]);
+  };
+
+  const field = (label: string, value: string, set: (v: string) => void, placeholder: string, color: string) => (
+    <div>
+      <div className="text-[10px] font-black uppercase tracking-wider text-neutral-400">{label}</div>
+      <input type="number" inputMode="decimal" step="0.01" value={value} onChange={(e) => set(e.target.value)} placeholder={placeholder}
+        className="mt-1 h-12 w-full rounded-xl border border-[#2a2a2a] bg-black px-3 font-mono text-[18px] font-bold outline-none" style={{ color }} />
+    </div>
+  );
+
+
+  
   return (
     <div className="space-y-3 pb-4">
-      {/* A) header */}
-      <div className={CARD}>
+      <div className="rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-4">
         <div className="flex items-center justify-between">
-          <span className={LABEL}>DAILY ENTRY</span>
+          <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">DAILY ENTRY</span>
           <span className="text-[11px] font-semibold text-[#8a8a8a]">{todayLabel}</span>
         </div>
-        <div className="mt-1 font-mono text-[34px] font-black leading-none text-[#FFD700]">{fmt(net)}</div>
-        <div className="mt-1 text-[9px] font-bold text-[#6f6f6f]">
-          NET = GROSS + TOLLS + EXTRA CASH + TIPS − PLATFORM FEE
-        </div>
-      </div>
 
-      {/* B) fare type */}
-      <div className="flex gap-2">
-        {FARE_TYPES.map((f) => {
-          const active = draft.fareType === f.key;
-          return (
-            <button
-              key={f.key}
-              onClick={() => setDraft({ ...draft, fareType: f.key })}
-              className={`h-14 flex-1 rounded-xl border text-[12px] font-black transition-all ${
-                active ? "border-[#FFD700] bg-[#332F1A] text-[#FFD700]" : "border-[#2a2a2a] bg-[#0e0e0e] text-white"
-              }`}
-            >
-              {f.label}
-            </button>
-          );
-        })}
-      </div>
-      {/* C) revenue source dropdown with logos */}
-      <div ref={ref} className="relative">
-        <button
-          onClick={() => setOpen((o) => !o)}
-          className="h-16 w-full rounded-xl border-2 border-[#FFD700] bg-[#0e0e0e] px-3 text-left"
-        >
-          <span className="flex items-center gap-2">
-            {platformLogo(draft.platform) ? (
-              <img src={platformLogo(draft.platform)!} alt="" className="h-5 w-5 rounded object-contain" />
-            ) : (
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#332F1A] text-[9px] font-black text-[#FFD700]">
-                {draft.platform.slice(0, 1)}
-              </span>
-            )}
-            <span className="text-[14px] font-bold text-white">{draft.platform}</span>
-            <span className="ml-auto flex gap-1">
-              {platformPills(draft.platform).map((x) => (
-                <span key={x} className={pillCls(x === "ACCESS-A-RIDE" ? "green" : "gold")}>
-                  {x}
-                </span>
-              ))}
-              <ChevronDown size={16} className="text-[#FFD700]" />
-            </span>
-          </span>
-        </button>
-        {open && (
-          <div className="absolute left-0 right-0 z-30 mt-1 max-h-72 overflow-y-auto rounded-xl border border-[#2a2a2a] bg-[#0e0e0e] shadow-2xl">
-            {PLATFORMS.map((p) => (
-              <button
-                key={p.name}
-                onClick={() => {
-                  setDraft({ ...draft, platform: p.name });
-                  setOpen(false);
-                }}
-                className="flex w-full items-center gap-2 px-3 py-3 text-left active:bg-[#1c1c1c]"
-              >
-                {platformLogo(p.name) ? (
-                  <img src={platformLogo(p.name)!} alt="" className="h-5 w-5 rounded object-contain" />
-                ) : (
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#332F1A] text-[9px] font-black text-[#FFD700]">
-                    {p.name.slice(0, 1)}
-                  </span>
-                )}
-                <span className="text-[13px] font-bold text-white">{p.name}</span>
-                <span className="ml-auto flex gap-1">
-                  {platformPills(p.name).map((x) => (
-                    <span key={x} className={pillCls(x === "ACCESS-A-RIDE" ? "green" : "gold")}>
-                      {x}
-                    </span>
-                  ))}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* D) gross fare */}
-      <div className={CARD}>
-        <div className={LABEL}>GROSS FARE / INGRESO ($) · REQUIRED</div>
-        <input
-          type="number"
-          inputMode="decimal"
-          step="0.01"
-          value={draft.gross}
-          onChange={(e) => set("gross", e.target.value)}
-          placeholder="0.00"
-          className={INPUT + " mt-1 border-[#FFD70033] font-mono"}
-        />
-      </div>
-      {/* E) origin & destination */}
-      <div className="grid grid-cols-2 gap-2">
-        {(["origin", "destination"] as const).map((key) => {
-          const isOrigin = key === "origin";
-          const label = isOrigin ? "ORIGIN" : "DESTINATION";
-          const ph = isOrigin ? "Pickup Location" : "Street, City";
-          return (
-            <div key={key} className={CARD}>
-              <div className={LABEL}>{label}</div>
-              <input
-                value={isOrigin ? draft.origin : draft.destination}
-                onChange={(e) => set(key, e.target.value)}
-                placeholder={ph}
-                className={INPUT_SM + " mt-1"}
-              />
-              <button
-                onClick={() => onCapture(key)}
-                className={`mt-1.5 h-10 w-full rounded-lg text-[10px] font-black text-black ${
-                  isOrigin ? "bg-[#00FF6A]" : "bg-[#4a9eff]"
-                }`}
-              >
-                📍 GPS CAPTURE
-              </button>
-              {(isOrigin ? draft.originTag : draft.destTag) ? (
-                <div className="mt-1 text-[9px] font-bold text-[#00FF6A]">
-                  📍 {(isOrigin ? draft.originTag : draft.destTag)} ✓ capturado
-                </div>
-              ) : (
-                <div className="mt-1 text-[9px] font-bold text-[#6f6f6f]">📍 GPS tag automático</div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* F) trip mileage */}
-      <div className={CARD}>
-        <div className={LABEL}>TRIP MILEAGE</div>
-        <div className="mt-1 flex items-center gap-2">
-          <button
-            onClick={onToggleTracking}
-            className={`h-12 flex-1 rounded-xl text-[12px] font-black ${
-              tracking ? "bg-[#f87171] text-black" : "bg-[#4a9eff] text-black"
-            }`}
-          >
-            {tracking ? "⏹ STOP TRACKING" : "▶ START TRACKING"}
+        {/* Platform dropdown */}
+        <div className="relative mt-3" ref={ref}>
+          <button onClick={() => setOpen(!open)} className="flex h-12 w-full items-center gap-2 rounded-xl border border-[#2a2a2a] bg-black px-3 text-left">
+            <img src={platformLogo(platform) || ""} alt={platform} className="h-5 w-5 object-contain" />
+            <span className="font-medium">{platform}</span>
+            <ChevronDown className="ml-auto h-4 w-4 text-neutral-500" />
           </button>
-          <input
-            type="number"
-            inputMode="decimal"
-            step="0.1"
-            value={draft.miles}
-            onChange={(e) => set("miles", e.target.value)}
-            className={INPUT_SM + " w-24 font-mono"}
-          />
-          <span className="text-[12px] font-black text-white">mi</span>
-        </div>
-        <div className="mt-1 text-[9px] font-bold text-[#6f6f6f]">
-          {tracking ? `⏱ corriendo… ${liveMiles} mi acumuladas` : "Tap before you start driving · ✏️ editable manual"}
-        </div>
-      </div>
-      {/* G) additional income & deductions — 4 green boxes */}
-      <div className="grid grid-cols-2 gap-2">
-        {(
-          [
-            { key: "tips", label: "TIPS", sub: "GRATUITY" },
-            { key: "cashRec", label: "OTHER CASH", sub: "CASH REC ($)" },
-            { key: "tollReimb", label: "TOLL REIMB", sub: "GPS AUTO" },
-            { key: "comm", label: "PLATFORM COMM", sub: "FEE ($)" },
-          ] as const
-        ).map(({ key, label, sub }) => {
-          const auto = key === "tollReimb";
-          return (
-          <div key={key} className="rounded-xl border border-[#332F1A] bg-[#0A0A0A] p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[9px] font-black text-white">{label}</span>
-              {auto && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-[#00FF6A55] bg-[#00FF6A18] px-1.5 py-0.5 text-[8px] font-black text-[#00FF6A]">
-                  GPS AUTO
-                </span>
-              )}
+          {open && (
+            <div className="absolute top-14 z-10 w-full rounded-xl border border-[#2a2a2a] bg-[#141414] py-1 shadow-xl">
+              {PLATFORMS.map((p) => (
+                <button key={p.name} onClick={() => { setPlatform(p.name); setOpen(false); }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-[#1e1e1e]">
+                  <img src={platformLogo(p.name) || ""} alt={p.name} className="h-5 w-5 object-contain" />
+                  <span>{p.name}</span>
+                  {p.type === "VOUCHER" && <span className="ml-auto text-[9px] font-black text-orange-500">VOUCHER</span>}
+                  {p.type === "ACCESS" && <span className="ml-auto text-[9px] font-black text-blue-500">ACCESS</span>}
+                </button>
+              ))}
             </div>
-            <div className="text-[9px] font-bold text-[#6f6f6f]">{sub}</div>
-            <input
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              value={draft[key]}
-              onChange={(e) => set(key, e.target.value)}
-              className="mt-1 w-full rounded-lg border border-[#2a2a2a] bg-black px-2 py-2 font-mono text-[16px] font-black text-[#00FF6A] outline-none focus:border-[#FFD700]"
-            />
-          </div>
-          );
-        })}
+          )}
+        </div>
       </div>
 
-      {/* H) footer — REF + NOTE + GRABAR */}
-      <div className={CARD}>
-        <div className="grid grid-cols-[auto_1fr] items-center gap-2">
-          <span className={LABEL}>REF INVOICE</span>
-          <div className="flex items-center gap-2">
-            <span className="rounded-lg border border-[#FFD70055] bg-[#FFD70018] px-2 py-1 font-mono text-[14px] font-black text-[#FFD700]">
-              {nextRef}
-            </span>
-            <span className="text-[11px] font-bold text-[#8a8a8a]">· AUTO</span>
-          </div>
+      {/* Break/Lunch button - only show when not day closed */}
+      {!dayClosed && (
+        <div className="flex gap-2">
+          {!isOnBreak ? (
+            <button 
+              onClick={onBreakStart} 
+              className="flex-1 h-10 rounded-lg border border-[#F59E0B] bg-[#F59E0B]/10 text-[11px] font-black text-[#F59E0B]"
+            >
+              ⏸️ BREAK/LUNCH
+            </button>
+          ) : (
+            <button 
+              onClick={onBreakEnd} 
+              className="flex-1 h-10 rounded-lg border border-[#00FF6A] bg-[#00FF6A]/10 text-[11px] font-black text-[#00FF6A]"
+            >
+              ▶️ RESUME WORKING
+            </button>
+          )}
         </div>
-        <div className="mt-2">
-          <div className={LABEL}>NOTE</div>
-          <input
-            value={draft.notes}
-            onChange={(e) => set("notes", e.target.value)}
-            placeholder="Surge, traffic…"
-            className={INPUT_SM + " mt-1"}
-          />
-        </div>
-        <button
-          onClick={onSave}
-          disabled={gross <= 0 || dayClosed}
-          className="mt-3 text-[16px] font-black tracking-wider text-black"
-          style={{ width: "100%", height: 64, borderRadius: 16, background: "linear-gradient(90deg,#FFD700,#d9b64f)" }}
-        >
-          + GRABAR EN DISCO
-        </button>
-        {dayClosed && (
-          <div className="mt-1 text-center text-[10px] font-black text-[#FF8C00]">
-            🔒 Día cerrado — viajes bloqueados hasta mañana
-          </div>
-        )}
+      )}
+
+      {/* financial fields in spec order */}
+      <div className="grid grid-cols-2 gap-2">
+        {field("Earnings", earnings, setEarnings, "$0.00", "#1E3A8A")}
+        {field("Extra Cash", extraCash, setExtraCash, "$0.00 cash cliente", "#16A34A")}
+        {field("Tips", tips, setTips, "$0.00", "#CA8A04")}
+        {field("Toll", toll, setToll, "$0.00 auto", "#EA580C")}
+        {field("Platform Fee", fee, setFee, "$0.00 fee", "#DC2626")}
       </div>
 
+      {/* gross + net */}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-xl border border-[#2a2a2a] bg-[#F3F4F6] p-3">
+          <div className="text-[10px] font-black uppercase tracking-wider text-neutral-500">GROSS INCOME</div>
+          <div className="font-mono text-[22px] font-black" style={{ color: "#111827" }}>{fmt(gross)}</div>
+        </div>
+        <div className="rounded-xl border border-[#2a2a2a] bg-[#0e0e0e] p-3">
+          <div className="text-[10px] font-black uppercase tracking-wider text-neutral-400">NET PAYOUT</div>
+          <div className="font-mono text-[22px] font-black" style={{ color: "#15803D" }}>{fmt(net)}</div>
+        </div>
+            </div>
 
+      {/* pickup / dropoff */}
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-wider text-neutral-400">PICKUP</div>
+          <input value={pickup} onChange={(e) => setPickup(e.target.value)} placeholder="Tap GPS or enter address" className="mt-1 h-12 w-full rounded-xl border border-[#2a2a2a] bg-black px-3 text-[13px] text-white outline-none" />
+          <button onClick={() => onCapture("pickup")} className="mt-1 flex h-10 w-full items-center justify-center rounded-lg bg-[#00FF6A] text-[11px] font-black text-black">📍 PICKUP NOW</button>
+        </div>
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-wider text-neutral-400">DROPOFF</div>
+          <input value={dropoff} onChange={(e) => setDropoff(e.target.value)} placeholder="Tap GPS or enter address" className="mt-1 h-12 w-full rounded-xl border border-[#2a2a2a] bg-black px-3 text-[13px] text-white outline-none" />
+          <button onClick={() => onCapture("dropoff")} className="mt-1 flex h-10 w-full items-center justify-center rounded-lg bg-[#4a9eff] text-[11px] font-black text-black">📍 DROPOFF NOW</button>
+        </div>
+      </div>
+
+      {/* invoice ref — only VOUCHER/ACCESS */}
+      {showInvoice && (
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-wider text-neutral-400">INVOICE / REFERENCE NUMBER</div>
+          <input value={invoiceRef} onChange={(e) => setInvoiceRef(e.target.value)} placeholder="Ref # / Invoice #" className="mt-1 h-12 w-full rounded-xl border border-[#2a2a2a] bg-black px-3 text-[14px] text-white outline-none" />
+        </div>
+      )}
+
+      {/* notes */}
+      <div>
+        <div className="text-[10px] font-black uppercase tracking-wider text-neutral-400">NOTES</div>
+        <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Toll details auto-filled..." className="mt-1 h-12 w-full rounded-xl border border-[#2a2a2a] bg-black px-3 text-[13px] text-white outline-none" />
+      </div>
+
+      {/* submit */}
+      <button onClick={submit} disabled={!earnings || nEarnings <= 0 || dayClosed} className="h-16 w-full rounded-2xl text-[16px] font-black tracking-wider text-black disabled:opacity-40" style={{ background: "linear-gradient(90deg,#FFD700,#d9b64f)" }}>
+        + GRABAR EN DISCO
+      </button>
     </div>
   );
 }
+
