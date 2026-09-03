@@ -57,18 +57,24 @@ export interface PlatformDef {
   logo?: string;
 }
 
+// Ported from original EI Program platform list (replit-backup)
 export const PLATFORMS: PlatformDef[] = [
-  { name: "Uber", type: "RIDESHARE", logo: "uber.png" },
-  { name: "Lyft", type: "RIDESHARE", logo: "lyft.png" },
-  { name: "Island City Mobility / Transit", type: "RIDESHARE", logo: "islandcity.jpg" },
-  { name: "EcoRide", type: "ACCESS", logo: "ecoride.png" },
-  { name: "Aki", type: "ACCESS", logo: "aki.png" },
+  { name: "EcoRide - 10% fee", type: "ACCESS" },
+  { name: "EcoRide", type: "ACCESS", logo: "ecoride.jpg" },
+  { name: "Uber", type: "RIDESHARE", logo: "uber.jpg" },
+  { name: "Lyft", type: "RIDESHARE", logo: "lyft.jpg" },
+  { name: "Empower", type: "RIDESHARE", logo: "empower.jpg" },
+  { name: "Gallant", type: "VOUCHER", logo: "gallant.jpg" },
+  { name: "Aventus Ride", type: "VOUCHER", logo: "aventus.jpg" },
+  { name: "Classic Ryde", type: "VOUCHER", logo: "classicryde-new.svg" },
+  { name: "Aki Technology", type: "ACCESS", logo: "aki.jpg" },
+  { name: "Street Hail", type: "RIDESHARE", logo: "streethail.png" },
+  { name: "Island City Transit", type: "RIDESHARE", logo: "islandcity.jpg" },
+  { name: "Transit Tax", type: "ACCESS", logo: "transittax.png" },
   { name: "Throo", type: "ACCESS", logo: "throo.jpg" },
-  { name: "Transittax Luxury", type: "ACCESS", logo: "transittax.png" },
-  { name: "Aventus Ride", type: "ACCESS", logo: "aventus.png" },
-  { name: "Brakha Group", type: "VOUCHER", logo: "brakha.jpg" },
-  { name: "Gallant", type: "VOUCHER", logo: "gallant.png" },
-  { name: "CR", type: "VOUCHER", logo: "classicryde.png" },
+  { name: "Brakha Group", type: "ACCESS", logo: "brakha.jpg" },
+  { name: "TBZI Luxury", type: "RIDESHARE", logo: "tbzi.jpg" },
+  { name: "Other", type: "RIDESHARE" },
 ];
 
 export function platformDef(name: string): PlatformDef | undefined {
