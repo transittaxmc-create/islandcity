@@ -89,3 +89,22 @@ export function detectToll(
   }
   return null;
 }
+
+// ── E-ZPass reconciliation ───────────────────────────────────────────
+export type EzpStatus = "pending" | "reconciled" | "discrepancy";
+
+/**
+ * One GPS-detected toll crossing, kept pending until the driver matches
+ * it against the E-ZPass monthly statement amount.
+ */
+export interface EzpTransaction {
+  id: string;
+  tollName: string;
+  /** ISO timestamp of the crossing */
+  timestamp: string;
+  /** amount auto-detected via GPS (E-ZPass rate, never Pay-by-Mail) */
+  detectedAmount: number;
+  status: EzpStatus;
+  /** amount copied from the E-ZPass statement, when reconciling */
+  ezpassStatementAmount?: number;
+}

@@ -120,3 +120,30 @@ export function uid(): string {
 export function emptyState(): AppState {
   return { entries: [], goal: 45, autoDownloadJson: true, refCounter: 8821, closedDays: {} };
 }
+
+// ── Ledger register (phase-2 screen keeps compiling) ────────────────
+export type LedgerTxType = "EZPASS_DAILY" | "EXPENSE" | "INCOME";
+export type LedgerTxStatus = "POR_PAGAR" | "PAID" | "PAGADO";
+
+export interface LedgerTx {
+  id: string;
+  type: LedgerTxType;
+  title: string;
+  amount: number;
+  status: LedgerTxStatus;
+  date: string;
+  /** day the daily-toll batch was closed (E-ZPass POR PAGAR) */
+  sourceDate?: string;
+  displayTime: string;
+  notes?: string;
+  /** IndexedDB key of the receipt photo */
+  photoKey?: string;
+}
+
+/** One GPS-detected toll crossing, grouped by day for close-day. */
+export interface TollHit {
+  name: string;
+  amount: number;
+  date: string;
+  ts: number;
+}

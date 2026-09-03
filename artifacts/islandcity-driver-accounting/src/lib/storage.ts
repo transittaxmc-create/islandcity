@@ -3,7 +3,7 @@
 // localStorage (ei_program_state kept for Netlify-v2 users migrating),
 // plus per-trip JSON files for the paper audit trail.
 
-import { emptyState, todayStr, type AppState, type Trip } from "./domain";
+import { emptyState, todayStr, uid, type AppState, type EntryRecord } from "./domain";
 
 const STORAGE_KEY = "ic_tip_tracker_state_v1";
 const LEGACY_KEYS = ["ei_program_state", "ei_program_state_backup", "island-city-trips"];
@@ -39,7 +39,7 @@ function migrateLegacy(state: AppState): void {
         goal?: number;
       };
       state.refCounter = Math.max(state.refCounter, 8821 + (old.trips?.length ?? 0));
-      state.trips = (old.trips ?? []).map((t, i) => legacyTrip(t, i, state));
+      state.entries = (old.trips ?? []).map((t, i) => legacyEntry(t, i, state));
       saveState(state);
       return;
     }
@@ -47,7 +47,7 @@ function migrateLegacy(state: AppState): void {
     if (rawV1) {
       const old = JSON.parse(rawV1) as Array<Record<string, unknown>>;
       state.refCounter = Math.max(state.refCounter, 8821 + old.length);
-      state.trips = old.map((t, i) => legacyTrip(t, i, state));
+      state.entries = old.map((t, i) => legacyEntry(t, i, state));
       saveState(state);
     }
   } catch {
@@ -55,32 +55,34 @@ function migrateLegacy(state: AppState): void {
   }
 }
 
-function legacyTrip(t: Record<string, unknown>, i: number, state: AppState): Trip {
-  const gross = Number(t.gross ?? t.earnings) || 0;
+function legacyEntry(t: Record<string, unknown>, i: number, state: AppState): EntryRecord {
+  const earnings = Number(t.gross ?? t.earnings) || 0;
+  const extraCash = Number(t.extra ?? t.cashRec) || 0;
   const tips = Number(t.tips) || 0;
-  const extra = Number(t.extra ?? t.cashRec) || 0;
-  const tollReimb = Number(t.toll ?? t.toll_amount) || 0;
-  const comm = Number(t.fee ?? t.comm) || 0;
+  const toll = Number(t.toll ?? t.toll_amount) || 0;
+  const platformFee = Number(t.fee ?? t.comm) || 0;
+  const grossIncome = earnings + extraCash + tips + toll; // spec formula
+  const datetime =
+    typeof t.timestamp === "number" && t.timestamp > 0
+      ? new Date(t.timestamp).toISOString()
+      : `${String(t.date ?? todayStr())}T12:00:00.000Z`;
   return {
-    id: String(t.id ?? Math.random().toString(36).slice(2)),
-    ref: `IC-${(state.refCounter + i).toString().padStart(4, "0")}`,
-    fareType: "UBER",
+    id: String(t.id ?? uid()),
+    datetime,
     platform: String(t.platform ?? "Other"),
-    gross: gross + extra,
+    platformType: "RIDESHARE",
+    earnings,
+    extraCash,
     tips,
-    cashRec: 0,
-    tollReimb,
-    comm,
-    net: gross + extra + tips + tollReimb - comm,
-    date: String(t.date ?? todayStr()),
-    displayTime: String(t.displayTime ?? t.time ?? ""),
-    timestamp: Number(t.timestamp) || Date.now(),
-    origin: { text: String(t.pickup ?? ""), lat: null, lng: null, acc: null },
-    destination: { text: String(t.dropoff ?? ""), lat: null, lng: null, acc: null },
-    tripMiles: 0,
+    toll,
+    tollDetails: toll ? [{ name: "Legacy toll", price: toll }] : [],
+    platformFee,
+    grossIncome,
+    netPayout: grossIncome - platformFee,
+    pickup: { address: String(t.pickup ?? ""), businessName: "", lat: 0, lng: 0, type: "", icon: "", timestamp: "" },
+    dropoff: { address: String(t.dropoff ?? ""), businessName: "", lat: 0, lng: 0, type: "", icon: "", timestamp: "" },
     notes: String(t.comments ?? ""),
-    receipts: [],
-    status: t.reconStatus === "closed" || t.status === "posted" ? "posted" : "queued",
+    status: t.reconStatus === "closed" || t.status === "posted" ? "posted" : "open",
   };
 }
 
@@ -92,22 +94,22 @@ export function saveState(state: AppState): void {
   }
 }
 
-/** Spec H): trip_YYYY-MM-DD_IC-XXXX.json — full audit payload. */
-export function downloadTripAuditJson(trip: Trip): void {
+/** Spec H): trip_YYYY-MM-DD.json — full audit payload. */
+export function downloadTripAuditJson(entry: EntryRecord): void {
   const payload = {
     app: "IslandCity Tip Tracker",
     exportedAt: new Date().toISOString(),
-    trip,
+    trip: entry,
     audit: {
-      formula: "NET = GROSS + TIPS + OTHER CASH + TOLL REIMB - PLATFORM COMM",
-      original: trip,
+      formula: "GROSS = EARNINGS + EXTRACASH + TIPS + TOLL · NET = GROSS - PLATFORMFEE",
+      original: entry,
     },
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `trip_${trip.date}_${trip.ref}.json`;
+  a.download = `trip_${entry.datetime.slice(0, 10)}_${entry.id}.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

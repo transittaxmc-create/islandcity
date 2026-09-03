@@ -1,6 +1,6 @@
 // ── IslandCity Tip Tracker · PHASE 1 ────────────────────────────────
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ClipboardList, Gauge, Home } from "lucide-react";
+import { ClipboardList, Gauge, Home, Receipt } from "lucide-react";
 import {
   emptyState,
   fmt,
@@ -9,11 +9,13 @@ import {
   type AppState,
   type EntryRecord,
 } from "./lib/domain";
-import { detectToll, tollAmount } from "./lib/tolls";
+import { detectToll, tollAmount, type EzpTransaction } from "./lib/tolls";
+import { type ReceiptRecord } from "./lib/receipts";
 import EntryScreen from "./screens/EntryScreen";
 import QueueScreen from "./screens/QueueScreen";
+import ExpensesScreen from "./screens/ExpensesScreen";
 
-type Tab = "ENTRY" | "QUEUE" | "DASH";
+type Tab = "ENTRY" | "QUEUE" | "EXPENSES" | "DASH";
 
 interface BreakRecord {
   id: string;
@@ -38,6 +40,12 @@ export default function App() {
   const [isOnBreak, setIsOnBreak] = useState(false);
   const [breaks, setBreaks] = useState<BreakRecord[]>([]);
   const [activeBreak, setActiveBreak] = useState<BreakRecord | null>(null);
+  const [expenses, setExpenses] = useState<ReceiptRecord[]>(() => {
+    try { return JSON.parse(localStorage.getItem("ic_expenses") || "[]") as ReceiptRecord[]; } catch { return []; }
+  });
+  const [transactions, setTransactions] = useState<EzpTransaction[]>(() => {
+    try { return JSON.parse(localStorage.getItem("ic_ezp_transactions") || "[]") as EzpTransaction[]; } catch { return []; }
+  });
   const toastTimer = useRef<number | null>(null);
 
   const showToast = useCallback((msg: string, ms = 3000) => {
@@ -106,6 +114,24 @@ export default function App() {
             amount,
             details: [{ name: toll.name, price: amount }]
           });
+
+          // Pending E-ZPass tx → reconciliation list (24h dedup guard)
+          setTransactions((prev) => {
+            const dup = prev.some(
+              (x) => x.tollName === toll.name && Date.now() - new Date(x.timestamp).getTime() < 24 * 60 * 60 * 1000,
+            );
+            if (dup) return prev;
+            const tx: EzpTransaction = {
+              id: Math.random().toString(36).slice(2),
+              tollName: toll.name,
+              timestamp: new Date().toISOString(),
+              detectedAmount: amount,
+              status: "pending",
+            };
+            const n = [tx, ...prev];
+            try { localStorage.setItem("ic_ezp_transactions", JSON.stringify(n)); } catch {}
+            return n;
+          });
         }
       },
       () => {},
@@ -132,6 +158,23 @@ export default function App() {
     update((s) => ({ ...s, entries: s.entries.map((x) => (x.id === id ? { ...x, status: "posted" } : x)) }));
     showToast("✓ POSTED → Ledger");
   }, [showToast, update]);
+
+  const addExpense = useCallback((e: ReceiptRecord) => {
+    setExpenses((prev) => {
+      const n = [e, ...prev];
+      try { localStorage.setItem("ic_expenses", JSON.stringify(n)); } catch {}
+      return n;
+    });
+    showToast("✓ Expense guardado");
+  }, [showToast]);
+
+  const updateTransaction = useCallback((t: EzpTransaction) => {
+    setTransactions((prev) => {
+      const n = prev.map((x) => (x.id === t.id ? t : x));
+      try { localStorage.setItem("ic_ezp_transactions", JSON.stringify(n)); } catch {}
+      return n;
+    });
+  }, []);
 
   const startBreak = useCallback(() => {
     const now = new Date();
@@ -180,6 +223,7 @@ export default function App() {
   const tabs: { key: Tab; label: string; Icon: typeof Home }[] = [
     { key: "ENTRY", label: "ENTRY", Icon: Home },
     { key: "QUEUE", label: "QUEUE", Icon: ClipboardList },
+    { key: "EXPENSES", label: "EXPENSES", Icon: Receipt },
     { key: "DASH", label: "DASH", Icon: Gauge },
   ];
 
@@ -193,6 +237,7 @@ export default function App() {
       <div className="px-3 pt-3">
         {tab === "ENTRY" && <EntryScreen addEntry={addEntry} todayLabel={headerDateTime(clock)} onCapture={captureGPS} dayClosed={false} onBreakStart={startBreak} onBreakEnd={endBreak} isOnBreak={isOnBreak} detectedToll={detectedToll} />}
         {tab === "QUEUE" && <QueueScreen entries={openEntries} onEdit={setEditTarget} onDelete={deleteEntry} onPost={postEntry} />}
+        {tab === "EXPENSES" && <ExpensesScreen entries={state.entries} addExpense={addExpense} expenses={expenses} transactions={transactions} updateTransaction={updateTransaction} />}
         {tab === "DASH" && (
           <div className="space-y-3 pb-4">
             <div className="rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-4">

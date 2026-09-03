@@ -17,7 +17,7 @@ interface Props {
   detectedToll: {toll: string; amount: number; details: {name: string; price: number}[]} | null;
 }
 
-export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed, onBreakStart, onBreakEnd, isOnBreak }: Props) {
+export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed, onBreakStart, onBreakEnd, isOnBreak, detectedToll }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const [platform, setPlatform] = useState("Uber");
@@ -65,6 +65,7 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
   const nTips = parseFloat(tips) || 0;
   const nToll = parseFloat(toll) || 0;
   const nFee = parseFloat(fee) || 0;
+  const gross = calcGross(nEarnings, nExtra, nTips, nToll);
   const net = calcNet(gross, nFee);
   
   const captureLocation = async (kind: "pickup" | "dropoff") => {

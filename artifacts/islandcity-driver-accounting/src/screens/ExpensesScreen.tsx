@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { type EntryRecord } from "../lib/domain";
 import { type EzpTransaction, detectToll, tollAmount, TOLLS } from "../lib/tolls";
-import { type ReceiptRecord, detectCategoryFromVendor, simulateOCR, fileToDataUrl, putPhoto, getPhoto, type OcrResult, ocrReceipt } from "../lib/receipts";
+import { type ReceiptRecord, EXPENSE_CATEGORIES, detectCategoryFromVendor, simulateOCR, fileToDataUrl, putPhoto, getPhoto, type OcrResult, ocrReceipt } from "../lib/receipts";
 import { ChevronLeft, ChevronDown, Camera, Upload } from "lucide-react";
 
 interface Props {
@@ -29,6 +29,7 @@ export default function ExpensesScreen({ entries, addExpense, expenses, transact
   const [regCategory, setRegCategory] = useState("Fuel");
   const [regFrequency, setRegFrequency] = useState<"daily" | "weekly" | "monthly" | "one-time">("one-time");
   const [regDueDate, setRegDueDate] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -78,6 +79,29 @@ export default function ExpensesScreen({ entries, addExpense, expenses, transact
     if (!scanResult) return;
     addExpense(scanResult);
     setScanResult(null);
+  };
+
+  const saveRegularExpense = () => {
+    const amount = parseFloat(regAmount);
+    if (!regVendor.trim() || !amount || amount <= 0) return;
+    const record: ReceiptRecord = {
+      id: Math.random().toString(36).slice(2),
+      vendor: regVendor.trim(),
+      amount,
+      category: regCategory,
+      dueDate: regDueDate || new Date().toISOString().slice(0, 10),
+      businessCategory: regCategory,
+      type: expenseType,
+      expenseType: "regular",
+      frequency: regFrequency,
+      createdAt: new Date().toISOString(),
+    };
+    addExpense(record);
+    setRegVendor("");
+    setRegAmount("");
+    setRegDueDate("");
+    setRegFrequency("one-time");
+    setShowRegularForm(false);
   };
 
   
@@ -156,7 +180,7 @@ export default function ExpensesScreen({ entries, addExpense, expenses, transact
                       onChange={(e) => updateTransaction({...tx, ezpassStatementAmount: parseFloat(e.target.value) || undefined})}
                     />
                     <button 
-                      onClick={() => updateTransaction({...tx, ezpassStatementAmount: parseFloat(tx.ezpassStatementAmount || 0) || undefined, status: 'reconciled'})}
+                      onClick={() => updateTransaction({...tx, status: "reconciled"})}
                       className="px-3 rounded-lg bg-[#00FF6A] text-[10px] font-black text-black"
                     >
                       ✓
@@ -276,9 +300,13 @@ export default function ExpensesScreen({ entries, addExpense, expenses, transact
               onClick={saveExpense}
               className="h-12 w-full rounded-lg bg-[#22C55E] text-[13px] font-black mt-2"
             >
-                )}
+              ✓ SAVE EXPENSE
+            </button>
+          </div>
+        </div>
+      )}
 
-          {!scanResult && !showRegularForm && (
+          {activeTab === "expenses" && !scanResult && !showRegularForm && (
             <button
               onClick={() => setShowRegularForm(true)}
               className="mb-4 h-12 w-full rounded-xl text-[14px] font-black text-black"
@@ -289,7 +317,7 @@ export default function ExpensesScreen({ entries, addExpense, expenses, transact
           )}
 
           {/* Regular Expense Form */}
-          {showRegularForm && !scanResult && (
+          {activeTab === "expenses" && showRegularForm && !scanResult && (
             <div className="mb-4 rounded-xl border-2 border-[#FFD700] bg-[#0e0e0e] p-3">
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">REGULAR EXPENSE</span>
@@ -332,8 +360,6 @@ export default function ExpensesScreen({ entries, addExpense, expenses, transact
               </div>
             </div>
           )}
-        </div>
-      )}
 
       {/* Expenses list with filters */}
       {activeTab === "expenses" && (
