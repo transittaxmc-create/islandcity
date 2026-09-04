@@ -23,7 +23,9 @@ export function GaugeArc({ perHourGross, goal }: { perHourGross: number; goal: n
   ];
   const activeZ = zones.find((z) => perHourGross >= z.min && (z.max >= 100 || perHourGross < z.max)) ?? zones[0];
   const zColor = perHourGross > 0 ? activeZ.color : "#374151";
-  const needleA = gA(perHourGross > 0 ? Math.min(perHourGross, 100) : 0);
+  // Needle always drawn — resting at $0 (180°) in gray when no data, so the
+  // gauge reads like a real speedometer on any device, shift or not.
+  const needleA = gA(Math.min(Math.max(perHourGross, 0), 100));
   const tip = gP(GR - 14, needleA), b1 = gP(9, needleA + 90), b2 = gP(9, needleA - 90);
   const goalA = gA(Math.min(goal, 100));
   const gm1 = gP(GR - GSW / 2 + 1, goalA), gm2 = gP(GR + GSW / 2 - 3, goalA);
@@ -46,11 +48,11 @@ export function GaugeArc({ perHourGross, goal }: { perHourGross: number; goal: n
         const a = gA(v); const p = gP(GR + GSW / 2 + 9, a);
         return <text key={v} x={p.x} y={p.y + 4} textAnchor={v <= 20 ? "end" : "start"} fill="#4b5563" fontSize="9" fontFamily="monospace">{t}</text>;
       })}
-      {/* Needle */}
-      {perHourGross > 0 && <polygon points={`${tip.x},${tip.y} ${b1.x},${b1.y} ${b2.x},${b2.y}`} fill={zColor} opacity="0.92" />}
+      {/* Needle — always visible (rests at $0 in gray, colored when live) */}
+      <polygon points={`${tip.x},${tip.y} ${b1.x},${b1.y} ${b2.x},${b2.y}`} fill={zColor} opacity="0.92" />
       <circle cx={GCX} cy={GCY} r="9" fill="#0a0a0a" stroke={zColor} strokeWidth="2" />
       <text x={GCX} y={GCY - 26} textAnchor="middle" fill={zColor} fontSize="28" fontWeight="900" fontFamily="'JetBrains Mono',monospace">
-        {perHourGross > 0 ? `$${perHourGross.toFixed(0)}` : "—"}
+        {perHourGross > 0 ? `$${perHourGross.toFixed(0)}` : "$0"}
       </text>
       <text x={GCX} y={GCY - 9} textAnchor="middle" fill="#6b7280" fontSize="9" fontFamily="monospace">/hr gross</text>
       {perHourGross > 0 && (
