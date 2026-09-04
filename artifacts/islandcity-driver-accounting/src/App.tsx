@@ -24,6 +24,7 @@ import { FinanceScreen } from "./screens/finance/FinanceScreen";
 import ReportsScreen from "./screens/ReportsScreen";
 import AiScreen from "./screens/AiScreen";
 import DataScreen from "./screens/DataScreen";
+import { GpsStatusBar } from "./components/GpsStatusBar";
 
 type Tab = "ENTRY" | "QUEUE" | "EXPENSES" | "DASH" | "FINANCE" | "REPORTS" | "AI" | "DATA";
 
@@ -447,6 +448,7 @@ export default function App() {
         </div>
       )}
       <div className="px-3 pt-3">
+        <GpsStatusBar />
         {tab === "ENTRY" && <EntryScreen addEntry={addEntry} todayLabel={headerDateTime(clock)} onCapture={captureGPS} dayClosed={false} onBreakStart={startBreak} onBreakEnd={endBreak} isOnBreak={isOnBreak} detectedToll={detectedToll} />}
         {tab === "QUEUE" && <QueueScreen entries={openEntries} onEdit={setEditTarget} onEditEntry={editEntry} onDelete={deleteEntry} onPost={postEntry} />}
         {tab === "EXPENSES" && <ExpensesScreen entries={state.entries} addExpense={addExpense} expenses={expenses} transactions={transactions} updateTransaction={updateTransaction} />}
