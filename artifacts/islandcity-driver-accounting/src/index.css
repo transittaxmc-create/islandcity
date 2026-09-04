@@ -77,6 +77,47 @@ input[type='range']::-webkit-slider-runnable-track {
   background: #1a1a1a;
 }
 
+/* Daily Entry CSS (spec restructure) */
+.daily-entry-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background-color: #0d0d0d;
+  color: #ffffff;
+  padding: 16px;
+}
+
+.section-header { order: 1; }
+.section-operational { order: 2; }
+.section-financial-inputs { order: 3; }
+.section-calculated-results { order: 4; }
+.section-notes { order: 5; }
+
+.operational-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.btn-pickup {
+  background-color: #00E676;
+  color: #000000;
+  font-weight: bold;
+}
+
+.btn-dropoff {
+  background-color: #29b6f6;
+  color: #000000;
+  font-weight: bold;
+}
+
+.net-payout-card {
+  background-color: #ffffff;
+  color: #000000;
+  border-radius: 8px;
+  padding: 12px;
+}
+
 /* Desktop: keep the phone-first layout looking like the phone —
    dark backdrop outside the centered column (same as original app). */
 @media (min-width: 768px) {

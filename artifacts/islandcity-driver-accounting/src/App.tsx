@@ -23,8 +23,9 @@ import type { BankAdjEntry, RecurringPlan, WeekOverrides } from "./screens/finan
 import { FinanceScreen } from "./screens/finance/FinanceScreen";
 import ReportsScreen from "./screens/ReportsScreen";
 import AiScreen from "./screens/AiScreen";
+import DataScreen from "./screens/DataScreen";
 
-type Tab = "ENTRY" | "QUEUE" | "EXPENSES" | "DASH" | "FINANCE" | "REPORTS" | "AI";
+type Tab = "ENTRY" | "QUEUE" | "EXPENSES" | "DASH" | "FINANCE" | "REPORTS" | "AI" | "DATA";
 
 interface BreakRecord {
   id: string;
@@ -374,7 +375,6 @@ export default function App() {
     reader.readAsText(file);
   }, [showToast, update]);
 
-  const fullInputRef = useRef<HTMLInputElement | null>(null);
 
   const exportBackup = useCallback(() => {
     try {
@@ -436,6 +436,7 @@ export default function App() {
     { key: "FINANCE", label: "FINANCE", Icon: ChartColumn },
     { key: "REPORTS", label: "REPORTS", Icon: FileText },
     { key: "AI", label: "AI", Icon: Sparkles },
+    { key: "DATA", label: "DATA", Icon: Boxes },
   ];
 
   return (
@@ -475,30 +476,12 @@ export default function App() {
               tollsMonth={tollsMonth}
               tollsYear={tollsYear}
             />
-            <div className="mt-5 rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-4">
-              <p className="text-center text-[9px] tracking-[0.18em] font-bold text-neutral-500 uppercase">📱 Data · Backup / Restore</p>
-              <div className="mt-2 flex gap-2">
-                <button onClick={exportBackup} className="h-10 flex-1 rounded-lg bg-[#FFD700] text-[11px] font-black text-black">💾 EXPORT BACKUP</button>
-                <button onClick={() => fullInputRef.current?.click()} className="h-10 flex-1 rounded-lg border border-[#FFD70055] bg-[#141414] text-[11px] font-black text-[#FFD700]">📥 IMPORT BACKUP</button>
-              </div>
-              <input
-                ref={fullInputRef}
-                type="file"
-                accept="application/json,.json"
-                className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) importFullBackup(f); e.target.value = ""; }}
-              />
-              <p className="mt-2 text-center text-[9px] leading-relaxed text-neutral-500">
-                EXPORT guarda TODOS tus datos en un .json · IMPORT en el otro dispositivo los restaura (reemplaza) y recarga
-              </p>
-              <p className="mt-3 text-center text-[9px] tracking-[0.18em] font-bold text-neutral-600 uppercase">Legacy import · EI Program</p>
-              <input
-                type="file"
-                accept="application/json,.json"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) importLegacy(f); e.target.value = ""; }}
-                className="mt-2 w-full text-[11px] text-neutral-400 file:mr-3 file:rounded-lg file:border-0 file:bg-[#FFD700] file:px-3 file:py-2 file:text-[11px] file:font-black file:text-black"
-              />
-            </div>
+            <button
+              onClick={() => setTab("DATA")}
+              className="mt-5 h-12 w-full rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400"
+            >
+              📦 DATA · BACKUP / RESTORE →
+            </button>
           </>
         )}
         {tab === "FINANCE" && (
@@ -521,8 +504,19 @@ export default function App() {
             showToast={showToast}
           />
         )}
-      {tab === "REPORTS" && <ReportsScreen entries={state.entries} />}
-      {tab === "AI" && <AiScreen entries={state.entries} goal={state.goal} />}      </div>
+        {tab === "REPORTS" && <ReportsScreen entries={state.entries} expenses={expenses} showToast={showToast} />}
+        {tab === "AI" && <AiScreen entries={state.entries} expenses={expenses} goal={state.goal} />}
+        {tab === "DATA" && (
+          <DataScreen
+            entries={state.entries}
+            expenses={expenses}
+            transactions={transactions}
+            exportBackup={exportBackup}
+            importFullBackup={importFullBackup}
+            importLegacy={importLegacy}
+          />
+        )}
+      </div>
       <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#1c1c1c] bg-[#030303]" style={{ maxWidth: 480, margin: "0 auto" }}>
         <div className="flex">
           {tabs.map(({ key, label, Icon }) => {
