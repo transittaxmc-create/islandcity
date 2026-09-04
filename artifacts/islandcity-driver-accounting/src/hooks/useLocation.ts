@@ -23,9 +23,19 @@ export function useLocation() {
 
   const startTracking = useCallback(() => {
     if (!navigator.geolocation) {
-      setState(s => ({ ...s, error: 'Geolocation not supported' }));
+      setState(s => ({ ...s, error: "Geolocation not supported", isTracking: false }));
       return;
     }
+
+    if (typeof navigator !== "undefined" && (navigator as any).permissions?.query) {
+      (navigator as any).permissions.query({ name: "geolocation" }).then((p: any) => {
+        if (p.state === "denied") {
+          setState(s => ({ ...s, error: "Permission denied", isTracking: false }));
+        }
+      }).catch(() => {});
+    }
+
+    setState(s => ({ ...s, isTracking: true, error: null }));
 
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
@@ -33,17 +43,18 @@ export function useLocation() {
           ...s,
           currentPosition: pos,
           accuracy: pos.coords.accuracy,
-          isTracking: true
+          isTracking: true,
+          error: null,
         }));
       },
       (err) => {
-        setState(s => ({ ...s, error: err.message }));
+        setState(s => ({
+          ...s,
+          isTracking: s.currentPosition != null,
+          error: err.code === 1 ? "Permission denied" : err.message,
+        }));
       },
-      { 
-        enableHighAccuracy: true, 
-        timeout: 10000,
-        maximumAge: 5000
-      }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
     );
 
     return () => navigator.geolocation.clearWatch(watchId);

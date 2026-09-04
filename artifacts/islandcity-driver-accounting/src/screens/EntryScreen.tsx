@@ -43,38 +43,38 @@ function GpsPlaceCard(props: {
     const typeLabel = PLACE_LABELS[pt] || "PLACE";
     const showName = pt !== "residence" && props.meta.businessName;
     return (
-      <div className="flex flex-col">
-        <div className="flex items-center justify-between">
+      <div className="flex min-h-[152px] flex-col">
+        <div className="flex shrink-0 items-center justify-between">
           <div className="text-[10px] font-black uppercase tracking-wider text-neutral-400">{headerLabel}</div>
           <div className="flex items-center gap-1 rounded-full bg-[#0F3A1D] px-2 py-0.5 text-[9px] font-black tracking-wider text-[#22FF88]">
             <span className="h-1.5 w-1.5 rounded-full bg-[#22FF88]" />
             GPS
           </div>
         </div>
-        <div className="mt-1 rounded-xl border border-[#1f3a1f] bg-[#0a1a0a] p-2">
-          <div className="flex items-baseline gap-2">
-            <span className="text-[10px] font-black uppercase tracking-[0.18em]" style={{ color: "#F5D78E" }}>{icon} {typeLabel}</span>
-            {showName && <span className="text-[13px] font-bold text-white">{props.meta.businessName}</span>}
+        <div className="mt-1 flex h-[68px] shrink-0 flex-col justify-center overflow-hidden rounded-xl border border-[#1f3a1f] bg-[#0a1a0a] p-2">
+          <div className="flex items-baseline gap-1.5 truncate">
+            <span className="shrink-0 text-[10px] font-black uppercase tracking-[0.18em]" style={{ color: "#F5D78E" }}>{icon} {typeLabel}</span>
+            {showName && <span className="truncate text-[12px] font-bold text-white">{props.meta.businessName}</span>}
           </div>
-          <div className="mt-0.5 truncate text-[10px] text-neutral-500">DIR  {props.meta.address}</div>
+          <div className="line-clamp-2 text-[10px] leading-tight text-neutral-500">{props.meta.address}</div>
         </div>
-        <div className="mt-1.5 flex gap-1.5">
-          <button onClick={props.onCapture} className={btnCls + " flex h-10 flex-1 items-center justify-center rounded-lg"}>{btnLabel}</button>
-          <button onClick={props.onClear} className="flex h-10 items-center justify-center rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 text-[11px] font-black text-neutral-400">✏️ EDIT</button>
+        <div className="mt-1.5 flex shrink-0 gap-1.5">
+          <button onClick={props.onCapture} className={btnCls + " flex h-9 flex-1 items-center justify-center rounded-lg text-[12px]"}>{btnLabel}</button>
+          <button onClick={props.onClear} className="flex h-9 items-center justify-center rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-2 text-[11px] font-black text-neutral-400">✏️</button>
         </div>
       </div>
     );
   }
   return (
-    <div className="flex flex-col">
-      <div className="text-[10px] font-black uppercase tracking-wider text-neutral-400">{headerLabel}</div>
+    <div className="flex min-h-[152px] flex-col">
+      <div className="shrink-0 text-[10px] font-black uppercase tracking-wider text-neutral-400">{headerLabel}</div>
       <input
         value={props.value}
         onChange={(e) => props.onChange(e.target.value)}
         placeholder="Tap GPS or enter address"
-        className="mt-1 h-12 w-full rounded-xl border border-[#2a2a2a] bg-black px-3 text-[13px] text-white outline-none placeholder:text-neutral-500"
+        className="mt-1 h-12 w-full shrink-0 rounded-xl border border-[#2a2a2a] bg-black px-3 text-[13px] text-white outline-none placeholder:text-neutral-500"
       />
-      <button onClick={props.onCapture} className={btnCls + " mt-2 flex h-10 w-full items-center justify-center rounded-lg"}>{btnLabel}</button>
+      <button onClick={props.onCapture} className={btnCls + " mt-2 flex h-10 w-full shrink-0 items-center justify-center rounded-lg"}>{btnLabel}</button>
     </div>
   );
 }
