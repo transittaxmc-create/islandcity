@@ -14,6 +14,7 @@ export interface GeoTag {
   type: string;
   icon: string;
   timestamp: string;
+  accuracy?: number;
   terminal?: string;
 }
 

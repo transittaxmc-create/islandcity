@@ -51,21 +51,21 @@ function GpsPlaceCard(props: {
             GPS
           </div>
         </div>
-        <div className="mt-1 rounded-xl border border-[#1f3a1f] bg-[#0a1a0a] p-3">
+        <div className="mt-1 rounded-xl border border-[#1f3a1f] bg-[#0a1a0a] p-2">
           <div className="flex items-baseline gap-2">
             <span className="text-[10px] font-black uppercase tracking-[0.18em]" style={{ color: "#F5D78E" }}>{icon} {typeLabel}</span>
             {showName && <span className="text-[13px] font-bold text-white">{props.meta.businessName}</span>}
           </div>
-          <div className="mt-1 text-[11px] leading-tight text-neutral-400">DIR  {props.meta.address}</div>
+          <div className="mt-0.5 truncate text-[10px] text-neutral-500">DIR  {props.meta.address}</div>
           {props.meta.lat != null && props.meta.lng != null && (
-            <div className="mt-1.5 font-mono text-[10px] text-neutral-500">
+            <div className="mt-1 font-mono text-[10px] text-neutral-500">
               {props.meta.lat.toFixed(4)}, {props.meta.lng.toFixed(4)}
               {props.meta.accuracy != null && <>  ·  ±{Math.round(props.meta.accuracy)}m</> }
               {props.meta.time && <>  ·  {new Date(props.meta.time).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}</>}
             </div>
           )}
         </div>
-        <div className="mt-2 flex gap-2">
+        <div className="mt-1.5 flex gap-1.5">
           <button onClick={props.onCapture} className={btnCls + " flex h-10 flex-1 items-center justify-center rounded-lg"}>{btnLabel}</button>
           <button onClick={props.onClear} className="flex h-10 items-center justify-center rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 text-[11px] font-black text-neutral-400">✏️ EDIT</button>
         </div>
@@ -250,8 +250,8 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
       platformFee: nFee || null,
       grossIncome: gross,
       netPayout: net,
-      pickup: { address: pickup, businessName: "", lat: 0, lng: 0, type: "", icon: "", timestamp: pickupTimestamp || now },
-      dropoff: { address: dropoff, businessName: "", lat: 0, lng: 0, type: "", icon: "", timestamp: dropoffTimestamp || now },
+      pickup: { address: pickupMeta?.address ?? pickup, businessName: pickupMeta?.businessName ?? "", lat: pickupMeta?.lat ?? 0, lng: pickupMeta?.lng ?? 0, type: pickupMeta?.placeType ?? "", icon: getPlaceIcon(pickupMeta?.placeType || "business"), timestamp: pickupTimestamp || now, accuracy: pickupMeta?.accuracy ?? 0 },
+      dropoff: { address: dropoffMeta?.address ?? dropoff, businessName: dropoffMeta?.businessName ?? "", lat: dropoffMeta?.lat ?? 0, lng: dropoffMeta?.lng ?? 0, type: dropoffMeta?.placeType ?? "", icon: getPlaceIcon(dropoffMeta?.placeType || "business"), timestamp: dropoffTimestamp || now, accuracy: dropoffMeta?.accuracy ?? 0 },
       invoiceRef: invoiceRef || undefined,
       notes,
       status: "open",
@@ -328,7 +328,7 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
         )}
       </div>
       {/* ═══ BLOQUE 2: OPERACIÓN / ACCIÓN RÁPIDA ═══ */}
-      <div className="section-operational rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-4">
+      <div className="section-operational rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-3">
         <div className="operational-grid">
           <GpsPlaceCard
             kind="pickup"
