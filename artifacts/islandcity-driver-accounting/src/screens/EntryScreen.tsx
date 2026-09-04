@@ -206,12 +206,8 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
 
   return (
         <div className="daily-entry-container overflow-y-auto pb-24">
-      {/* ═══ BLOQUE 1: HEADER (Plataforma + Break/Lunch) ═══ */}
-      <div className="section-header flex items-center justify-between rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-4">
-        <div className="flex items-center gap-3">
-          <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">DAILY ENTRY</span>
-          <span className="text-[11px] font-semibold text-[#8a8a8a]">{todayLabel}</span>
-        </div>
+      {/* PLATFORM header (left) + BREAK/LUNCH toggle (right) - mockup C */}
+      <div className="section-header flex items-center justify-between gap-3 rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-4">
         <div className="relative" ref={ref}>
           <button onClick={() => setOpen(!open)} className="flex h-10 items-center gap-2 rounded-lg border border-[#2a2a2a] bg-black px-3 text-[12px] text-white">
             {platformLogo(platform) && <img src={platformLogo(platform)!} alt="" className="h-5 w-5 rounded-full object-cover" />}
@@ -219,7 +215,7 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
             <ChevronDown className="h-3 w-3 text-neutral-400" />
           </button>
           {open && (
-            <div className="absolute right-0 top-full z-50 mt-1 max-h-60 w-48 overflow-y-auto rounded-xl border border-[#2a2a2a] bg-[#0e0e0e] shadow-xl">
+            <div className="absolute left-0 top-full z-50 mt-1 max-h-60 w-48 overflow-y-auto rounded-xl border border-[#2a2a2a] bg-[#0e0e0e] shadow-xl">
               {PLATFORMS.map((p) => (
                 <button key={p.name} onClick={() => { setPlatform(p.name); setOpen(false); }} className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] hover:bg-[#1a1a1a] ${p.name === platform ? "bg-[#1a1a1a] text-white" : "text-neutral-300"}`}>
                   {p.logo && <img src={`${import.meta.env.BASE_URL}logos/${p.logo}`} alt="" className="h-5 w-5 rounded-full object-cover" />}
@@ -229,19 +225,21 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
             </div>
           )}
         </div>
-      </div>
 
-      {/* Break/Lunch button */}
-      {!dayClosed && (
-        <div className="mt-2 flex gap-2">
-          {!isOnBreak ? (
-            <button onClick={onBreakStart} className="flex-1 h-10 rounded-lg border border-[#F59E0B] bg-[#F59E0B]/10 text-[11px] font-black text-[#F59E0B]">⏸️ BREAK/LUNCH</button>
+        {!dayClosed && (
+          !isOnBreak ? (
+            <button onClick={onBreakStart} className="flex h-10 items-center gap-2 rounded-full border border-[#F59E0B] bg-[#F59E0B]/10 px-3 text-[11px] font-black text-[#F59E0B]">
+              <span className="h-2 w-2 rounded-full bg-[#F59E0B]" />
+              BREAK/LUNCH
+            </button>
           ) : (
-            <button onClick={onBreakEnd} className="flex-1 h-10 rounded-lg bg-[#F59E0B] text-[11px] font-black text-black">▶️ END BREAK</button>
-          )}
-        </div>
-      )}
-
+            <button onClick={onBreakEnd} className="flex h-10 items-center gap-2 rounded-full bg-[#F59E0B] px-3 text-[11px] font-black text-black">
+              <span className="h-2 w-2 rounded-full bg-black" />
+              END BREAK
+            </button>
+          )
+        )}
+      </div>
       {/* ═══ BLOQUE 2: OPERACIÓN / ACCIÓN RÁPIDA ═══ */}
       <div className="section-operational rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-4">
         <div className="operational-grid">
@@ -275,13 +273,13 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
 
       {/* ═══ BLOQUE 4: RESULTADOS CALCULADOS ═══ */}
       <div className="section-calculated-results grid grid-cols-2 gap-2">
-        <div className="rounded-xl border border-[#2a2a2a] bg-[#0e0e0e] p-3">
-          <div className="text-[10px] font-black uppercase tracking-wider text-neutral-400">GROSS INCOME</div>
-          <div className="font-mono text-[22px] font-black text-white">{fmt(gross)}</div>
-        </div>
         <div className="net-payout-card">
           <div className="text-[10px] font-black uppercase tracking-wider text-neutral-500">NET PAYOUT</div>
-          <div className="font-mono text-[22px] font-black" style={{ color: "#15803D" }}>{fmt(net)}</div>
+          <div className="font-mono text-[26px] font-black" style={{ color: "#15803D" }}>{fmt(net)}</div>
+        </div>
+        <div className="rounded-xl border border-[#2a2a2a] bg-white p-3">
+          <div className="text-[10px] font-black uppercase tracking-wider text-neutral-500">GROSS INCOME</div>
+          <div className="font-mono text-[26px] font-black text-black">{fmt(gross)}</div>
         </div>
       </div>
 
