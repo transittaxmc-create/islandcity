@@ -448,7 +448,7 @@ export default function App() {
       )}
       <div className="px-3 pt-3">
         {tab === "ENTRY" && <EntryScreen addEntry={addEntry} todayLabel={headerDateTime(clock)} onCapture={captureGPS} dayClosed={false} onBreakStart={startBreak} onBreakEnd={endBreak} isOnBreak={isOnBreak} detectedToll={detectedToll} />}
-        {tab === "QUEUE" && <QueueScreen entries={openEntries} onEdit={setEditTarget} onDelete={deleteEntry} onPost={postEntry} />}
+        {tab === "QUEUE" && <QueueScreen entries={openEntries} onEdit={setEditTarget} onEditEntry={editEntry} onDelete={deleteEntry} onPost={postEntry} />}
         {tab === "EXPENSES" && <ExpensesScreen entries={state.entries} addExpense={addExpense} expenses={expenses} transactions={transactions} updateTransaction={updateTransaction} />}
         {tab === "DASH" && (
           <>
