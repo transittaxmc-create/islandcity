@@ -76,3 +76,16 @@ input[type='range']::-webkit-slider-runnable-track {
   border-radius: 999px;
   background: #1a1a1a;
 }
+
+/* Desktop: keep the phone-first layout looking like the phone —
+   dark backdrop outside the centered column (same as original app). */
+@media (min-width: 768px) {
+  body {
+    background: #050505;
+  }
+  .app-shell {
+    border-left: 1px solid #1a1a1a;
+    border-right: 1px solid #1a1a1a;
+    box-shadow: 0 0 80px rgba(0, 0, 0, 0.9);
+  }
+}

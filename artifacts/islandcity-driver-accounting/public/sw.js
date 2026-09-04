@@ -2,7 +2,7 @@
 // Cache-first for app shell, network-first for API calls.
 // Falls back to cached shell when offline so the app always loads.
 
-const CACHE_VERSION = 'ic-v3'; // bump on each deploy so clients pick up the new shell
+const CACHE_VERSION = 'ic-v4'; // bump on each deploy so clients pick up the new shell
 const CACHE_NAME = `islandcity-app-${CACHE_VERSION}`;
 
 // ── Install: open cache and pre-cache the app shell ──────────────

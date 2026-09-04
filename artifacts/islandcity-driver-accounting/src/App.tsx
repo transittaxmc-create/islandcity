@@ -372,6 +372,49 @@ export default function App() {
     reader.readAsText(file);
   }, [showToast, update]);
 
+  const fullInputRef = useRef<HTMLInputElement | null>(null);
+
+  const exportBackup = useCallback(() => {
+    try {
+      const data: Record<string, string> = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith("ic_") || k.startsWith("ic-"))) data[k] = localStorage.getItem(k) ?? "";
+      }
+      const blob = new Blob([JSON.stringify({ app: "IslandCity Tip Tracker", version: 2, exportDate: new Date().toISOString(), data }, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const d = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      a.href = url;
+      a.download = `IslandCity_Backup_${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("✓ Backup exportado — úsalo en el otro dispositivo con IMPORT", 5000);
+    } catch {
+      showToast("✗ No se pudo exportar el backup", 5000);
+    }
+  }, [showToast]);
+
+  const importFullBackup = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result)) as { app?: string; data?: Record<string, string> };
+        if (parsed?.app !== "IslandCity Tip Tracker" || !parsed.data || typeof parsed.data !== "object") {
+          throw new Error("No es un backup de IslandCity (usa Legacy import para EI Program)");
+        }
+        const keys = Object.entries(parsed.data).filter(([k]) => k.startsWith("ic_") || k.startsWith("ic-"));
+        for (const [k, v] of keys) localStorage.setItem(k, v);
+        showToast(`✓ Backup restaurado (${keys.length} claves) — recargando…`, 3000);
+        setTimeout(() => location.reload(), 1200);
+      } catch (err) {
+        showToast(`✗ ${err instanceof Error ? err.message : "Import failed"}`, 5000);
+      }
+    };
+    reader.readAsText(file);
+  }, [showToast]);
+
   const F = useMemo(() => computeFinance({
     clock,
     entries: state.entries,
@@ -392,7 +435,7 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white pb-24" style={{ maxWidth: 480, margin: "0 auto" }}>
+    <div className="app-shell min-h-screen bg-[#0A0A0A] text-white pb-24" style={{ maxWidth: 480, margin: "0 auto" }}>
       {toast && (
         <div className="fixed top-4 z-50 rounded-full border border-[#FFD70055] bg-[#1a1a1a] px-4 py-2 text-[12px] font-bold text-white" style={{ left: "50%", transform: "translateX(-50%)" }}>
           {toast}
@@ -428,8 +471,23 @@ export default function App() {
               tollsMonth={tollsMonth}
               tollsYear={tollsYear}
             />
-            <div className="mt-5 rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-4 text-center">
-              <p className="text-[9px] tracking-[0.18em] font-bold text-neutral-500 uppercase">Legacy import · EI Program</p>
+            <div className="mt-5 rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-4">
+              <p className="text-center text-[9px] tracking-[0.18em] font-bold text-neutral-500 uppercase">📱 Data · Backup / Restore</p>
+              <div className="mt-2 flex gap-2">
+                <button onClick={exportBackup} className="h-10 flex-1 rounded-lg bg-[#FFD700] text-[11px] font-black text-black">💾 EXPORT BACKUP</button>
+                <button onClick={() => fullInputRef.current?.click()} className="h-10 flex-1 rounded-lg border border-[#FFD70055] bg-[#141414] text-[11px] font-black text-[#FFD700]">📥 IMPORT BACKUP</button>
+              </div>
+              <input
+                ref={fullInputRef}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) importFullBackup(f); e.target.value = ""; }}
+              />
+              <p className="mt-2 text-center text-[9px] leading-relaxed text-neutral-500">
+                EXPORT guarda TODOS tus datos en un .json · IMPORT en el otro dispositivo los restaura (reemplaza) y recarga
+              </p>
+              <p className="mt-3 text-center text-[9px] tracking-[0.18em] font-bold text-neutral-600 uppercase">Legacy import · EI Program</p>
               <input
                 type="file"
                 accept="application/json,.json"
