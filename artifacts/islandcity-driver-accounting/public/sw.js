@@ -2,7 +2,7 @@
 // Cache-first for app shell, network-first for API calls.
 // Falls back to cached shell when offline so the app always loads.
 
-const CACHE_VERSION = 'ic-v1';
+const CACHE_VERSION = 'ic-v2'; // bump on each deploy so clients pick up the new shell
 const CACHE_NAME = `islandcity-app-${CACHE_VERSION}`;
 
 // ── Install: open cache and pre-cache the app shell ──────────────
@@ -53,7 +53,33 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // ── App shell (HTML/CSS/JS/assets): cache-first ───────────────
+  // ── Navigations (app shell HTML): network-first ─────────────────
+  // Fresh deployments must show immediately when online; cache is the
+  // offline fallback only. (Cache-first here caused stale UI after deploys.)
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request.clone()).then(response => {
+        if (response.ok && response.type !== 'opaque') {
+          const clone = response.clone();
+          caches.open(CACHE_NAME)
+            .then(cache => cache.put(request, clone))
+            .catch(() => {});
+        }
+        return response;
+      }).catch(() =>
+        caches.match(request).then(cached =>
+          cached ?? caches.match(self.registration.scope).then(root =>
+            root ?? new Response('IslandCity is offline. Please reconnect.', {
+              status: 503, headers: { 'Content-Type': 'text/plain' },
+            })
+          )
+        )
+      )
+    );
+    return;
+  }
+
+  // ── App shell (CSS/JS/assets): cache-first, revalidate in background ──
   event.respondWith(
     caches.match(request).then(cached => {
       // Serve from cache immediately if available

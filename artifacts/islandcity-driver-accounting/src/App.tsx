@@ -1,6 +1,6 @@
 // ── IslandCity Tip Tracker · PHASE 1 ────────────────────────────────
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ClipboardList, Gauge, Home, Receipt } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChartColumn, ClipboardList, Gauge, Home, Receipt } from "lucide-react";
 import {
   emptyState,
   fmt,
@@ -11,11 +11,18 @@ import {
 } from "./lib/domain";
 import { detectToll, tollAmount, type EzpTransaction } from "./lib/tolls";
 import { type ReceiptRecord } from "./lib/receipts";
+import { haversineKm } from "./lib/nycZones";
+import { parseLegacyBackup, mergeById } from "./lib/legacyImport";
+import { useWakeLock } from "./hooks/useWakeLock";
+import DashScreen from "./screens/DashScreen";
 import EntryScreen from "./screens/EntryScreen";
 import QueueScreen from "./screens/QueueScreen";
 import ExpensesScreen from "./screens/ExpensesScreen";
+import { computeFinance } from "./screens/finance/financeData";
+import type { BankAdjEntry, RecurringPlan, WeekOverrides } from "./screens/finance/financeData";
+import { FinanceScreen } from "./screens/finance/FinanceScreen";
 
-type Tab = "ENTRY" | "QUEUE" | "EXPENSES" | "DASH";
+type Tab = "ENTRY" | "QUEUE" | "EXPENSES" | "DASH" | "FINANCE";
 
 interface BreakRecord {
   id: string;
@@ -46,6 +53,22 @@ export default function App() {
   const [transactions, setTransactions] = useState<EzpTransaction[]>(() => {
     try { return JSON.parse(localStorage.getItem("ic_ezp_transactions") || "[]") as EzpTransaction[]; } catch { return []; }
   });
+  const [workDays, setWorkDays] = useState<number[]>(() => {
+    try { const v = JSON.parse(localStorage.getItem("ic-work-days") || "[1,2,3,4,5]"); return Array.isArray(v) ? v : [1,2,3,4,5]; } catch { return [1,2,3,4,5]; }
+  });
+  const [dayTargets, setDayTargets] = useState<Record<number, number>>(() => {
+    try { return JSON.parse(localStorage.getItem("ic-day-targets") || "{}"); } catch { return {}; }
+  });
+  const [weekOverrides, setWeekOverrides] = useState<WeekOverrides>(() => {
+    try { return JSON.parse(localStorage.getItem("ic-week-overrides") || "{}"); } catch { return {}; }
+  });
+  const [recurringPlan, setRecurringPlan] = useState<RecurringPlan>(() => {
+    try { const v = JSON.parse(localStorage.getItem("ic-recurring-plan") || "null"); return v && typeof v === "object" ? v : { enabled: false, workDays: [1,2,3,4,5], dayTargets: {}, untilDate: "" }; } catch { return { enabled: false, workDays: [1,2,3,4,5], dayTargets: {}, untilDate: "" }; }
+  });
+  const [bankBalance, setBankBalance] = useState<number>(() => { const n = parseFloat(localStorage.getItem("ic-bank-balance") || "0"); return isNaN(n) ? 0 : n; });
+  const [bankAdjHistory, setBankAdjHistory] = useState<BankAdjEntry[]>(() => {
+    try { return JSON.parse(localStorage.getItem("ic-bank-adj-history") || "[]"); } catch { return []; }
+  });
   const toastTimer = useRef<number | null>(null);
 
   const showToast = useCallback((msg: string, ms = 3000) => {
@@ -62,6 +85,12 @@ export default function App() {
     });
   }, []);
 
+  useEffect(() => { try { localStorage.setItem("ic-work-days", JSON.stringify(workDays)); } catch {} }, [workDays]);
+  useEffect(() => { try { localStorage.setItem("ic-day-targets", JSON.stringify(dayTargets)); } catch {} }, [dayTargets]);
+  useEffect(() => { try { localStorage.setItem("ic-week-overrides", JSON.stringify(weekOverrides)); } catch {} }, [weekOverrides]);
+  useEffect(() => { try { localStorage.setItem("ic-recurring-plan", JSON.stringify(recurringPlan)); } catch {} }, [recurringPlan]);
+  useEffect(() => { try { localStorage.setItem("ic-bank-balance", String(bankBalance)); } catch {} }, [bankBalance]);
+  useEffect(() => { try { localStorage.setItem("ic-bank-adj-history", JSON.stringify(bankAdjHistory)); } catch {} }, [bankAdjHistory]);
   // load
   useEffect(() => {
     try {
@@ -87,58 +116,95 @@ export default function App() {
   });
   const [detectedToll, setDetectedToll] = useState<{toll: string; amount: number; details: {name: string; price: number}[]} | null>(null);
 
-  useEffect(() => {
-    if (!("geolocation" in navigator)) return;
-    let cancelled = false;
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        if (cancelled) return;
-        const { latitude: lat, longitude: lng, accuracy: acc } = pos.coords;
-        setGps({ lat, lng, acc });
-        const toll = detectToll(lat, lng, lastTollTimes);
-        if (toll) {
-          const amount = tollAmount(toll, new Date());
-          // Update cooldown
-          const newLastTollTimes = { ...lastTollTimes, [toll.name]: Date.now() };
-          setLastTollTimes(newLastTollTimes);
-          try {
-            localStorage.setItem("ic_toll_cooldowns", JSON.stringify(newLastTollTimes));
-          } catch {}
-          
-          if (navigator.vibrate) navigator.vibrate(120);
-          showToast(`Toll detectado: ${toll.name} $${amount.toFixed(2)} E-ZPass`);
-          
-          // Auto-fill for Daily Entry
-          setDetectedToll({
-            toll: toll.name,
-            amount,
-            details: [{ name: toll.name, price: amount }]
-          });
+  // ── Shift state (persisted, date-guarded — iOS Safari safe) ───────
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const savedShift = (() => {
+    try {
+      const s = JSON.parse(localStorage.getItem("ic_shift") || "null") as
+        { date?: string; active?: boolean; clockIn?: number | null; breakMs?: number; breakStart?: number | null; miles?: number; hourlyGoal?: number } | null;
+      if (s && s.date === todayISO) return s;
+    } catch {}
+    return null;
+  })();
+  const [shiftActive, setShiftActive] = useState<boolean>(savedShift?.active ?? false);
+  const [clockInTime, setClockInTime] = useState<number | null>(savedShift?.clockIn ?? null);
+  const [totalBreakMs, setTotalBreakMs] = useState<number>(savedShift?.breakMs ?? 0);
+  const [shiftBreakStart, setShiftBreakStart] = useState<number | null>(savedShift?.breakStart ?? null);
+  const [shiftMiles, setShiftMiles] = useState<number>(savedShift?.miles ?? 0);
+  const [hourlyGoal, setHourlyGoal] = useState<number>(savedShift?.hourlyGoal ?? 60);
+  const prevGpsRef = useRef<{ lat: number; lng: number } | null>(null);
+  const wakeLock = useWakeLock();
 
-          // Pending E-ZPass tx → reconciliation list (24h dedup guard)
-          setTransactions((prev) => {
-            const dup = prev.some(
-              (x) => x.tollName === toll.name && Date.now() - new Date(x.timestamp).getTime() < 24 * 60 * 60 * 1000,
-            );
-            if (dup) return prev;
-            const tx: EzpTransaction = {
-              id: Math.random().toString(36).slice(2),
-              tollName: toll.name,
-              timestamp: new Date().toISOString(),
-              detectedAmount: amount,
-              status: "pending",
-            };
-            const n = [tx, ...prev];
-            try { localStorage.setItem("ic_ezp_transactions", JSON.stringify(n)); } catch {}
-            return n;
-          });
-        }
-      },
+  useEffect(() => {
+    try {
+      localStorage.setItem("ic_shift", JSON.stringify({
+        date: todayISO, active: shiftActive, clockIn: clockInTime, breakMs: totalBreakMs,
+        breakStart: shiftBreakStart, miles: shiftMiles, hourlyGoal,
+      }));
+    } catch {}
+  }, [todayISO, shiftActive, clockInTime, totalBreakMs, shiftBreakStart, shiftMiles, hourlyGoal]);
+
+  const activeHoursDecimal = useMemo(() => {
+    if (!shiftActive || !clockInTime) return 0;
+    const nowMs = clock.getTime();
+    const liveBreak = shiftBreakStart ? Math.max(nowMs - shiftBreakStart, 0) : 0;
+    return Math.max((nowMs - clockInTime - totalBreakMs - liveBreak) / 3600000, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shiftActive, clockInTime, totalBreakMs, shiftBreakStart, clock]);
+
+    const shiftActiveRef = useRef(shiftActive);
+  useEffect(() => { shiftActiveRef.current = shiftActive; }, [shiftActive]);
+  const lastTollTimesRef = useRef(lastTollTimes);
+  useEffect(() => { lastTollTimesRef.current = lastTollTimes; }, [lastTollTimes]);
+  const gpsWatchId = useRef<number | null>(null);
+
+  const onGpsFix = useCallback((lat: number, lng: number, acc: number) => {
+    setGps({ lat, lng, acc });
+    if (!shiftActiveRef.current) return;
+    const prev = prevGpsRef.current;
+    prevGpsRef.current = { lat, lng };
+    if (prev && acc < 80) {
+      const km = haversineKm(prev.lat, prev.lng, lat, lng);
+      if (km > 0.01 && km < 1.5) setShiftMiles((m) => m + km * 0.621371);
+    }
+    const toll = detectToll(lat, lng, lastTollTimesRef.current);
+    if (toll) {
+      const amount = tollAmount(toll, new Date());
+      const newLastTollTimes = { ...lastTollTimesRef.current, [toll.name]: Date.now() };
+      setLastTollTimes(newLastTollTimes);
+      try { localStorage.setItem("ic_toll_cooldowns", JSON.stringify(newLastTollTimes)); } catch {}
+      if (navigator.vibrate) navigator.vibrate(120);
+      showToast(`Toll detectado: ${toll.name} $${amount.toFixed(2)} E-ZPass`);
+      setDetectedToll({ toll: toll.name, amount, details: [{ name: toll.name, price: amount }] });
+      setTransactions((prev) => {
+        const dup = prev.some((x) => x.tollName === toll.name && Date.now() - new Date(x.timestamp).getTime() < 24 * 60 * 60 * 1000);
+        if (dup) return prev;
+        const tx: EzpTransaction = { id: Math.random().toString(36).slice(2), tollName: toll.name, timestamp: new Date().toISOString(), detectedAmount: amount, status: "pending" };
+        const n = [tx, ...prev];
+        try { localStorage.setItem("ic_ezp_transactions", JSON.stringify(n)); } catch {}
+        return n;
+      });
+    }
+  }, [showToast]);
+
+  const stopGpsWatch = useCallback(() => {
+    if (gpsWatchId.current !== null) { navigator.geolocation.clearWatch(gpsWatchId.current); gpsWatchId.current = null; prevGpsRef.current = null; }
+  }, []);
+
+  const startGpsWatch = useCallback(() => {
+    if (!("geolocation" in navigator) || gpsWatchId.current !== null) return;
+    gpsWatchId.current = navigator.geolocation.watchPosition(
+      (pos) => onGpsFix(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
       () => {},
       { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 },
     );
-    return () => { cancelled = true; navigator.geolocation.clearWatch(watchId); };
-  }, [showToast, lastTollTimes]);
+  }, [onGpsFix]);
+
+  useEffect(() => {
+    if (shiftActiveRef.current) startGpsWatch();
+    return () => stopGpsWatch();
+  }, [startGpsWatch, stopGpsWatch]);
+
 
   // ── Handlers ──────────────────────────────────────────────────────
   const addEntry = useCallback((e: EntryRecord) => update((s) => ({ ...s, entries: [e, ...s.entries], refCounter: s.refCounter + 1 })), [update]);
@@ -220,11 +286,109 @@ export default function App() {
   const todayPosted = state.entries.filter((e) => e.datetime.slice(0, 10) === today && e.status === "posted");
   const grossToday = todayPosted.reduce((s, e) => s + e.grossIncome, 0);
   const netToday = todayPosted.reduce((s, e) => s + e.netPayout, 0);
+
+  // ── DASH derived (todayTrips = open+posted of today, per memory rule) ──
+  const todayTripsAll = state.entries.filter((e) => e.datetime.slice(0, 10) === today);
+  const grossTodayAll = todayTripsAll.reduce((s, e) => s + e.grossIncome, 0);
+  const weekStart = (() => { const d = new Date(clock); const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow); return todayStr(d); })();
+  const weeklyTotal = state.entries.filter((e) => e.datetime.slice(0, 10) >= weekStart && e.datetime.slice(0, 10) <= today)
+    .reduce((s, e) => s + e.grossIncome, 0);
+  const txTs = (t: EzpTransaction) => new Date(t.timestamp).getTime();
+  const tollsToday = transactions.filter((t) => txTs(t) >= new Date(today).getTime()).reduce((s, t) => s + t.detectedAmount, 0);
+  const tollsWeek = transactions.filter((t) => txTs(t) >= new Date(weekStart).getTime()).reduce((s, t) => s + t.detectedAmount, 0);
+  const monthStart = today.slice(0, 8) + "01";
+  const tollsMonth = transactions.filter((t) => txTs(t) >= new Date(monthStart).getTime()).reduce((s, t) => s + t.detectedAmount, 0);
+  const tollsYear = transactions.filter((t) => new Date(t.timestamp).getFullYear() === clock.getFullYear()).reduce((s, t) => s + t.detectedAmount, 0);
+
+  const startDashShift = useCallback(() => {
+    setShiftActive(true); setClockInTime(Date.now()); setTotalBreakMs(0);
+    setShiftBreakStart(null); setShiftMiles(0);
+    try { localStorage.setItem("ic_shift_start", new Date().toISOString()); } catch {}
+    void wakeLock.request();
+    startGpsWatch();
+    showToast("â–¶ Shift iniciado");
+  }, [showToast, wakeLock, startGpsWatch]);
+
+  const toggleDashBreak = useCallback(() => {
+    if (shiftBreakStart) {
+      setTotalBreakMs((b) => b + (Date.now() - shiftBreakStart));
+      setShiftBreakStart(null);
+      showToast("▶ Resumed");
+    } else {
+      setShiftBreakStart(Date.now());
+      showToast("⏸️ Break iniciado");
+    }
+  }, [shiftBreakStart, showToast]);
+
+  const endDashShift = useCallback(() => {
+    const nowMs = Date.now();
+    const brk = shiftBreakStart ? (nowMs - shiftBreakStart) : 0;
+    const totalBreakFinal = totalBreakMs + brk;
+    const workMs = Math.max((nowMs - (clockInTime ?? nowMs)) - totalBreakFinal, 0);
+    setTotalBreakMs(totalBreakFinal);
+    setShiftBreakStart(null); setShiftActive(false); setClockInTime(null);
+    void wakeLock.release();
+    stopGpsWatch();
+    try {
+      const shiftLog = {
+        start: new Date(clockInTime ?? nowMs).toISOString(),
+        end: new Date(nowMs).toISOString(),
+        totalElapsedMs: Math.max(nowMs - (clockInTime ?? nowMs), 0),
+        workingMs: workMs,
+        breakMs: totalBreakFinal,
+        miles: shiftMiles,
+        tollsToday,
+        sello: new Date().toISOString(),
+      };
+      const logs = JSON.parse(localStorage.getItem("ic_shift_logs") || "[]");
+      logs.unshift(shiftLog);
+      localStorage.setItem("ic_shift_logs", JSON.stringify(logs.slice(0, 50)));
+    } catch {}
+    showToast("â–  Shift terminado");
+  }, [shiftBreakStart, clockInTime, totalBreakMs, shiftMiles, tollsToday, showToast, wakeLock, stopGpsWatch]);
+
+  const refreshGps = useCallback(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setGps({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy ?? 0 }),
+      () => showToast("GPS no disponible"),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 },
+    );
+  }, [showToast]);
+
+  const importLegacy = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const res = parseLegacyBackup(String(reader.result));
+        update((s) => ({ ...s, entries: mergeById(s.entries, res.entries), goal: res.goal ?? s.goal }));
+        setExpenses((prev) => { const n = mergeById(prev, res.receipts); try { localStorage.setItem("ic_expenses", JSON.stringify(n)); } catch {} return n; });
+        setTransactions((prev) => { const n = mergeById(prev, res.transactions); try { localStorage.setItem("ic_ezp_transactions", JSON.stringify(n)); } catch {} return n; });
+        showToast(`✓ Importado: ${res.summary.trips} trips · ${res.summary.expenses} expenses · ${res.summary.tolls} tolls`, 5000);
+      } catch (err) {
+        showToast(`✗ ${err instanceof Error ? err.message : "Import failed"}`, 5000);
+      }
+    };
+    reader.readAsText(file);
+  }, [showToast, update]);
+
+  const F = useMemo(() => computeFinance({
+    clock,
+    entries: state.entries,
+    expenses,
+    dailyGoal: state.goal,
+    workDays,
+    dayTargets,
+    weekOverrides,
+    recurringPlan,
+    bankBalance,
+  }), [clock, state.entries, expenses, state.goal, workDays, dayTargets, weekOverrides, recurringPlan, bankBalance]);
   const tabs: { key: Tab; label: string; Icon: typeof Home }[] = [
     { key: "ENTRY", label: "ENTRY", Icon: Home },
     { key: "QUEUE", label: "QUEUE", Icon: ClipboardList },
     { key: "EXPENSES", label: "EXPENSES", Icon: Receipt },
     { key: "DASH", label: "DASH", Icon: Gauge },
+    { key: "FINANCE", label: "FINANCE", Icon: ChartColumn },
   ];
 
   return (
@@ -239,28 +403,62 @@ export default function App() {
         {tab === "QUEUE" && <QueueScreen entries={openEntries} onEdit={setEditTarget} onDelete={deleteEntry} onPost={postEntry} />}
         {tab === "EXPENSES" && <ExpensesScreen entries={state.entries} addExpense={addExpense} expenses={expenses} transactions={transactions} updateTransaction={updateTransaction} />}
         {tab === "DASH" && (
-          <div className="space-y-3 pb-4">
-            <div className="rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">DASHBOARD</span>
-                <span className="text-[11px] font-semibold text-[#8a8a8a]">{headerDateTime(clock)}</span>
-              </div>
-              <div className="mt-1 font-mono text-[34px] font-black leading-none" style={{ color: "#15803D" }}>{fmt(netToday)}</div>
-              <div className="mt-1 text-[9px] font-bold text-[#6f6f6f]">NET TODAY · {todayPosted.length} trips posted</div>
+          <>
+            <DashScreen
+              clock={clock}
+              gps={gps}
+              todayTrips={todayTripsAll}
+              grossToday={grossTodayAll}
+              netToday={netToday}
+              expenses={expenses}
+              weeklyTotal={weeklyTotal}
+              shiftActive={shiftActive}
+              isOnBreak={!!shiftBreakStart}
+              activeHoursDecimal={activeHoursDecimal}
+              shiftMiles={shiftMiles}
+              hourlyGoal={hourlyGoal}
+              setHourlyGoal={setHourlyGoal}
+              dailyGoal={state.goal}
+              onStart={startDashShift}
+              onBreak={toggleDashBreak}
+              onEnd={endDashShift}
+              onRefreshGps={refreshGps}
+              tollsToday={tollsToday}
+              tollsWeek={tollsWeek}
+              tollsMonth={tollsMonth}
+              tollsYear={tollsYear}
+            />
+            <div className="mt-5 rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-4 text-center">
+              <p className="text-[9px] tracking-[0.18em] font-bold text-neutral-500 uppercase">Legacy import · EI Program</p>
+              <input
+                type="file"
+                accept="application/json,.json"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) importLegacy(f); e.target.value = ""; }}
+                className="mt-2 w-full text-[11px] text-neutral-400 file:mr-3 file:rounded-lg file:border-0 file:bg-[#FFD700] file:px-3 file:py-2 file:text-[11px] file:font-black file:text-black"
+              />
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-xl bg-black p-3 text-center">
-                <div className="text-[8px] font-bold text-neutral-500">GROSS TODAY</div>
-                <div className="font-mono text-[18px] font-black text-[#FFD700]">{fmt(grossToday)}</div>
-              </div>
-              <div className="rounded-xl bg-black p-3 text-center">
-                <div className="text-[8px] font-bold text-neutral-500">NET TODAY</div>
-                <div className="font-mono text-[18px] font-black text-[#00FF6A]">{fmt(netToday)}</div>
-              </div>
-            </div>
-          </div>
+          </>
         )}
-      </div>
+        {tab === "FINANCE" && (
+          <FinanceScreen
+            F={F}
+            clock={clock}
+            expenses={expenses}
+            addExpense={addExpense}
+            dailyGoal={state.goal}
+            workDays={workDays}
+            setWorkDays={setWorkDays}
+            dayTargets={dayTargets}
+            setDayTargets={setDayTargets}
+            recurringPlan={recurringPlan}
+            setRecurringPlan={setRecurringPlan}
+            bankBalance={bankBalance}
+            setBankBalance={setBankBalance}
+            bankAdjHistory={bankAdjHistory}
+            setBankAdjHistory={setBankAdjHistory}
+            showToast={showToast}
+          />
+        )}      </div>
       <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#1c1c1c] bg-[#030303]" style={{ maxWidth: 480, margin: "0 auto" }}>
         <div className="flex">
           {tabs.map(({ key, label, Icon }) => {
