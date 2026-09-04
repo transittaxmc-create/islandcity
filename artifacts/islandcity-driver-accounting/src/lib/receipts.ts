@@ -131,6 +131,8 @@ export interface ReceiptRecord {
   /** receipt = captured via scan, regular = manual/recurring entry */
   expenseType: "receipt" | "regular";
   frequency?: "daily" | "weekly" | "monthly" | "one-time";
+  /** Repeat-until date for recurring expenses (stop projecting after it) */
+  endDate?: string;
   createdAt?: string;
 }
 

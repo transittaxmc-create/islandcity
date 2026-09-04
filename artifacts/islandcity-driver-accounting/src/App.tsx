@@ -1,6 +1,6 @@
 // ── IslandCity Tip Tracker · PHASE 1 ────────────────────────────────
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ClipboardList, Gauge, Home, Receipt } from "lucide-react";
+import { ChartColumn, ClipboardList, Gauge, Home, Receipt } from "lucide-react";
 import {
   emptyState,
   fmt,
@@ -18,8 +18,11 @@ import DashScreen from "./screens/DashScreen";
 import EntryScreen from "./screens/EntryScreen";
 import QueueScreen from "./screens/QueueScreen";
 import ExpensesScreen from "./screens/ExpensesScreen";
+import { computeFinance } from "./screens/finance/financeData";
+import type { BankAdjEntry, RecurringPlan, WeekOverrides } from "./screens/finance/financeData";
+import { FinanceScreen } from "./screens/finance/FinanceScreen";
 
-type Tab = "ENTRY" | "QUEUE" | "EXPENSES" | "DASH";
+type Tab = "ENTRY" | "QUEUE" | "EXPENSES" | "DASH" | "FINANCE";
 
 interface BreakRecord {
   id: string;
@@ -50,6 +53,22 @@ export default function App() {
   const [transactions, setTransactions] = useState<EzpTransaction[]>(() => {
     try { return JSON.parse(localStorage.getItem("ic_ezp_transactions") || "[]") as EzpTransaction[]; } catch { return []; }
   });
+  const [workDays, setWorkDays] = useState<number[]>(() => {
+    try { const v = JSON.parse(localStorage.getItem("ic-work-days") || "[1,2,3,4,5]"); return Array.isArray(v) ? v : [1,2,3,4,5]; } catch { return [1,2,3,4,5]; }
+  });
+  const [dayTargets, setDayTargets] = useState<Record<number, number>>(() => {
+    try { return JSON.parse(localStorage.getItem("ic-day-targets") || "{}"); } catch { return {}; }
+  });
+  const [weekOverrides, setWeekOverrides] = useState<WeekOverrides>(() => {
+    try { return JSON.parse(localStorage.getItem("ic-week-overrides") || "{}"); } catch { return {}; }
+  });
+  const [recurringPlan, setRecurringPlan] = useState<RecurringPlan>(() => {
+    try { const v = JSON.parse(localStorage.getItem("ic-recurring-plan") || "null"); return v && typeof v === "object" ? v : { enabled: false, workDays: [1,2,3,4,5], dayTargets: {}, untilDate: "" }; } catch { return { enabled: false, workDays: [1,2,3,4,5], dayTargets: {}, untilDate: "" }; }
+  });
+  const [bankBalance, setBankBalance] = useState<number>(() => { const n = parseFloat(localStorage.getItem("ic-bank-balance") || "0"); return isNaN(n) ? 0 : n; });
+  const [bankAdjHistory, setBankAdjHistory] = useState<BankAdjEntry[]>(() => {
+    try { return JSON.parse(localStorage.getItem("ic-bank-adj-history") || "[]"); } catch { return []; }
+  });
   const toastTimer = useRef<number | null>(null);
 
   const showToast = useCallback((msg: string, ms = 3000) => {
@@ -66,6 +85,12 @@ export default function App() {
     });
   }, []);
 
+  useEffect(() => { try { localStorage.setItem("ic-work-days", JSON.stringify(workDays)); } catch {} }, [workDays]);
+  useEffect(() => { try { localStorage.setItem("ic-day-targets", JSON.stringify(dayTargets)); } catch {} }, [dayTargets]);
+  useEffect(() => { try { localStorage.setItem("ic-week-overrides", JSON.stringify(weekOverrides)); } catch {} }, [weekOverrides]);
+  useEffect(() => { try { localStorage.setItem("ic-recurring-plan", JSON.stringify(recurringPlan)); } catch {} }, [recurringPlan]);
+  useEffect(() => { try { localStorage.setItem("ic-bank-balance", String(bankBalance)); } catch {} }, [bankBalance]);
+  useEffect(() => { try { localStorage.setItem("ic-bank-adj-history", JSON.stringify(bankAdjHistory)); } catch {} }, [bankAdjHistory]);
   // load
   useEffect(() => {
     try {
@@ -127,65 +152,59 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shiftActive, clockInTime, totalBreakMs, shiftBreakStart, clock]);
 
-  useEffect(() => {
-    if (!("geolocation" in navigator)) return;
-    let cancelled = false;
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        if (cancelled) return;
-        const { latitude: lat, longitude: lng, accuracy: acc } = pos.coords;
-        setGps({ lat, lng, acc });
-        // Odometer — haversine deltas with noise filters (acc<80m, 10m–1.5km jumps)
-        const prev = prevGpsRef.current;
-        prevGpsRef.current = { lat, lng };
-        if (prev && acc < 80) {
-          const km = haversineKm(prev.lat, prev.lng, lat, lng);
-          if (km > 0.01 && km < 1.5) setShiftMiles((m) => m + km * 0.621371);
-        }
-        const toll = detectToll(lat, lng, lastTollTimes);
-        if (toll) {
-          const amount = tollAmount(toll, new Date());
-          // Update cooldown
-          const newLastTollTimes = { ...lastTollTimes, [toll.name]: Date.now() };
-          setLastTollTimes(newLastTollTimes);
-          try {
-            localStorage.setItem("ic_toll_cooldowns", JSON.stringify(newLastTollTimes));
-          } catch {}
-          
-          if (navigator.vibrate) navigator.vibrate(120);
-          showToast(`Toll detectado: ${toll.name} $${amount.toFixed(2)} E-ZPass`);
-          
-          // Auto-fill for Daily Entry
-          setDetectedToll({
-            toll: toll.name,
-            amount,
-            details: [{ name: toll.name, price: amount }]
-          });
+    const shiftActiveRef = useRef(shiftActive);
+  useEffect(() => { shiftActiveRef.current = shiftActive; }, [shiftActive]);
+  const lastTollTimesRef = useRef(lastTollTimes);
+  useEffect(() => { lastTollTimesRef.current = lastTollTimes; }, [lastTollTimes]);
+  const gpsWatchId = useRef<number | null>(null);
 
-          // Pending E-ZPass tx → reconciliation list (24h dedup guard)
-          setTransactions((prev) => {
-            const dup = prev.some(
-              (x) => x.tollName === toll.name && Date.now() - new Date(x.timestamp).getTime() < 24 * 60 * 60 * 1000,
-            );
-            if (dup) return prev;
-            const tx: EzpTransaction = {
-              id: Math.random().toString(36).slice(2),
-              tollName: toll.name,
-              timestamp: new Date().toISOString(),
-              detectedAmount: amount,
-              status: "pending",
-            };
-            const n = [tx, ...prev];
-            try { localStorage.setItem("ic_ezp_transactions", JSON.stringify(n)); } catch {}
-            return n;
-          });
-        }
-      },
+  const onGpsFix = useCallback((lat: number, lng: number, acc: number) => {
+    setGps({ lat, lng, acc });
+    if (!shiftActiveRef.current) return;
+    const prev = prevGpsRef.current;
+    prevGpsRef.current = { lat, lng };
+    if (prev && acc < 80) {
+      const km = haversineKm(prev.lat, prev.lng, lat, lng);
+      if (km > 0.01 && km < 1.5) setShiftMiles((m) => m + km * 0.621371);
+    }
+    const toll = detectToll(lat, lng, lastTollTimesRef.current);
+    if (toll) {
+      const amount = tollAmount(toll, new Date());
+      const newLastTollTimes = { ...lastTollTimesRef.current, [toll.name]: Date.now() };
+      setLastTollTimes(newLastTollTimes);
+      try { localStorage.setItem("ic_toll_cooldowns", JSON.stringify(newLastTollTimes)); } catch {}
+      if (navigator.vibrate) navigator.vibrate(120);
+      showToast(`Toll detectado: ${toll.name} $${amount.toFixed(2)} E-ZPass`);
+      setDetectedToll({ toll: toll.name, amount, details: [{ name: toll.name, price: amount }] });
+      setTransactions((prev) => {
+        const dup = prev.some((x) => x.tollName === toll.name && Date.now() - new Date(x.timestamp).getTime() < 24 * 60 * 60 * 1000);
+        if (dup) return prev;
+        const tx: EzpTransaction = { id: Math.random().toString(36).slice(2), tollName: toll.name, timestamp: new Date().toISOString(), detectedAmount: amount, status: "pending" };
+        const n = [tx, ...prev];
+        try { localStorage.setItem("ic_ezp_transactions", JSON.stringify(n)); } catch {}
+        return n;
+      });
+    }
+  }, [showToast]);
+
+  const stopGpsWatch = useCallback(() => {
+    if (gpsWatchId.current !== null) { navigator.geolocation.clearWatch(gpsWatchId.current); gpsWatchId.current = null; prevGpsRef.current = null; }
+  }, []);
+
+  const startGpsWatch = useCallback(() => {
+    if (!("geolocation" in navigator) || gpsWatchId.current !== null) return;
+    gpsWatchId.current = navigator.geolocation.watchPosition(
+      (pos) => onGpsFix(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
       () => {},
       { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 },
     );
-    return () => { cancelled = true; navigator.geolocation.clearWatch(watchId); };
-  }, [showToast, lastTollTimes]);
+  }, [onGpsFix]);
+
+  useEffect(() => {
+    if (shiftActiveRef.current) startGpsWatch();
+    return () => stopGpsWatch();
+  }, [startGpsWatch, stopGpsWatch]);
+
 
   // ── Handlers ──────────────────────────────────────────────────────
   const addEntry = useCallback((e: EntryRecord) => update((s) => ({ ...s, entries: [e, ...s.entries], refCounter: s.refCounter + 1 })), [update]);
@@ -284,9 +303,11 @@ export default function App() {
   const startDashShift = useCallback(() => {
     setShiftActive(true); setClockInTime(Date.now()); setTotalBreakMs(0);
     setShiftBreakStart(null); setShiftMiles(0);
+    try { localStorage.setItem("ic_shift_start", new Date().toISOString()); } catch {}
     void wakeLock.request();
-    showToast("▶ Shift iniciado");
-  }, [showToast, wakeLock]);
+    startGpsWatch();
+    showToast("â–¶ Shift iniciado");
+  }, [showToast, wakeLock, startGpsWatch]);
 
   const toggleDashBreak = useCallback(() => {
     if (shiftBreakStart) {
@@ -300,11 +321,31 @@ export default function App() {
   }, [shiftBreakStart, showToast]);
 
   const endDashShift = useCallback(() => {
-    if (shiftBreakStart) setTotalBreakMs((b) => b + (Date.now() - shiftBreakStart));
+    const nowMs = Date.now();
+    const brk = shiftBreakStart ? (nowMs - shiftBreakStart) : 0;
+    const totalBreakFinal = totalBreakMs + brk;
+    const workMs = Math.max((nowMs - (clockInTime ?? nowMs)) - totalBreakFinal, 0);
+    setTotalBreakMs(totalBreakFinal);
     setShiftBreakStart(null); setShiftActive(false); setClockInTime(null);
     void wakeLock.release();
-    showToast("■ Shift terminado");
-  }, [shiftBreakStart, showToast, wakeLock]);
+    stopGpsWatch();
+    try {
+      const shiftLog = {
+        start: new Date(clockInTime ?? nowMs).toISOString(),
+        end: new Date(nowMs).toISOString(),
+        totalElapsedMs: Math.max(nowMs - (clockInTime ?? nowMs), 0),
+        workingMs: workMs,
+        breakMs: totalBreakFinal,
+        miles: shiftMiles,
+        tollsToday,
+        sello: new Date().toISOString(),
+      };
+      const logs = JSON.parse(localStorage.getItem("ic_shift_logs") || "[]");
+      logs.unshift(shiftLog);
+      localStorage.setItem("ic_shift_logs", JSON.stringify(logs.slice(0, 50)));
+    } catch {}
+    showToast("â–  Shift terminado");
+  }, [shiftBreakStart, clockInTime, totalBreakMs, shiftMiles, tollsToday, showToast, wakeLock, stopGpsWatch]);
 
   const refreshGps = useCallback(() => {
     if (!navigator.geolocation) return;
@@ -331,11 +372,23 @@ export default function App() {
     reader.readAsText(file);
   }, [showToast, update]);
 
+  const F = useMemo(() => computeFinance({
+    clock,
+    entries: state.entries,
+    expenses,
+    dailyGoal: state.goal,
+    workDays,
+    dayTargets,
+    weekOverrides,
+    recurringPlan,
+    bankBalance,
+  }), [clock, state.entries, expenses, state.goal, workDays, dayTargets, weekOverrides, recurringPlan, bankBalance]);
   const tabs: { key: Tab; label: string; Icon: typeof Home }[] = [
     { key: "ENTRY", label: "ENTRY", Icon: Home },
     { key: "QUEUE", label: "QUEUE", Icon: ClipboardList },
     { key: "EXPENSES", label: "EXPENSES", Icon: Receipt },
     { key: "DASH", label: "DASH", Icon: Gauge },
+    { key: "FINANCE", label: "FINANCE", Icon: ChartColumn },
   ];
 
   return (
@@ -386,7 +439,26 @@ export default function App() {
             </div>
           </>
         )}
-      </div>
+        {tab === "FINANCE" && (
+          <FinanceScreen
+            F={F}
+            clock={clock}
+            expenses={expenses}
+            addExpense={addExpense}
+            dailyGoal={state.goal}
+            workDays={workDays}
+            setWorkDays={setWorkDays}
+            dayTargets={dayTargets}
+            setDayTargets={setDayTargets}
+            recurringPlan={recurringPlan}
+            setRecurringPlan={setRecurringPlan}
+            bankBalance={bankBalance}
+            setBankBalance={setBankBalance}
+            bankAdjHistory={bankAdjHistory}
+            setBankAdjHistory={setBankAdjHistory}
+            showToast={showToast}
+          />
+        )}      </div>
       <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#1c1c1c] bg-[#030303]" style={{ maxWidth: 480, margin: "0 auto" }}>
         <div className="flex">
           {tabs.map(({ key, label, Icon }) => {
