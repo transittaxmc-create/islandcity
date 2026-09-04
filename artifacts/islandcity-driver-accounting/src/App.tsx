@@ -1,6 +1,6 @@
 // ── IslandCity Tip Tracker · PHASE 1 ────────────────────────────────
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChartColumn, ClipboardList, Gauge, Home, Receipt } from "lucide-react";
+import {ChartColumn, ClipboardList, Gauge, Home, Receipt, FileText, Sparkles, Boxes} from "lucide-react";
 import {
   emptyState,
   fmt,
@@ -21,8 +21,10 @@ import ExpensesScreen from "./screens/ExpensesScreen";
 import { computeFinance } from "./screens/finance/financeData";
 import type { BankAdjEntry, RecurringPlan, WeekOverrides } from "./screens/finance/financeData";
 import { FinanceScreen } from "./screens/finance/FinanceScreen";
+import ReportsScreen from "./screens/ReportsScreen";
+import AiScreen from "./screens/AiScreen";
 
-type Tab = "ENTRY" | "QUEUE" | "EXPENSES" | "DASH" | "FINANCE";
+type Tab = "ENTRY" | "QUEUE" | "EXPENSES" | "DASH" | "FINANCE" | "REPORTS" | "AI";
 
 interface BreakRecord {
   id: string;
@@ -432,6 +434,8 @@ export default function App() {
     { key: "EXPENSES", label: "EXPENSES", Icon: Receipt },
     { key: "DASH", label: "DASH", Icon: Gauge },
     { key: "FINANCE", label: "FINANCE", Icon: ChartColumn },
+    { key: "REPORTS", label: "REPORTS", Icon: FileText },
+    { key: "AI", label: "AI", Icon: Sparkles },
   ];
 
   return (
@@ -516,7 +520,9 @@ export default function App() {
             setBankAdjHistory={setBankAdjHistory}
             showToast={showToast}
           />
-        )}      </div>
+        )}
+      {tab === "REPORTS" && <ReportsScreen entries={state.entries} />}
+      {tab === "AI" && <AiScreen entries={state.entries} goal={state.goal} />}      </div>
       <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#1c1c1c] bg-[#030303]" style={{ maxWidth: 480, margin: "0 auto" }}>
         <div className="flex">
           {tabs.map(({ key, label, Icon }) => {
