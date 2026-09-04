@@ -28,6 +28,13 @@
 2. **Desde el repo:** en la página principal, barra lateral derecha → **Environments** → **github-pages** → **View deployment**
 3. **Desde Actions:** pestaña **Actions** → el último run con ✅ verde → abajo en *Deployments* → **github-pages / View deployment**
 
+## ▲ Vercel (segundo link en vivo)
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ftransittaxmc-create%2Fislandcity)
+
+La configuración de build ya está lista en `vercel.json` (instala el monorepo pnpm y compila `artifacts/islandcity-driver-accounting`).
+Cada push a `main` → deploy de producción · cada push a `feature/*` → preview URL.
+
 ## 🚀 Cómo se despliega
 
 Cada push a `main` dispara el workflow `deploy-driver-accounting.yml`:
