@@ -19,6 +19,72 @@ interface Props {
 
 const STORAGE_KEY = "islandcity:draft:entry";
 
+// Rich GPS display card (mockup C: type uppercase + name + full address + coords)
+const PLACE_ICONS: Record<string, string> = {
+  residence: "🏠", business: "🏢", airport: "✈️", hospital: "🏥", commercial: "🏪", other: "📍"
+};
+const PLACE_LABELS: Record<string, string> = {
+  residence: "RESIDENCE", business: "BUSINESS", airport: "AIRPORT", hospital: "HOSPITAL", commercial: "COMMERCIAL", other: "PLACE"
+};
+function GpsPlaceCard(props: {
+  kind: "pickup" | "dropoff";
+  value: string;
+  onChange: (v: string) => void;
+  meta: { placeType?: string; businessName?: string; address?: string; lat?: number; lng?: number; accuracy?: number; time?: string } | null;
+  onCapture: () => void;
+  onClear: () => void;
+}) {
+  const btnCls = props.kind === "pickup" ? "btn-pickup" : "btn-dropoff";
+  const btnLabel = props.kind === "pickup" ? "📍 PICKUP NOW" : "📍 DROPOFF NOW";
+  const headerLabel = props.kind === "pickup" ? "PICKUP" : "DROPOFF";
+  if (props.meta && props.meta.address) {
+    const pt = props.meta.placeType || "other";
+    const icon = PLACE_ICONS[pt] || "📍";
+    const typeLabel = PLACE_LABELS[pt] || "PLACE";
+    const showName = pt !== "residence" && props.meta.businessName;
+    return (
+      <div className="flex flex-col">
+        <div className="flex items-center justify-between">
+          <div className="text-[10px] font-black uppercase tracking-wider text-neutral-400">{headerLabel}</div>
+          <div className="flex items-center gap-1 rounded-full bg-[#0F3A1D] px-2 py-0.5 text-[9px] font-black tracking-wider text-[#22FF88]">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#22FF88]" />
+            GPS
+          </div>
+        </div>
+        <div className="mt-1 rounded-xl border border-[#1f3a1f] bg-[#0a1a0a] p-3">
+          <div className="flex items-baseline gap-2">
+            <span className="text-[10px] font-black uppercase tracking-[0.18em]" style={{ color: "#F5D78E" }}>{icon} {typeLabel}</span>
+            {showName && <span className="text-[13px] font-bold text-white">{props.meta.businessName}</span>}
+          </div>
+          <div className="mt-1 text-[11px] leading-tight text-neutral-400">DIR  {props.meta.address}</div>
+          {props.meta.lat != null && props.meta.lng != null && (
+            <div className="mt-1.5 font-mono text-[10px] text-neutral-500">
+              {props.meta.lat.toFixed(4)}, {props.meta.lng.toFixed(4)}
+              {props.meta.accuracy != null && <>  ·  ±{Math.round(props.meta.accuracy)}m</> }
+              {props.meta.time && <>  ·  {new Date(props.meta.time).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}</>}
+            </div>
+          )}
+        </div>
+        <div className="mt-2 flex gap-2">
+          <button onClick={props.onCapture} className={btnCls + " flex h-10 flex-1 items-center justify-center rounded-lg"}>{btnLabel}</button>
+          <button onClick={props.onClear} className="flex h-10 items-center justify-center rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-3 text-[11px] font-black text-neutral-400">✏️ EDIT</button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col">
+      <div className="text-[10px] font-black uppercase tracking-wider text-neutral-400">{headerLabel}</div>
+      <input
+        value={props.value}
+        onChange={(e) => props.onChange(e.target.value)}
+        placeholder="Tap GPS or enter address"
+        className="mt-1 h-12 w-full rounded-xl border border-[#2a2a2a] bg-black px-3 text-[13px] text-white outline-none placeholder:text-neutral-500"
+      />
+      <button onClick={props.onCapture} className={btnCls + " mt-2 flex h-10 w-full items-center justify-center rounded-lg"}>{btnLabel}</button>
+    </div>
+  );
+}
 interface DraftState {
   platform: string;
   earnings: string;
@@ -45,6 +111,8 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
   const [fee, setFee] = useState("");
   const [pickup, setPickup] = useState("");
   const [dropoff, setDropoff] = useState("");
+  const [pickupMeta, setPickupMeta] = useState<{ placeType?: string; businessName?: string; address?: string; lat?: number; lng?: number; accuracy?: number; time?: string } | null>(null);
+  const [dropoffMeta, setDropoffMeta] = useState<{ placeType?: string; businessName?: string; address?: string; lat?: number; lng?: number; accuracy?: number; time?: string } | null>(null);
   const [invoiceRef, setInvoiceRef] = useState("");
   const [notes, setNotes] = useState("");
   const [tollDetails, setTollDetails] = useState<{ name: string; price: number }[]>([]);
@@ -128,13 +196,30 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
     try {
       const gpsPoint = await getCurrentLocation();
       const placeIcon = getPlaceIcon(gpsPoint.placeType || "business");
-      const locationString = `${placeIcon} ${gpsPoint.businessName || "Detected Location"}\n${gpsPoint.address || ""}`;
-
+      const placeType = gpsPoint.placeType || "business";
+      const businessName = gpsPoint.businessName || "";
+      const address = gpsPoint.address || "";
+      // For "residence" we never show name as title; for business/hospital/airport we do
+      const titleForLegacy = placeType === "residence"
+        ? `${placeIcon} RESIDENCE`
+        : `${placeIcon} ${(placeType || "place").toString().toUpperCase()}${businessName ? " · " + businessName : ""}`;
+      const locationString = `${titleForLegacy}\n${address}`;
+      const meta = {
+        placeType,
+        businessName,
+        address,
+        lat: gpsPoint.lat,
+        lng: gpsPoint.lng,
+        accuracy: gpsPoint.accuracy,
+        time: now,
+      };
       if (kind === "pickup") {
         setPickup(locationString);
+        setPickupMeta(meta);
         setPickupTimestamp(now);
       } else {
         setDropoff(locationString);
+        setDropoffMeta(meta);
         setDropoffTimestamp(now);
       }
       onCapture(kind);
@@ -186,7 +271,9 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
     setNotes("");
     setTollDetails([]);
     setPickupTimestamp(null);
+    setPickupMeta(null);
     setDropoffTimestamp(null);
+    setDropoffMeta(null);
   };
 
         const field = (label: string, value: string, setter: (v: string) => void, placeholder: string, colorClass: string = "#1E3A8A") => (
@@ -243,16 +330,22 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
       {/* ═══ BLOQUE 2: OPERACIÓN / ACCIÓN RÁPIDA ═══ */}
       <div className="section-operational rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-4">
         <div className="operational-grid">
-          <div className="flex flex-col">
-            <div className="text-[10px] font-black uppercase tracking-wider text-neutral-400">PICKUP</div>
-            <input value={pickup} onChange={(e) => setPickup(e.target.value)} placeholder="Tap GPS or enter address" className="mt-1 h-12 w-full rounded-xl border border-[#2a2a2a] bg-black px-3 text-[13px] text-white outline-none placeholder:text-neutral-500" />
-            <button onClick={() => captureLocation("pickup")} className="btn-pickup mt-2 flex h-10 w-full items-center justify-center rounded-lg">📍 PICKUP NOW</button>
-          </div>
-          <div className="flex flex-col">
-            <div className="text-[10px] font-black uppercase tracking-wider text-neutral-400">DROPOFF</div>
-            <input value={dropoff} onChange={(e) => setDropoff(e.target.value)} placeholder="Tap GPS or enter address" className="mt-1 h-12 w-full rounded-xl border border-[#2a2a2a] bg-black px-3 text-[13px] text-white outline-none placeholder:text-neutral-500" />
-            <button onClick={() => captureLocation("dropoff")} className="btn-dropoff mt-2 flex h-10 w-full items-center justify-center rounded-lg">📍 DROPOFF NOW</button>
-          </div>
+          <GpsPlaceCard
+            kind="pickup"
+            value={pickup}
+            onChange={setPickup}
+            meta={pickupMeta}
+            onCapture={() => captureLocation("pickup")}
+            onClear={() => { setPickup(""); setPickupMeta(null); }}
+          />
+          <GpsPlaceCard
+            kind="dropoff"
+            value={dropoff}
+            onChange={setDropoff}
+            meta={dropoffMeta}
+            onCapture={() => captureLocation("dropoff")}
+            onClear={() => { setDropoff(""); setDropoffMeta(null); }}
+          />
         </div>
       </div>
 
