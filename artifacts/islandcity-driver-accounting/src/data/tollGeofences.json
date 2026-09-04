@@ -1,0 +1,302 @@
+[
+  {
+    "toll_id": "MTA-QMT",
+    "name": "Queens–Midtown Tunnel",
+    "authority": "MTA_BT",
+    "crossing_type": "tunnel",
+    "road": "I-495",
+    "lat": 40.7506,
+    "lng": -73.9651,
+    "geofence_radius_m": 150,
+    "allowed_bearings": [
+      90,
+      100,
+      270,
+      280
+    ],
+    "default_tariff_usd_cents": null,
+    "source_url": "https://new.mta.info/bridges-and-tunnels/toll-rates",
+    "unverified": true,
+    "notes": "Verify 2026 E-ZPass rate at source before activation"
+  },
+  {
+    "toll_id": "MTA-BBT",
+    "name": "Brooklyn–Battery Tunnel",
+    "authority": "MTA_BT",
+    "crossing_type": "tunnel",
+    "road": "I-478",
+    "lat": 40.7041,
+    "lng": -74.0139,
+    "geofence_radius_m": 150,
+    "allowed_bearings": [
+      0,
+      10,
+      180,
+      190
+    ],
+    "default_tariff_usd_cents": null,
+    "source_url": "https://new.mta.info/bridges-and-tunnels/toll-rates",
+    "unverified": true
+  },
+  {
+    "toll_id": "MTA-VNB",
+    "name": "Verrazzano-Narrows Bridge",
+    "authority": "MTA_BT",
+    "crossing_type": "bridge",
+    "road": "I-278",
+    "lat": 40.6066,
+    "lng": -74.0447,
+    "geofence_radius_m": 150,
+    "allowed_bearings": [
+      0,
+      10,
+      180,
+      190
+    ],
+    "default_tariff_usd_cents": null,
+    "source_url": "https://new.mta.info/bridges-and-tunnels/toll-rates",
+    "unverified": true
+  },
+  {
+    "toll_id": "MTA-HLB",
+    "name": "Henry Hudson Bridge",
+    "authority": "MTA_BT",
+    "crossing_type": "bridge",
+    "road": "NY-9A",
+    "lat": 40.8778,
+    "lng": -73.9228,
+    "geofence_radius_m": 100,
+    "allowed_bearings": [
+      0,
+      180
+    ],
+    "default_tariff_usd_cents": null,
+    "source_url": "https://new.mta.info/bridges-and-tunnels/toll-rates",
+    "unverified": true
+  },
+  {
+    "toll_id": "MTA-RFK",
+    "name": "Robert F. Kennedy Bridge",
+    "authority": "MTA_BT",
+    "crossing_type": "bridge",
+    "road": "I-278",
+    "lat": 40.7813,
+    "lng": -73.927,
+    "geofence_radius_m": 200,
+    "allowed_bearings": [
+      0,
+      45,
+      90,
+      180,
+      225,
+      270
+    ],
+    "default_tariff_usd_cents": null,
+    "source_url": "https://new.mta.info/bridges-and-tunnels/toll-rates",
+    "unverified": true
+  },
+  {
+    "toll_id": "MTA-MPB",
+    "name": "Marine Parkway–Gil Hodges Bridge",
+    "authority": "MTA_BT",
+    "crossing_type": "bridge",
+    "road": "NY-27",
+    "lat": 40.5962,
+    "lng": -73.8852,
+    "geofence_radius_m": 100,
+    "allowed_bearings": [
+      0,
+      180
+    ],
+    "default_tariff_usd_cents": null,
+    "source_url": "https://new.mta.info/bridges-and-tunnels/toll-rates",
+    "unverified": true
+  },
+  {
+    "toll_id": "MTA-CBB",
+    "name": "Cross Bay Veterans Memorial Bridge",
+    "authority": "MTA_BT",
+    "crossing_type": "bridge",
+    "road": "NY-27",
+    "lat": 40.5892,
+    "lng": -73.8202,
+    "geofence_radius_m": 100,
+    "allowed_bearings": [
+      0,
+      180
+    ],
+    "default_tariff_usd_cents": null,
+    "source_url": "https://new.mta.info/bridges-and-tunnels/toll-rates",
+    "unverified": true
+  },
+  {
+    "toll_id": "MTA-BWB",
+    "name": "Bronx–Whitestone Bridge",
+    "authority": "MTA_BT",
+    "crossing_type": "bridge",
+    "road": "I-678",
+    "lat": 40.8016,
+    "lng": -73.83,
+    "geofence_radius_m": 150,
+    "allowed_bearings": [
+      0,
+      180
+    ],
+    "default_tariff_usd_cents": null,
+    "source_url": "https://new.mta.info/bridges-and-tunnels/toll-rates",
+    "unverified": true
+  },
+  {
+    "toll_id": "MTA-TBB",
+    "name": "Throgs Neck Bridge",
+    "authority": "MTA_BT",
+    "crossing_type": "bridge",
+    "road": "I-295",
+    "lat": 40.8015,
+    "lng": -73.7935,
+    "geofence_radius_m": 150,
+    "allowed_bearings": [
+      0,
+      180
+    ],
+    "default_tariff_usd_cents": null,
+    "source_url": "https://new.mta.info/bridges-and-tunnels/toll-rates",
+    "unverified": true
+  },
+  {
+    "toll_id": "PANYNJ-GWB",
+    "name": "George Washington Bridge",
+    "authority": "PANYNJ",
+    "crossing_type": "bridge",
+    "road": "I-95",
+    "lat": 40.8517,
+    "lng": -73.9527,
+    "geofence_radius_m": 250,
+    "allowed_bearings": [
+      0,
+      180
+    ],
+    "default_tariff_usd_cents": null,
+    "source_url": "https://www.panynj.gov/bridges-tunnels/tolls.html",
+    "unverified": true
+  },
+  {
+    "toll_id": "PANYNJ-LT",
+    "name": "Lincoln Tunnel",
+    "authority": "PANYNJ",
+    "crossing_type": "tunnel",
+    "road": "NJ-495",
+    "lat": 40.7585,
+    "lng": -74.0011,
+    "geofence_radius_m": 250,
+    "allowed_bearings": [
+      90,
+      270
+    ],
+    "default_tariff_usd_cents": null,
+    "source_url": "https://www.panynj.gov/bridges-tunnels/tolls.html",
+    "unverified": true
+  },
+  {
+    "toll_id": "PANYNJ-HT",
+    "name": "Holland Tunnel",
+    "authority": "PANYNJ",
+    "crossing_type": "tunnel",
+    "road": "I-78",
+    "lat": 40.7269,
+    "lng": -74.0119,
+    "geofence_radius_m": 200,
+    "allowed_bearings": [
+      90,
+      270
+    ],
+    "default_tariff_usd_cents": null,
+    "source_url": "https://www.panynj.gov/bridges-tunnels/tolls.html",
+    "unverified": true
+  },
+  {
+    "toll_id": "PANYNJ-GB",
+    "name": "Goethals Bridge",
+    "authority": "PANYNJ",
+    "crossing_type": "bridge",
+    "road": "I-278",
+    "lat": 40.636,
+    "lng": -74.195,
+    "geofence_radius_m": 150,
+    "allowed_bearings": [
+      0,
+      180
+    ],
+    "default_tariff_usd_cents": null,
+    "source_url": "https://www.panynj.gov/bridges-tunnels/tolls.html",
+    "unverified": true
+  },
+  {
+    "toll_id": "PANYNJ-OB",
+    "name": "Outerbridge Crossing",
+    "authority": "PANYNJ",
+    "crossing_type": "bridge",
+    "road": "NY-440",
+    "lat": 40.5239,
+    "lng": -74.2447,
+    "geofence_radius_m": 150,
+    "allowed_bearings": [
+      0,
+      180
+    ],
+    "default_tariff_usd_cents": null,
+    "source_url": "https://www.panynj.gov/bridges-tunnels/tolls.html",
+    "unverified": true
+  },
+  {
+    "toll_id": "PANYNJ-BB",
+    "name": "Bayonne Bridge",
+    "authority": "PANYNJ",
+    "crossing_type": "bridge",
+    "road": "NY-440",
+    "lat": 40.6414,
+    "lng": -74.1423,
+    "geofence_radius_m": 150,
+    "allowed_bearings": [
+      0,
+      180
+    ],
+    "default_tariff_usd_cents": null,
+    "source_url": "https://www.panynj.gov/bridges-tunnels/tolls.html",
+    "unverified": true
+  },
+  {
+    "toll_id": "NYSTA-TZ",
+    "name": "Tappan Zee / Governor Mario M. Cuomo Bridge",
+    "authority": "NYSTA",
+    "crossing_type": "bridge",
+    "road": "I-87 / I-287",
+    "lat": 41.0716,
+    "lng": -73.8924,
+    "geofence_radius_m": 300,
+    "allowed_bearings": [
+      0,
+      180
+    ],
+    "default_tariff_usd_cents": null,
+    "source_url": "https://www.thruway.ny.gov/about/toll/",
+    "unverified": true
+  },
+  {
+    "toll_id": "NYSTA-NB",
+    "name": "Newburgh–Beacon Bridge",
+    "authority": "NYSTA",
+    "crossing_type": "bridge",
+    "road": "I-84",
+    "lat": 41.52,
+    "lng": -73.99,
+    "geofence_radius_m": 200,
+    "allowed_bearings": [
+      0,
+      180
+    ],
+    "default_tariff_usd_cents": null,
+    "source_url": "https://www.thruway.ny.gov/about/toll/",
+    "unverified": true
+  }
+]

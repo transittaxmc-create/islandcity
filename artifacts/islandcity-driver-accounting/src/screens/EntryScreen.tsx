@@ -57,13 +57,6 @@ function GpsPlaceCard(props: {
             {showName && <span className="text-[13px] font-bold text-white">{props.meta.businessName}</span>}
           </div>
           <div className="mt-0.5 truncate text-[10px] text-neutral-500">DIR  {props.meta.address}</div>
-          {props.meta.lat != null && props.meta.lng != null && (
-            <div className="mt-1 font-mono text-[10px] text-neutral-500">
-              {props.meta.lat.toFixed(4)}, {props.meta.lng.toFixed(4)}
-              {props.meta.accuracy != null && <>  ·  ±{Math.round(props.meta.accuracy)}m</> }
-              {props.meta.time && <>  ·  {new Date(props.meta.time).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}</>}
-            </div>
-          )}
         </div>
         <div className="mt-1.5 flex gap-1.5">
           <button onClick={props.onCapture} className={btnCls + " flex h-10 flex-1 items-center justify-center rounded-lg"}>{btnLabel}</button>
