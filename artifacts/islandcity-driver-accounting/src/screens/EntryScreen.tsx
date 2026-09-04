@@ -210,7 +210,7 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
       <div className="section-header flex items-center justify-between gap-3 rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-4">
         <div className="relative" ref={ref}>
           <button onClick={() => setOpen(!open)} className="flex h-10 items-center gap-2 rounded-lg border border-[#2a2a2a] bg-black px-3 text-[12px] text-white">
-            {platformLogo(platform) && <img src={platformLogo(platform)!} alt="" className="h-5 w-5 rounded-full object-cover" />}
+            {platformLogo(platform) && <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/95 ring-1 ring-[#2a2a2a]"><img src={platformLogo(platform)!} alt="" className="h-5 w-5 rounded-full object-contain" /></span>}
             <span className="font-semibold">{platform}</span>
             <ChevronDown className="h-3 w-3 text-neutral-400" />
           </button>
@@ -218,7 +218,7 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
             <div className="absolute left-0 top-full z-50 mt-1 max-h-60 w-48 overflow-y-auto rounded-xl border border-[#2a2a2a] bg-[#0e0e0e] shadow-xl">
               {PLATFORMS.map((p) => (
                 <button key={p.name} onClick={() => { setPlatform(p.name); setOpen(false); }} className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] hover:bg-[#1a1a1a] ${p.name === platform ? "bg-[#1a1a1a] text-white" : "text-neutral-300"}`}>
-                  {p.logo && <img src={`${import.meta.env.BASE_URL}logos/${p.logo}`} alt="" className="h-5 w-5 rounded-full object-cover" />}
+                  {p.logo && <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/95 ring-1 ring-[#2a2a2a]"><img src={`${import.meta.env.BASE_URL}logos/${p.logo}`} alt="" className="h-6 w-6 rounded-full object-contain" /></span>}
                   <span className="font-medium">{p.name}</span>
                 </button>
               ))}
