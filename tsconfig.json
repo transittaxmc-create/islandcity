@@ -4,16 +4,7 @@
   "files": [],
   "references": [
     {
-      "path": "./lib/db"
-    },
-    {
-      "path": "./lib/api-client-react"
-    },
-    {
-      "path": "./lib/api-zod"
-    },
-    {
-      "path": "./lib/integrations-gemini-ai"
+      "path": "./artifacts/islandcity-driver-accounting"
     }
   ]
 }
