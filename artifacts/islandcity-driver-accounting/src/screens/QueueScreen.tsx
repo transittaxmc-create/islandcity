@@ -11,6 +11,9 @@ interface Props {
   onDelete: (id: string) => void;
   onPost: (id: string) => void;
   onReconcile: (id: string, paidAmount: number, paymentReference: string) => void;
+  dayClosed: boolean;
+  onCloseDay: () => void;
+  onReopenDay: () => void;
 }
 
 
@@ -86,7 +89,7 @@ function EditableLocation({ label, value, onChange }: { label: string; value: Ge
     </div>
   );
 }
-export default function QueueScreen({ entries, onEdit, onEditEntry, onDelete, onPost, onReconcile }: Props) {
+export default function QueueScreen({ entries, onEdit, onEditEntry, onDelete, onPost, onReconcile, dayClosed, onCloseDay, onReopenDay }: Props) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "pending" | "reconciled" | "ledger">("all");
   const openCount = entries.filter((e) => e.status === "open").length;
@@ -127,6 +130,14 @@ export default function QueueScreen({ entries, onEdit, onEditEntry, onDelete, on
             </button>
           ))}
         </div>
+        <button
+          onClick={dayClosed ? onReopenDay : onCloseDay}
+          className={dayClosed
+            ? "mt-2 h-10 w-full rounded-lg border border-[#2a2a2a] bg-black text-[11px] font-black tracking-wider text-neutral-300"
+            : "mt-2 h-10 w-full rounded-lg border border-[#f8717155] bg-[#f8717115] text-[11px] font-black tracking-wider text-[#f87171]"}
+        >
+          {dayClosed ? "🔓 DÍA CERRADO — REABRIR PARA EDITAR" : "🔒 CERRAR DÍA (bloquea el registro de hoy)"}
+        </button>
       </div>
 
       {visible.length === 0 && (

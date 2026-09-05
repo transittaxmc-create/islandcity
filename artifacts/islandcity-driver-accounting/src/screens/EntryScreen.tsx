@@ -1,4 +1,4 @@
-﻿// â”€â”€ Daily Entry Â· main income entry (spec DOC FINAL RESTRUCTURED) â”€â”€â”€â”€â”€
+// â”€â”€ Daily Entry Â· main income entry (spec DOC FINAL RESTRUCTURED) â”€â”€â”€â”€â”€
 // Spec DOC: DAILY Entry + Queue + Mileage GPS + Break/Lunch logic
 import { useEffect, useRef, useState, useCallback } from "react";
 import { ChevronDown } from "lucide-react";
@@ -298,6 +298,8 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
   }, [detectedToll]);
 
   const platformType: PlatformType = PLATFORMS.find((p) => p.name === platform)?.type ?? "RIDESHARE";
+  const hourNow = new Date().getHours();
+  const greeting = hourNow < 12 ? "Good morning" : hourNow < 18 ? "Good afternoon" : "Good evening";
   const showInvoice = platformType === "VOUCHER" || platformType === "ACCESS";
   const nEarnings = parseFloat(earnings) || 0;
   const nExtra = parseFloat(extraCash) || 0;
@@ -462,7 +464,7 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
         <div className="daily-entry-container h-[calc(100dvh-62px)] overflow-hidden pb-24">
         <div className="flex h-12 shrink-0 items-center justify-between gap-2 px-1">
           <div className="min-w-0">
-            <div className="truncate text-[14px] font-black text-white">Good afternoon, Driver</div>
+            <div className="truncate text-[14px] font-black text-white">{greeting}, Driver</div>
             <div className="truncate text-[10px] text-neutral-500">{todayLabel}</div>
           </div>
           <EntryGpsIndicator />
@@ -502,11 +504,8 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
         )}
       </div>
       <div className="section-fare grid grid-cols-2 gap-2 rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-3">
-        {field("GROSS FARE", earnings, setEarnings, "$0.00", "#1E3A8A")}
-        <div>
-          <label className="text-[10px] font-black uppercase tracking-wider text-neutral-400">REF / INVOICE</label>
-          <input value={invoiceRef} onChange={(e) => setInvoiceRef(e.target.value)} placeholder="Reference" className="mt-1 h-12 w-full rounded-xl border border-[#2a2a2a] bg-black px-3 text-[13px] text-white outline-none placeholder:text-neutral-500" />
-        </div>
+        {field("EARNINGS", earnings, setEarnings, "$0.00", "#1E3A8A")}
+        {field("EXTRA CASH", extraCash, setExtraCash, "$0.00", "#16A34A")}
       </div>
 
       {/* â•â•â• BLOQUE 2: OPERACIÃ“N / ACCIÃ“N RÃPIDA â•â•â• */}
@@ -537,6 +536,10 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
           {field("TIPS", tips, setTips, "$0.00", "#CA8A04")}
           {field("TOLL", toll, setToll, "$0.00", "#EA580C")}
           {field("PLATFORM FEE", fee, setFee, "$0.00", "#DC2626")}
+        </div>
+        <div className="mt-2">
+          <label className="text-[10px] font-black uppercase tracking-wider text-neutral-400">REF / INVOICE</label>
+          <input value={invoiceRef} onChange={(e) => setInvoiceRef(e.target.value)} placeholder="Reference" className="mt-1 h-12 w-full rounded-xl border border-[#2a2a2a] bg-black px-3 text-[13px] text-white outline-none placeholder:text-neutral-500" />
         </div>
       </div>
 

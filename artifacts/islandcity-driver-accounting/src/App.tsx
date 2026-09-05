@@ -251,6 +251,16 @@ export default function App() {
     showToast(paidAmount >= 0 ? "Pago comparado con la transacción" : "Pago inválido");
   }, [showToast, update]);
 
+  const closeDay = useCallback(() => {
+    update((s) => ({ ...s, closedDays: { ...s.closedDays, [todayStr(clock)]: true } }));
+    showToast("🔒 Día cerrado — Daily Entry bloqueado");
+  }, [clock, showToast, update]);
+
+  const reopenDay = useCallback(() => {
+    update((s) => ({ ...s, closedDays: { ...s.closedDays, [todayStr(clock)]: false } }));
+    showToast("🔓 Día reabierto");
+  }, [clock, showToast, update]);
+
   const addExpense = useCallback((e: ReceiptRecord) => {
     setExpenses((prev) => {
       const n = [e, ...prev];
@@ -312,6 +322,7 @@ export default function App() {
   }, [gps, showToast]);
 
   const today = todayStr(clock);
+  const dayClosed = !!state.closedDays[today];
   const openEntries = state.entries.filter((e) => e.status === "open");
   const todayPosted = state.entries.filter((e) => e.datetime.slice(0, 10) === today && e.status === "posted");
   const grossToday = todayPosted.reduce((s, e) => s + e.grossIncome, 0);
@@ -476,8 +487,8 @@ export default function App() {
       )}
       <div className="px-3 pt-3">
         {tab !== "ENTRY" && <GpsStatusBar />}
-        {tab === "ENTRY" && <EntryScreen addEntry={addEntry} todayLabel={headerDateTime(clock)} onCapture={captureGPS} dayClosed={false} onBreakStart={startBreak} onBreakEnd={endBreak} isOnBreak={isOnBreak} detectedToll={detectedToll} />}
-        {tab === "QUEUE" && <QueueScreen entries={state.entries} onEdit={setEditTarget} onEditEntry={editEntry} onDelete={deleteEntry} onPost={postEntry} onReconcile={reconcileEntry} />}
+        {tab === "ENTRY" && <EntryScreen addEntry={addEntry} todayLabel={headerDateTime(clock)} onCapture={captureGPS} dayClosed={dayClosed} onBreakStart={startBreak} onBreakEnd={endBreak} isOnBreak={isOnBreak} detectedToll={detectedToll} />}
+        {tab === "QUEUE" && <QueueScreen entries={state.entries} onEdit={setEditTarget} onEditEntry={editEntry} onDelete={deleteEntry} onPost={postEntry} onReconcile={reconcileEntry} dayClosed={dayClosed} onCloseDay={closeDay} onReopenDay={reopenDay} />}
         {tab === "LEDGER" && <TransactionLedgerScreen entries={state.entries} />}
         {tab === "EXPENSES" && <ExpensesScreen entries={state.entries} addExpense={addExpense} expenses={expenses} transactions={transactions} updateTransaction={updateTransaction} />}
         {tab === "DASH" && (
