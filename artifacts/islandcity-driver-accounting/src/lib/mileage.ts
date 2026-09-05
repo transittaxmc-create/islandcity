@@ -75,6 +75,8 @@ export interface GeocodeResult {
   address: string;        // full street, city, state, zip
   placeType: PlaceType;
   city?: string;          // city/town for the GPS header bar
+  street?: string;
+  zip?: string;
   lat: number;
   lng: number;
 }
@@ -128,6 +130,8 @@ async function tomTomGeocode(lat: number, lng: number): Promise<GeocodeResult | 
       address: a.address?.freeformAddress ?? `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
       placeType,
       city: a.address?.municipality ?? a.address?.countrySubdivision ?? "",
+      street: a.address?.streetName ?? "",
+      zip: a.address?.postalCode ?? "",
       lat, lng,
     };
   } catch {
@@ -156,6 +160,8 @@ async function nominatimGeocode(lat: number, lng: number): Promise<GeocodeResult
       address: data.display_name ?? `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
       placeType,
       city: a.city ?? a.town ?? a.village ?? a.county ?? "",
+      street: a.road ?? a.pedestrian ?? "",
+      zip: a.postcode ?? "",
       lat, lng,
     };
   } catch {
@@ -174,6 +180,8 @@ export async function reverseGeocode(lat: number, lng: number): Promise<GeocodeR
     address: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
     placeType: "other",
     city: "",
+    street: "",
+    zip: "",
     lat, lng,
   };
 }

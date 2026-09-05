@@ -4,7 +4,9 @@
 //          Net   = Gross - PlatformFee
 
 export type PlatformType = "RIDESHARE" | "VOUCHER" | "ACCESS";
-export type TripStatus = "open" | "posted";
+export type TripStatus = "open" | "reconciled" | "posted";
+
+export type ReconciliationStatus = "pending" | "reconciled" | "difference";
 
 export interface GeoTag {
   address: string;
@@ -14,8 +16,14 @@ export interface GeoTag {
   type: string;
   icon: string;
   timestamp: string;
+  /** Day (YYYY-MM-DD) the capture happened, recorded separately so the
+   *  transaction keeps the calendar day even if the timestamp is shifted. */
+  day?: string;
   accuracy?: number;
   terminal?: string;
+  street?: string;
+  city?: string;
+  zip?: string;
 }
 
 export interface TollDetail {
@@ -41,6 +49,16 @@ export interface EntryRecord {
   invoiceRef?: string;
   notes: string;
   status: TripStatus;
+  reconciliation?: {
+    status: ReconciliationStatus;
+    paidAmount?: number;
+    paidAt?: string;
+    paymentMethod?: string;
+    paymentReference?: string;
+    difference?: number;
+  };
+  miles?: number | null;
+  durationMinutes?: number | null;
 }
 
 export interface AppState {

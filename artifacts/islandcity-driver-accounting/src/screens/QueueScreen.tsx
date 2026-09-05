@@ -10,6 +10,7 @@ interface Props {
   onEditEntry: (e: EntryRecord) => void;  // direct in-place update (no modal)
   onDelete: (id: string) => void;
   onPost: (id: string) => void;
+  onReconcile: (id: string, paidAmount: number, paymentReference: string) => void;
 }
 
 
@@ -41,6 +42,7 @@ function EditableLocation({ label, value, onChange }: { label: string; value: Ge
         type: addr.placeType || value.type,
         icon: getPlaceIcon(addr.placeType || "business"),
         timestamp: new Date().toISOString(),
+        day: new Date().toISOString().split("T")[0],
       });
     } finally { setBusy(false); }
   };
@@ -76,7 +78,7 @@ function EditableLocation({ label, value, onChange }: { label: string; value: Ge
         {value.lat != null && value.lng != null && <span>{value.lat.toFixed(4)}, {value.lng.toFixed(4)}</span>}
         {value.accuracy != null && <span>±{Math.round(value.accuracy)}m</span>}
         {value.timestamp && <span>{new Date(value.timestamp).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}</span>}
-        {value.timestamp && <span className="text-neutral-600">{new Date(value.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>}
+        {(value.day || value.timestamp) && <span className="text-neutral-600">{value.day || new Date(value.timestamp!).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>}
         <button onClick={recapture} disabled={busy} className="ml-auto rounded border border-[#FFD70055] bg-[#FFD70011] px-2 py-0.5 text-[9px] font-black tracking-wider text-[#FFD700] disabled:opacity-50">
           {busy ? "..." : "📍 RE-CAPTURE"}
         </button>
@@ -84,46 +86,60 @@ function EditableLocation({ label, value, onChange }: { label: string; value: Ge
     </div>
   );
 }
-export default function QueueScreen({ entries, onEdit, onEditEntry, onDelete, onPost }: Props) {
+export default function QueueScreen({ entries, onEdit, onEditEntry, onDelete, onPost, onReconcile }: Props) {
   const [expanded, setExpanded] = useState<string | null>(null);
-  const open = entries.filter((e) => e.status === "open");
-  const totalGross = open.reduce((s, e) => s + e.grossIncome, 0);
-  const totalNet = open.reduce((s, e) => s + e.netPayout, 0);
+  const [filter, setFilter] = useState<"all" | "pending" | "reconciled" | "ledger">("all");
+  const openCount = entries.filter((e) => e.status === "open").length;
+  const visible = entries.filter((e) => {
+    if (filter === "pending") return e.status === "open" || e.reconciliation?.status === "pending" || e.reconciliation?.status === "difference";
+    if (filter === "reconciled") return e.status === "reconciled" || e.reconciliation?.status === "reconciled";
+    if (filter === "ledger") return e.status === "posted";
+    return true;
+  });
+  const totalGross = visible.reduce((s, e) => s + e.grossIncome, 0);
+  const totalNet = visible.reduce((s, e) => s + e.netPayout, 0);
 
   return (
     <div className="space-y-3 pb-4">
       <div className="rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-4">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">QUEUE</span>
-          <span className="rounded-full border border-[#FF8C0055] bg-[#FF8C0018] px-2 py-0.5 text-[10px] font-black text-[#FF8C00]">{open.length} open</span>
+          <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">REGISTER</span>
+          <span className="rounded-full border border-[#FF8C0055] bg-[#FF8C0018] px-2 py-0.5 text-[10px] font-black text-[#FF8C00]">{openCount} pending</span>
         </div>
         <div className="mt-2 grid grid-cols-3 gap-2 text-center">
           <div className="rounded-lg bg-black p-2">
-            <div className="text-[8px] font-bold text-neutral-500">TOTAL GROSS Q</div>
+            <div className="text-[8px] font-bold text-neutral-500">TOTAL GROSS</div>
             <div className="font-mono text-[15px] font-black text-[#FFD700]">{fmt(totalGross)}</div>
           </div>
           <div className="rounded-lg bg-black p-2">
-            <div className="text-[8px] font-bold text-neutral-500">TOTAL NET Q</div>
+            <div className="text-[8px] font-bold text-neutral-500">TOTAL NET</div>
             <div className="font-mono text-[15px] font-black text-[#00FF6A]">{fmt(totalNet)}</div>
           </div>
           <div className="rounded-lg bg-black p-2">
-            <div className="text-[8px] font-bold text-neutral-500">COUNT OPEN</div>
-            <div className="font-mono text-[15px] font-black text-white">{open.length}</div>
+            <div className="text-[8px] font-bold text-neutral-500">COUNT PENDING</div>
+            <div className="font-mono text-[15px] font-black text-white">{openCount}</div>
           </div>
+        </div>
+        <div className="mt-3 grid grid-cols-4 gap-1">
+          {(["all", "pending", "reconciled", "ledger"] as const).map((value) => (
+            <button key={value} onClick={() => setFilter(value)} className={`h-8 rounded-lg text-[9px] font-black uppercase ${filter === value ? "bg-[#FFD700] text-black" : "bg-black text-neutral-500"}`}>
+              {value === "all" ? "ALL" : value === "pending" ? "PENDING" : value === "reconciled" ? "MATCHED" : "LEDGER"}
+            </button>
+          ))}
         </div>
       </div>
 
-      {open.length === 0 && (
+      {visible.length === 0 && (
         <div className="rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] py-10 text-center text-[13px] font-bold text-[#6f6f6f]">
           No trips in queue — graba tu primer viaje en Daily Entry
         </div>
       )}
-      {open.map((e) => {
+      {visible.map((e) => {
         const isOpen = expanded === e.id;
         return (
           <div key={e.id} className="rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-3">
             {/* compact row 2-3 lines spec */}
-            <button onClick={() => setExpanded(isOpen ? null : e.id)} className="w-full text-left">
+            <button onClick={() => onEdit(e)} className="w-full text-left">
               <div className="flex items-center gap-2">
                 {platformLogo(e.platform) ? (
                   <img src={platformLogo(e.platform)!} alt="" className="h-5 w-5 rounded object-contain" />
@@ -145,7 +161,9 @@ export default function QueueScreen({ entries, onEdit, onEditEntry, onDelete, on
               </div>
               <div className="mt-1 flex items-center justify-between text-[10px] font-bold text-[#8a8a8a]">
                 <span className="truncate">{e.pickup.address || "—"} → {e.dropoff.address || "—"}</span>
-                <span className="ml-2 rounded-full border border-[#FF8C0055] bg-[#FF8C0018] px-1.5 py-0.5 text-[8px] font-black text-[#FF8C00]">OPEN</span>
+                <span className={`ml-2 rounded-full border px-1.5 py-0.5 text-[8px] font-black ${e.status === "reconciled" ? "border-[#00FF6A55] bg-[#00FF6A18] text-[#00FF6A]" : "border-[#FF8C0055] bg-[#FF8C0018] text-[#FF8C00]"}`}>
+                  {e.status === "reconciled" ? "RECONCILIADA" : e.status === "posted" ? "LEDGER" : "PENDIENTE"}
+                </span>
               </div>
             </button>
 
@@ -171,10 +189,23 @@ export default function QueueScreen({ entries, onEdit, onEditEntry, onDelete, on
                   onChange={(next) => onEditEntry({ ...e, dropoff: next })}
                 />
                 {e.notes && <div className="text-[11px]"><span className="text-neutral-500">Notes:</span> <span className="text-white">{e.notes}</span></div>}
+                <div className="rounded-xl border border-[#2a2a2a] bg-black p-3">
+                  <div className="mb-2 text-[10px] font-black uppercase tracking-wider text-neutral-400">PAYMENT MATCH</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input id={`paid-${e.id}`} type="number" step="0.01" placeholder="Paid amount" className="h-9 rounded-lg border border-[#2a2a2a] bg-[#0e0e0e] px-2 text-[12px] text-white outline-none" />
+                    <input id={`ref-${e.id}`} placeholder="Payment reference" className="h-9 rounded-lg border border-[#2a2a2a] bg-[#0e0e0e] px-2 text-[12px] text-white outline-none" />
+                  </div>
+                  {e.reconciliation?.difference != null && <div className="mt-1 text-[10px] text-[#F5D78E]">Difference: {fmt(e.reconciliation.difference)}</div>}
+                  <button onClick={() => {
+                    const amount = Number((document.getElementById(`paid-${e.id}`) as HTMLInputElement)?.value || e.netPayout);
+                    const reference = (document.getElementById(`ref-${e.id}`) as HTMLInputElement)?.value || "";
+                    onReconcile(e.id, amount, reference);
+                  }} className="mt-2 h-9 w-full rounded-lg bg-[#22FF88] text-[10px] font-black text-black">MATCH PAYMENT</button>
+                </div>
                 <div className="grid grid-cols-3 gap-2">
                   <button onClick={() => onEdit(e)} className="h-10 rounded-lg bg-[#FFD700] text-[11px] font-black text-black">✏️ EDIT</button>
                   <button onClick={() => onDelete(e.id)} className="h-10 rounded-lg border border-[#f8717155] bg-[#f8717115] text-[11px] font-black text-[#f87171]">🗑 DELETE</button>
-                  <button onClick={() => onPost(e.id)} className="h-10 rounded-lg bg-[#00FF6A] text-[11px] font-black text-black">✓ POST</button>
+                  <button onClick={() => onPost(e.id)} disabled={e.status !== "reconciled"} className="h-10 rounded-lg bg-[#00FF6A] text-[11px] font-black text-black disabled:opacity-30">✓ LEDGER</button>
                 </div>
               </div>
             )}

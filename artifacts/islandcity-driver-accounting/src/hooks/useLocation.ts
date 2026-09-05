@@ -1,8 +1,8 @@
 // ── IslandCity Tip Tracker · location tracking hook ──────────────────
 // Spec DOC: LOGICA COMPLETA MILLAS LIGADAS GPS + BREAK/LUNCH
 
-import { useState, useCallback } from 'react';
-import { GPSPoint, reverseGeocode } from '../lib/mileage';
+import { useState, useCallback, useRef } from 'react';
+import { GPSPoint } from '../lib/mileage';
 
 export interface LocationState {
   currentPosition: GeolocationPosition | null;
@@ -13,6 +13,8 @@ export interface LocationState {
 }
 
 export function useLocation() {
+  const watchIdRef = useRef<number | null>(null);
+  const initialFixTimeoutRef = useRef<number | null>(null);
   const [state, setState] = useState<LocationState>({
     currentPosition: null,
     error: null,
@@ -37,8 +39,19 @@ export function useLocation() {
 
     setState(s => ({ ...s, isTracking: true, error: null }));
 
+    if (initialFixTimeoutRef.current !== null) window.clearTimeout(initialFixTimeoutRef.current);
+    initialFixTimeoutRef.current = window.setTimeout(() => {
+      setState(s => s.currentPosition ? s : { ...s, isTracking: false, error: "Location timeout" });
+      initialFixTimeoutRef.current = null;
+    }, 15000);
+
+    if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
+        if (initialFixTimeoutRef.current !== null) {
+          window.clearTimeout(initialFixTimeoutRef.current);
+          initialFixTimeoutRef.current = null;
+        }
         setState(s => ({
           ...s,
           currentPosition: pos,
@@ -48,6 +61,10 @@ export function useLocation() {
         }));
       },
       (err) => {
+        if (initialFixTimeoutRef.current !== null) {
+          window.clearTimeout(initialFixTimeoutRef.current);
+          initialFixTimeoutRef.current = null;
+        }
         setState(s => ({
           ...s,
           isTracking: s.currentPosition != null,
@@ -56,33 +73,39 @@ export function useLocation() {
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
     );
+    watchIdRef.current = watchId;
 
-    return () => navigator.geolocation.clearWatch(watchId);
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+      if (watchIdRef.current === watchId) watchIdRef.current = null;
+      if (initialFixTimeoutRef.current !== null) {
+        window.clearTimeout(initialFixTimeoutRef.current);
+        initialFixTimeoutRef.current = null;
+      }
+    };
   }, []);
 
   const getCurrentLocation = useCallback((): Promise<GPSPoint> => {
     return new Promise((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          try {
-            const geoData = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
-            const point: GPSPoint = {
-              lat: pos.coords.latitude,
-              lng: pos.coords.longitude,
-              accuracy: pos.coords.accuracy,
-              timestamp: new Date().toISOString(),
-              address: geoData.address,
-              businessName: geoData.businessName,
-              placeType: geoData.placeType
-            };
-            setState(s => ({ 
-              ...s, 
-              polyline: [...s.polyline, point]
-            }));
-            resolve(point);
-          } catch (e) {
-            reject(e);
-          }
+        (pos) => {
+          const point: GPSPoint = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+            timestamp: new Date().toISOString(),
+            address: `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`,
+            businessName: "",
+            placeType: "other",
+          };
+          setState(s => ({
+            ...s,
+            currentPosition: pos,
+            accuracy: pos.coords.accuracy,
+            error: null,
+            polyline: [...s.polyline, point],
+          }));
+          resolve(point);
         },
         (err) => reject(err),
         { enableHighAccuracy: true, timeout: 12000 }
@@ -91,6 +114,14 @@ export function useLocation() {
   }, []);
 
   const stopTracking = useCallback(() => {
+    if (watchIdRef.current !== null && navigator.geolocation) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    if (initialFixTimeoutRef.current !== null) {
+      window.clearTimeout(initialFixTimeoutRef.current);
+      initialFixTimeoutRef.current = null;
+    }
     setState(s => ({ ...s, isTracking: false }));
   }, []);
 

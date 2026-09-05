@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {ChartColumn, ClipboardList, Gauge, Home, Receipt, FileText, Sparkles, Boxes} from "lucide-react";
 import {
   emptyState,
+  calcGross,
+  calcNet,
   fmt,
   headerDateTime,
   todayStr,
@@ -17,6 +19,7 @@ import { useWakeLock } from "./hooks/useWakeLock";
 import DashScreen from "./screens/DashScreen";
 import EntryScreen from "./screens/EntryScreen";
 import QueueScreen from "./screens/QueueScreen";
+import TransactionLedgerScreen from "./screens/TransactionLedgerScreen";
 import ExpensesScreen from "./screens/ExpensesScreen";
 import { computeFinance } from "./screens/finance/financeData";
 import type { BankAdjEntry, RecurringPlan, WeekOverrides } from "./screens/finance/financeData";
@@ -26,7 +29,7 @@ import AiScreen from "./screens/AiScreen";
 import DataScreen from "./screens/DataScreen";
 import { GpsStatusBar } from "./components/GpsStatusBar";
 
-type Tab = "ENTRY" | "QUEUE" | "EXPENSES" | "DASH" | "FINANCE" | "REPORTS" | "AI" | "DATA";
+type Tab = "ENTRY" | "QUEUE" | "LEDGER" | "EXPENSES" | "DASH" | "FINANCE" | "REPORTS" | "AI" | "DATA";
 
 interface BreakRecord {
   id: string;
@@ -225,8 +228,27 @@ export default function App() {
   }, [showToast, update]);
 
   const postEntry = useCallback((id: string) => {
-    update((s) => ({ ...s, entries: s.entries.map((x) => (x.id === id ? { ...x, status: "posted" } : x)) }));
-    showToast("✓ POSTED → Ledger");
+    update((s) => ({ ...s, entries: s.entries.map((x) => (x.id === id && x.status === "reconciled" ? { ...x, status: "posted" } : x)) }));
+    showToast("✓ Transacción enviada al Ledger");
+  }, [showToast, update]);
+
+  const reconcileEntry = useCallback((id: string, paidAmount: number, paymentReference: string) => {
+    update((s) => ({ ...s, entries: s.entries.map((x) => {
+      if (x.id !== id) return x;
+      const difference = Number((paidAmount - x.netPayout).toFixed(2));
+      return {
+        ...x,
+        status: difference === 0 ? "reconciled" : "open",
+        reconciliation: {
+          status: difference === 0 ? "reconciled" : "difference",
+          paidAmount,
+          paidAt: new Date().toISOString(),
+          paymentReference,
+          difference,
+        },
+      };
+    }) }));
+    showToast(paidAmount >= 0 ? "Pago comparado con la transacción" : "Pago inválido");
   }, [showToast, update]);
 
   const addExpense = useCallback((e: ReceiptRecord) => {
@@ -237,6 +259,10 @@ export default function App() {
     });
     showToast("✓ Expense guardado");
   }, [showToast]);
+
+  const onAddEntry = useCallback((e: EntryRecord) => {
+    update((s) => ({ ...s, entries: [e, ...s.entries] }));
+  }, [update]);
 
   const updateTransaction = useCallback((t: EzpTransaction) => {
     setTransactions((prev) => {
@@ -431,7 +457,8 @@ export default function App() {
   }), [clock, state.entries, expenses, state.goal, workDays, dayTargets, weekOverrides, recurringPlan, bankBalance]);
   const tabs: { key: Tab; label: string; Icon: typeof Home }[] = [
     { key: "ENTRY", label: "ENTRY", Icon: Home },
-    { key: "QUEUE", label: "QUEUE", Icon: ClipboardList },
+    { key: "QUEUE", label: "REGISTER", Icon: ClipboardList },
+    { key: "LEDGER", label: "LEDGER", Icon: FileText },
     { key: "EXPENSES", label: "EXPENSES", Icon: Receipt },
     { key: "DASH", label: "DASH", Icon: Gauge },
     { key: "FINANCE", label: "FINANCE", Icon: ChartColumn },
@@ -448,9 +475,10 @@ export default function App() {
         </div>
       )}
       <div className="px-3 pt-3">
-        <GpsStatusBar />
+        {tab !== "ENTRY" && <GpsStatusBar />}
         {tab === "ENTRY" && <EntryScreen addEntry={addEntry} todayLabel={headerDateTime(clock)} onCapture={captureGPS} dayClosed={false} onBreakStart={startBreak} onBreakEnd={endBreak} isOnBreak={isOnBreak} detectedToll={detectedToll} />}
-        {tab === "QUEUE" && <QueueScreen entries={openEntries} onEdit={setEditTarget} onEditEntry={editEntry} onDelete={deleteEntry} onPost={postEntry} />}
+        {tab === "QUEUE" && <QueueScreen entries={state.entries} onEdit={setEditTarget} onEditEntry={editEntry} onDelete={deleteEntry} onPost={postEntry} onReconcile={reconcileEntry} />}
+        {tab === "LEDGER" && <TransactionLedgerScreen entries={state.entries} />}
         {tab === "EXPENSES" && <ExpensesScreen entries={state.entries} addExpense={addExpense} expenses={expenses} transactions={transactions} updateTransaction={updateTransaction} />}
         {tab === "DASH" && (
           <>
@@ -491,6 +519,7 @@ export default function App() {
             F={F}
             clock={clock}
             entries={state.entries}
+            onAddEntry={onAddEntry}
             expenses={expenses}
             addExpense={addExpense}
             dailyGoal={state.goal}
@@ -534,22 +563,47 @@ export default function App() {
         </div>
       </div>
       {editTarget && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70">
-          <div className="w-full max-w-[480px] rounded-t-2xl border-t border-[#FFD70055] bg-[#0e0e0e] p-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/95">
+          <div className="mx-auto min-h-full w-full max-w-[480px] bg-[#0e0e0e] p-4 pb-8">
             <div className="mb-3 flex items-center justify-between">
-              <span className="text-[12px] font-black text-white">✏️ EDIT · {editTarget.platform}</span>
+              <span className="text-[12px] font-black text-white">EDITAR TRANSACCIÓN · {editTarget.platform}</span>
               <button onClick={() => setEditTarget(null)} className="text-[18px] text-[#8a8a8a]">✕</button>
             </div>
             <div className="grid grid-cols-2 gap-2">
               {(["earnings", "extraCash", "tips", "toll", "platformFee"] as const).map((k) => (
                 <div key={k}>
                   <div className="text-[9px] font-black text-neutral-500">{k.toUpperCase()}</div>
-                  <input type="number" step="0.01" value={editTarget[k] ?? ""} onChange={(e) => setEditTarget({ ...editTarget, [k]: parseFloat(e.target.value) || null })}
+                  <input type="number" step="0.01" value={editTarget[k] ?? ""} onChange={(e) => {
+                    const next = parseFloat(e.target.value) || 0;
+                    const draft = { ...editTarget, [k]: next };
+                    const gross = calcGross(draft.earnings || 0, draft.extraCash || 0, draft.tips || 0, draft.toll || 0);
+                    setEditTarget({ ...draft, grossIncome: gross, netPayout: calcNet(gross, draft.platformFee || 0) });
+                  }}
                     className="mt-1 h-10 w-full rounded-lg border border-[#2a2a2a] bg-black px-2 font-mono text-[14px] font-bold text-white outline-none" />
                 </div>
               ))}
             </div>
-            <button onClick={() => editEntry(editTarget)} className="mt-3 h-12 w-full rounded-xl bg-[#FFD700] text-[13px] font-black text-black">✓ SAVE</button>
+            {(["pickup", "dropoff"] as const).map((kind) => {
+              const location = editTarget[kind];
+              return (
+                <div key={kind} className="mt-3 rounded-xl border border-[#2a2a2a] bg-black p-3">
+                  <div className="mb-2 text-[10px] font-black uppercase tracking-wider text-[#F5D78E]">{kind} · tipo: {location.type || "other"}</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(["type", "businessName", "address", "street", "city", "zip", "timestamp", "day", "lat", "lng"] as const).map((fieldName) => (
+                      <label key={fieldName} className={fieldName === "address" ? "col-span-2" : ""}>
+                        <span className="text-[9px] font-black uppercase text-neutral-500">{fieldName}</span>
+                        <input type={fieldName === "lat" || fieldName === "lng" ? "number" : "text"} value={location[fieldName] ?? ""} onChange={(e) => setEditTarget({ ...editTarget, [kind]: { ...location, [fieldName]: fieldName === "lat" || fieldName === "lng" ? Number(e.target.value) : e.target.value } })} className="mt-1 h-9 w-full rounded-lg border border-[#2a2a2a] bg-[#0e0e0e] px-2 text-[11px] text-white outline-none" />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+            <div className="mt-3 grid grid-cols-2 gap-2 text-center">
+              <div className="rounded-lg bg-black p-2"><div className="text-[9px] text-neutral-500">GROSS INCOME</div><div className="font-mono font-black text-white">{fmt(editTarget.grossIncome)}</div></div>
+              <div className="rounded-lg bg-black p-2"><div className="text-[9px] text-neutral-500">NET PAYOUT</div><div className="font-mono font-black text-[#00FF6A]">{fmt(editTarget.netPayout)}</div></div>
+            </div>
+            <button onClick={() => editEntry({ ...editTarget, reconciliation: { status: "pending" }, status: "open" })} className="mt-3 h-12 w-full rounded-xl bg-[#FFD700] text-[13px] font-black text-black">GUARDAR CAMBIOS</button>
           </div>
         </div>
       )}

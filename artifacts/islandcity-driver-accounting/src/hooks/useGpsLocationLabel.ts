@@ -19,7 +19,7 @@ export interface GpsLabel {
 const THROTTLE_MS = 8000;     // max 1 geocode every 8s
 
 export function useGpsLocationLabel(): GpsLabel {
-  const { state } = useLocation();
+  const { state, startTracking, stopTracking } = useLocation();
   const lastFetchAt = useRef(0);
   const lastLat = useRef<number | null>(null);
   const lastLng = useRef<number | null>(null);
@@ -31,6 +31,14 @@ export function useGpsLocationLabel(): GpsLabel {
     error: state.error,
     accuracy: state.accuracy,
   });
+
+  useEffect(() => {
+    const cleanup = startTracking();
+    return () => {
+      cleanup?.();
+      stopTracking();
+    };
+  }, [startTracking, stopTracking]);
 
   useEffect(() => {
     const pos = state.currentPosition;

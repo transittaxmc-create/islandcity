@@ -5,7 +5,7 @@
 
 import { emptyState, todayStr, uid, type AppState, type EntryRecord } from "./domain";
 
-const STORAGE_KEY = "ic_tip_tracker_state_v1";
+const STORAGE_KEY = "ic_tip_tracker";
 const LEGACY_KEYS = ["ei_program_state", "ei_program_state_backup", "island-city-trips"];
 
 export function loadState(): AppState {

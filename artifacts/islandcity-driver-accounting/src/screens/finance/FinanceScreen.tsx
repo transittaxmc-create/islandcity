@@ -1,4 +1,4 @@
-// FINANCE · shell — 4 pages horizontal scroll — ported 1:1
+﻿// FINANCE Â· shell â€” 6 pages horizontal scroll â€” Trip + Copiloto + 4 more
 import { useRef, useState } from "react";
 import type { FinanceData, BankAdjEntry, RecurringPlan } from "./financeData";
 import type { ReceiptRecord } from "../../lib/receipts";
@@ -8,10 +8,13 @@ import { ProjPage } from "./ProjPage";
 import { PlatformsPage } from "./PlatformsPage";
 import { HealthPage } from "./HealthPage";
 import { MatutinaPage } from "./MatutinaPage";
+import { TripPage } from "./TripPage";
 
 export function FinanceScreen(props: {
   F: FinanceData;
   clock: Date;
+  entries: EntryRecord[];
+  onAddEntry: (e: EntryRecord) => void;
   expenses: ReceiptRecord[];
   addExpense: (e: ReceiptRecord) => void;
   dailyGoal: number;
@@ -26,14 +29,12 @@ export function FinanceScreen(props: {
   bankAdjHistory: BankAdjEntry[];
   setBankAdjHistory: (fn: (prev: BankAdjEntry[]) => BankAdjEntry[]) => void;
   showToast: (m: string) => void;
-  entries: EntryRecord[];
-  tripsCount?: number;
 }) {
-  const { F, clock, expenses, addExpense, dailyGoal, workDays, setWorkDays, dayTargets, setDayTargets, recurringPlan, setRecurringPlan, bankBalance, setBankBalance, bankAdjHistory, setBankAdjHistory, showToast, entries } = props;
+  const { F, clock, entries, onAddEntry, expenses, addExpense, dailyGoal, workDays, setWorkDays, dayTargets, setDayTargets, recurringPlan, setRecurringPlan, bankBalance, setBankBalance, bankAdjHistory, setBankAdjHistory, showToast } = props;
   const [finPage, setFinPage] = useState(0);
   const finScrollRef = useRef<HTMLDivElement | null>(null);
-  const names = ["Copiloto", "This Week", "Projections", "Platforms", "Financial Health"];
-  const PAGE_COUNT = 5;
+  const names = ["Trip", "Copiloto", "This Week", "Projections", "Platforms", "Financial Health"];
+  const PAGE_COUNT = 6;
   return (
     <div>
       <div className="flex items-start justify-between px-4 pt-4 pb-3">
@@ -54,6 +55,8 @@ export function FinanceScreen(props: {
         style={{ overflowX: "scroll", scrollSnapType: "x mandatory", scrollbarWidth: "none" }}
         onScroll={(e) => { const el = e.currentTarget; setFinPage(Math.round(el.scrollLeft / (el.offsetWidth || 1))); }}>
 
+        <TripPage clock={clock} entries={entries} onAddEntry={onAddEntry} showToast={showToast} />
+
         <MatutinaPage clock={clock} entries={entries} expenses={expenses}
           bankBalance={bankBalance} bankAdjHistory={bankAdjHistory}
           dailyGoal={dailyGoal} workDays={workDays} dayTargets={dayTargets} showToast={showToast} />
@@ -73,3 +76,4 @@ export function FinanceScreen(props: {
     </div>
   );
 }
+
