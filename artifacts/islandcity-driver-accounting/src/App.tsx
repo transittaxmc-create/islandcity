@@ -217,12 +217,17 @@ export default function App() {
   const addEntry = useCallback((e: EntryRecord) => update((s) => ({ ...s, entries: [e, ...s.entries], refCounter: s.refCounter + 1 })), [update]);
 
   const editEntry = useCallback((e: EntryRecord) => {
+    const day = e.datetime.slice(0, 10);
+    if (stateRef.current.closedDays?.[day]) { showToast("🔒 El día está cerrado — no se puede editar"); return; }
     update((s) => ({ ...s, entries: s.entries.map((x) => (x.id === e.id ? e : x)) }));
     setEditTarget(null);
     showToast("✓ Editado");
   }, [showToast, update]);
 
   const deleteEntry = useCallback((id: string) => {
+    const del = stateRef.current.entries.find((x) => x.id === id);
+    const day = del ? del.datetime.slice(0, 10) : "";
+    if (day && stateRef.current.closedDays?.[day]) { showToast("🔒 El día está cerrado — no se puede borrar"); return; }
     update((s) => ({ ...s, entries: s.entries.filter((x) => x.id !== id) }));
     showToast("Eliminado");
   }, [showToast, update]);

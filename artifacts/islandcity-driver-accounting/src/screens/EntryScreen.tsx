@@ -469,6 +469,11 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
           </div>
           <EntryGpsIndicator />
         </div>
+      {dayClosed && (
+        <div className="mb-2 rounded-xl border border-[#f8717155] bg-[#f8717115] px-3 py-2 text-[11px] font-black text-[#f87171]">
+          🔒 Día cerrado — reabre en REGISTER para seguir grabando
+        </div>
+      )}
       {/* PLATFORM header (left) + BREAK/LUNCH toggle (right) - mockup C */}
       <div className="section-header flex items-center justify-between gap-3 rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-4">
         <div className="relative" ref={ref}>
