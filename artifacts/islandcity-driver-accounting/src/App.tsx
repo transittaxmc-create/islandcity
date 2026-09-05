@@ -102,7 +102,7 @@ export default function App() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem("ic_tip_tracker");
-      if (raw) setState(JSON.parse(raw));
+      if (raw) setState({ ...emptyState(), ...JSON.parse(raw) });
     } catch {}
   }, []);
 
@@ -327,7 +327,7 @@ export default function App() {
   }, [gps, showToast]);
 
   const today = todayStr(clock);
-  const dayClosed = !!state.closedDays[today];
+  const dayClosed = !!state.closedDays?.[today];
   const openEntries = state.entries.filter((e) => e.status === "open");
   const todayPosted = state.entries.filter((e) => e.datetime.slice(0, 10) === today && e.status === "posted");
   const grossToday = todayPosted.reduce((s, e) => s + e.grossIncome, 0);

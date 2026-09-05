@@ -461,7 +461,7 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
   );
 
   return (
-        <div className="daily-entry-container h-[calc(100dvh-62px)] overflow-hidden pb-24">
+        <div className="daily-entry-container h-[calc(100dvh-62px)] overflow-y-auto pb-24">
         <div className="flex h-12 shrink-0 items-center justify-between gap-2 px-1">
           <div className="min-w-0">
             <div className="truncate text-[14px] font-black text-white">{greeting}, Driver</div>
