@@ -124,7 +124,7 @@ async function tomTomGeocode(lat: number, lng: number): Promise<GeocodeResult | 
     const poi = a.poi ?? {};
     const placeType = classifyFromTomTom(a);
     return {
-      businessName: placeType === "residence" ? "" : (poi.name ?? a.address?.streetName ?? ""),
+      businessName: placeType === "residence" ? "" : (poi.name ?? a.address?.streetName ?? a.address?.freeformAddress?.split(",")[0] ?? "Business on " + (a.address?.streetName ?? "this street")),
       address: a.address?.freeformAddress ?? `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
       placeType,
       city: a.address?.municipality ?? a.address?.countrySubdivision ?? "",
@@ -152,7 +152,7 @@ async function nominatimGeocode(lat: number, lng: number): Promise<GeocodeResult
     const placeType = classifyFromNominatim(data);
     const a = data.address ?? {};
     return {
-      businessName: placeType === "residence" ? "" : (a.attraction ?? a.amenity ?? a.shop ?? a.tourism ?? a.building ?? a.display_name?.split(",")[0] ?? ""),
+      businessName: placeType === "residence" ? "" : (a.attraction ?? a.amenity ?? a.shop ?? a.tourism ?? a.building ?? a.display_name?.split(",")[0] ?? `${a.road ?? a.pedestrian ?? "Street"} ${a.house_number ?? ""}`.trim()),
       address: data.display_name ?? `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
       placeType,
       city: a.city ?? a.town ?? a.village ?? a.county ?? "",

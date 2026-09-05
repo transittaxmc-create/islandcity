@@ -490,6 +490,7 @@ export default function App() {
           <FinanceScreen
             F={F}
             clock={clock}
+            entries={state.entries}
             expenses={expenses}
             addExpense={addExpense}
             dailyGoal={state.goal}

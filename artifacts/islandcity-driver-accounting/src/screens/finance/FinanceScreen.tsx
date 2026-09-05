@@ -2,10 +2,12 @@
 import { useRef, useState } from "react";
 import type { FinanceData, BankAdjEntry, RecurringPlan } from "./financeData";
 import type { ReceiptRecord } from "../../lib/receipts";
+import type { EntryRecord } from "../../lib/domain";
 import { WeekPage } from "./WeekPage";
 import { ProjPage } from "./ProjPage";
 import { PlatformsPage } from "./PlatformsPage";
 import { HealthPage } from "./HealthPage";
+import { MatutinaPage } from "./MatutinaPage";
 
 export function FinanceScreen(props: {
   F: FinanceData;
@@ -24,11 +26,14 @@ export function FinanceScreen(props: {
   bankAdjHistory: BankAdjEntry[];
   setBankAdjHistory: (fn: (prev: BankAdjEntry[]) => BankAdjEntry[]) => void;
   showToast: (m: string) => void;
+  entries: EntryRecord[];
+  tripsCount?: number;
 }) {
-  const { F, clock, expenses, addExpense, dailyGoal, workDays, setWorkDays, dayTargets, setDayTargets, recurringPlan, setRecurringPlan, bankBalance, setBankBalance, bankAdjHistory, setBankAdjHistory, showToast } = props;
+  const { F, clock, expenses, addExpense, dailyGoal, workDays, setWorkDays, dayTargets, setDayTargets, recurringPlan, setRecurringPlan, bankBalance, setBankBalance, bankAdjHistory, setBankAdjHistory, showToast, entries } = props;
   const [finPage, setFinPage] = useState(0);
   const finScrollRef = useRef<HTMLDivElement | null>(null);
-  const names = ["This Week", "Projections", "Platforms", "Financial Health"];
+  const names = ["Copiloto", "This Week", "Projections", "Platforms", "Financial Health"];
+  const PAGE_COUNT = 5;
   return (
     <div>
       <div className="flex items-start justify-between px-4 pt-4 pb-3">
@@ -37,7 +42,7 @@ export function FinanceScreen(props: {
           <p className="text-[12px] font-semibold text-neutral-200 mt-0.5">{names[finPage]}</p>
         </div>
         <div className="flex items-center gap-1.5 mt-1">
-          {[0, 1, 2, 3].map((i) => (
+          {Array.from({ length: PAGE_COUNT }, (_, i) => i).map((i) => (
             <button key={i}
               onClick={() => { const el = finScrollRef.current; if (el) el.scrollTo({ left: i * el.offsetWidth, behavior: "smooth" }); }}
               style={{ width: i === finPage ? 16 : 8, height: 8, borderRadius: 4, background: i === finPage ? "#f6dd8c" : "#2a2a2a", transition: "all 0.3s", flexShrink: 0, border: "none", padding: 0, cursor: "pointer" }} />
@@ -48,6 +53,10 @@ export function FinanceScreen(props: {
       <div ref={finScrollRef} className="flex"
         style={{ overflowX: "scroll", scrollSnapType: "x mandatory", scrollbarWidth: "none" }}
         onScroll={(e) => { const el = e.currentTarget; setFinPage(Math.round(el.scrollLeft / (el.offsetWidth || 1))); }}>
+
+        <MatutinaPage clock={clock} entries={entries} expenses={expenses}
+          bankBalance={bankBalance} bankAdjHistory={bankAdjHistory}
+          dailyGoal={dailyGoal} workDays={workDays} dayTargets={dayTargets} showToast={showToast} />
 
         <WeekPage F={F} dailyGoal={dailyGoal} workDays={workDays} setWorkDays={setWorkDays}
           dayTargets={dayTargets} setDayTargets={setDayTargets} recurringPlan={recurringPlan}
