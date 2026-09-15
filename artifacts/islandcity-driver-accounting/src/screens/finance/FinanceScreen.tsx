@@ -4,7 +4,7 @@ import type { FinanceData, BankAdjEntry, RecurringPlan } from "./financeData";
 import type { ReceiptRecord } from "../../lib/receipts";
 import type { EntryRecord } from "../../lib/domain";
 import { WeekPage } from "./WeekPage";
-import { ProjPage } from "./ProjPage";
+import { PresupuestoPage } from "./PresupuestoPage";
 import { PlatformsPage } from "./PlatformsPage";
 import { HealthPage } from "./HealthPage";
 import { MatutinaPage } from "./MatutinaPage";
@@ -33,7 +33,7 @@ export function FinanceScreen(props: {
   const { F, clock, entries, onAddEntry, expenses, addExpense, dailyGoal, workDays, setWorkDays, dayTargets, setDayTargets, recurringPlan, setRecurringPlan, bankBalance, setBankBalance, bankAdjHistory, setBankAdjHistory, showToast } = props;
   const [finPage, setFinPage] = useState(0);
   const finScrollRef = useRef<HTMLDivElement | null>(null);
-  const names = ["Trip", "Copiloto", "This Week", "Projections", "Platforms", "Financial Health"];
+  const names = ["Trip", "Copiloto", "This Week", "Presupuesto", "Platforms", "Financial Health"];
   const PAGE_COUNT = 6;
   return (
     <div>
@@ -65,9 +65,11 @@ export function FinanceScreen(props: {
           dayTargets={dayTargets} setDayTargets={setDayTargets} recurringPlan={recurringPlan}
           setRecurringPlan={setRecurringPlan} showToast={showToast} />
 
-        <ProjPage F={F} clock={clock} expenses={expenses} addExpense={addExpense}
+        <PresupuestoPage clock={clock} entries={entries} expenses={expenses}
+          dailyGoal={dailyGoal} workDays={workDays} dayTargets={dayTargets}
           bankBalance={bankBalance} setBankBalance={setBankBalance}
-          bankAdjHistory={bankAdjHistory} setBankAdjHistory={setBankAdjHistory} showToast={showToast} />
+          bankAdjHistory={bankAdjHistory} setBankAdjHistory={setBankAdjHistory}
+          showToast={showToast} />
 
         <PlatformsPage F={F} />
 
