@@ -83,17 +83,66 @@ input[type='range']::-webkit-slider-runnable-track {
 .daily-entry-container {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  /* Uniform vertical rhythm between every block */
+  gap: 10px;
   background-color: #0d0d0d;
   color: #ffffff;
-  padding: 16px;
+  padding: 14px 16px 0;
 }
 
-.section-header { order: 1; }
-.section-operational { order: 2; }
-.section-financial-inputs { order: 3; }
-.section-calculated-results { order: 4; }
-.section-notes { order: 5; }
+/* ─ Visual order of the Entry blocks ────────────────────────────────
+   IMPORTANT: every block MUST be listed here. A block without an
+   `order` value defaults to 0 and jumps to the TOP of the page. That is
+   exactly the bug this list fixes: `.section-fare` and the save button
+   had no rule, so EARNINGS/EXTRA CASH and "+ GRABAR EN DISCO" used to
+   render above the platform selector, in the middle of the form.
+   The greeting header and the closed-day banner intentionally stay at
+   order 0, so they remain first. */
+.section-header             { order: 1; } /* platform + break/lunch    */
+.section-fare               { order: 2; } /* earnings + extra cash     */
+.section-operational        { order: 3; } /* pickup + dropoff (GPS)    */
+.section-financial-inputs   { order: 4; } /* tips / toll / fee + ref   */
+.section-notes              { order: 5; } /* notes                     */
+.section-calculated-results { order: 6; } /* totals — pinned (sticky)  */
+.section-submit             { order: 7; } /* save action — pinned      */
+
+/* ── Fixed totals + save action ──────────────────────────────────────
+   GROSS/NET and the save button stay pinned just above the bottom nav
+   while the form scrolls, so the driver always sees the two numbers
+   right before saving. Full-bleed via negative margins (the container
+   has 16px side padding). */
+.section-calculated-results {
+  position: sticky;
+  /* sits exactly on top of the 64px (h-16) save button — no gap, so no
+     strip of scrolled content can show through between the two bars */
+  bottom: 64px;
+  z-index: 20;
+  margin: 0 -16px;
+  padding: 0 16px 4px;
+  background-color: #0d0d0d;
+}
+
+/* Soft fade above the pinned totals so scrolled content does not clip
+   against a hard edge. */
+.section-calculated-results::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -16px;
+  height: 16px;
+  background: linear-gradient(180deg, rgba(13, 13, 13, 0) 0%, #0d0d0d 100%);
+  pointer-events: none;
+}
+
+.section-submit {
+  position: sticky;
+  bottom: 0;
+  z-index: 30;
+  margin: 0 -16px;
+  /* bleed to the container edges while keeping the inner label centered */
+  width: calc(100% + 32px);
+}
 
 .operational-grid {
   display: grid;
@@ -113,11 +162,22 @@ input[type='range']::-webkit-slider-runnable-track {
   font-weight: bold;
 }
 
+/* NET PAYOUT is the primary result of the trip, so it gets the gold
+   accent + the brighter, larger number. GROSS INCOME is supporting
+   information, so it stays quiet and neutral. */
 .net-payout-card {
-  background-color: #ffffff;
-  color: #000000;
-  border-radius: 8px;
-  padding: 12px;
+  background-color: #0e0e0e;
+  border: 1px solid rgba(255, 215, 0, 0.45);
+  border-radius: 12px;
+  padding: 10px 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 215, 0, 0.08);
+}
+
+.gross-income-card {
+  background-color: #0e0e0e;
+  border: 1px solid #1a1a1a;
+  border-radius: 12px;
+  padding: 10px 12px;
 }
 
 /* Desktop: keep the phone-first layout looking like the phone —

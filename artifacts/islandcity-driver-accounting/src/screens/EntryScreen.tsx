@@ -445,9 +445,12 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
     setDropoffMeta(null);
   };
 
-        const field = (label: string, value: string, setter: (v: string) => void, placeholder: string, colorClass: string = "#1E3A8A") => (
+        // Small helper for the money inputs. The label colour is applied with
+        // an inline style (not a Tailwind arbitrary value) so it always
+        // compiles and stays readable on the black field background.
+        const field = (label: string, value: string, setter: (v: string) => void, placeholder: string, colorClass: string = "#60A5FA") => (
     <div>
-      <label className={`text-[10px] font-black uppercase tracking-wider` + (colorClass ? ` text-[color:${colorClass}]` : ` text-neutral-400`)}> {label}</label>
+      <label className="text-[10px] font-black uppercase tracking-wider" style={{ color: colorClass }}>{label}</label>
       <input
         type="number"
         step="0.01"
@@ -455,13 +458,13 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
         value={value}
         onChange={(e) => setter(e.target.value)}
         placeholder={placeholder}
-        className="mt-1 h-12 w-full rounded-xl border border-[#2a2a2a] bg-black px-3 text-[13px] text-white outline-none placeholder:text-neutral-500"
+        className="mt-1 h-12 w-full rounded-xl border border-[#2a2a2a] bg-black px-3 text-[13px] text-white outline-none transition-colors placeholder:text-neutral-500 focus:border-[#FFD700]/60"
       />
     </div>
   );
 
   return (
-        <div className="daily-entry-container h-[calc(100dvh-62px)] overflow-y-auto pb-24">
+        <div className="daily-entry-container h-[calc(100dvh-62px)] overflow-y-auto">
         <div className="flex h-12 shrink-0 items-center justify-between gap-2 px-1">
           <div className="min-w-0">
             <div className="truncate text-[14px] font-black text-white">{greeting}, Driver</div>
@@ -470,7 +473,7 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
           <EntryGpsIndicator />
         </div>
       {dayClosed && (
-        <div className="mb-2 rounded-xl border border-[#f8717155] bg-[#f8717115] px-3 py-2 text-[11px] font-black text-[#f87171]">
+        <div className="rounded-xl border border-[#f8717155] bg-[#f8717115] px-3 py-2 text-[11px] font-black text-[#f87171]">
           🔒 Día cerrado — reabre en REGISTER para seguir grabando
         </div>
       )}
@@ -508,13 +511,13 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
           )
         )}
       </div>
-      <div className="section-fare grid grid-cols-2 gap-2 rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-3">
-        {field("EARNINGS", earnings, setEarnings, "$0.00", "#1E3A8A")}
-        {field("EXTRA CASH", extraCash, setExtraCash, "$0.00", "#16A34A")}
+      <div className="section-fare grid grid-cols-2 gap-2 rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-4">
+        {field("EARNINGS", earnings, setEarnings, "$0.00", "#60A5FA")}
+        {field("EXTRA CASH", extraCash, setExtraCash, "$0.00", "#22C55E")}
       </div>
 
       {/* â•â•â• BLOQUE 2: OPERACIÃ“N / ACCIÃ“N RÃPIDA â•â•â• */}
-      <div className="section-operational rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-3">
+      <div className="section-operational rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-4">
         <div className="operational-grid grid grid-cols-2 gap-2">
           <GpsPlaceCard
             kind="pickup"
@@ -538,9 +541,9 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
       {/* Financial inputs stay compact and fixed after the location cards. */}
       <div className="section-financial-inputs rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-4">
         <div className="grid grid-cols-3 gap-2">
-          {field("TIPS", tips, setTips, "$0.00", "#CA8A04")}
-          {field("TOLL", toll, setToll, "$0.00", "#EA580C")}
-          {field("PLATFORM FEE", fee, setFee, "$0.00", "#DC2626")}
+          {field("TIPS", tips, setTips, "$0.00", "#EAB308")}
+          {field("TOLL", toll, setToll, "$0.00", "#FB923C")}
+          {field("PLATFORM FEE", fee, setFee, "$0.00", "#F87171")}
         </div>
         <div className="mt-2">
           <label className="text-[10px] font-black uppercase tracking-wider text-neutral-400">REF / INVOICE</label>
@@ -551,12 +554,12 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
       {/* â•â•â• BLOQUE 4: RESULTADOS CALCULADOS â•â•â• */}
       <div className="section-calculated-results grid grid-cols-2 gap-2">
         <div className="net-payout-card">
-          <div className="text-[10px] font-black uppercase tracking-wider text-neutral-500">NET PAYOUT</div>
-          <div className="font-mono text-[26px] font-black" style={{ color: "#15803D" }}>{fmt(net)}</div>
+          <div className="text-[10px] font-black uppercase tracking-wider text-[#FFD700]">NET PAYOUT</div>
+          <div className="font-mono text-[27px] font-black leading-tight" style={{ color: "#22FF88" }}>{fmt(net)}</div>
         </div>
-        <div className="rounded-xl border border-[#2a2a2a] bg-white p-3">
-          <div className="text-[10px] font-black uppercase tracking-wider text-neutral-500">GROSS INCOME</div>
-          <div className="font-mono text-[26px] font-black text-black">{fmt(gross)}</div>
+        <div className="gross-income-card">
+          <div className="text-[10px] font-black uppercase tracking-wider text-neutral-400">GROSS INCOME</div>
+          <div className="font-mono text-[23px] font-black leading-tight text-white">{fmt(gross)}</div>
         </div>
       </div>
 
@@ -567,7 +570,7 @@ export default function EntryScreen({ addEntry, todayLabel, onCapture, dayClosed
       </div>
 
       {/* â•â•â• SUBMIT â•â•â• */}
-      <button onClick={submit} disabled={!earnings || nEarnings <= 0 || dayClosed} className="h-16 w-full rounded-2xl text-[16px] font-black tracking-wider text-black disabled:opacity-40" style={{ background: "linear-gradient(90deg,#FFD700,#d9b64f)" }}>
+      <button onClick={submit} disabled={!earnings || nEarnings <= 0 || dayClosed} className="section-submit h-16 w-full rounded-2xl text-[16px] font-black tracking-wider text-black disabled:opacity-40" style={{ background: "linear-gradient(90deg,#FFD700,#d9b64f)" }}>
         + GRABAR EN DISCO
       </button>
     </div>
