@@ -3,6 +3,7 @@ import { useState } from "react";
 import { fmt, platformLogo, platformTypeLabel, type EntryRecord, type GeoTag } from "../lib/domain";
 import { useLocation } from "../hooks/useLocation";
 import { reverseGeocode, getPlaceIcon } from "../lib/mileage";
+import { REGISTER_AMOUNT, REGISTER_LABEL, REGISTER_META } from "../lib/ui";
 
 interface Props {
   entries: EntryRecord[];
@@ -106,21 +107,21 @@ export default function QueueScreen({ entries, onEdit, onEditEntry, onDelete, on
     <div className="space-y-3 pb-4">
       <div className="rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-4">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">REGISTER</span>
-          <span className="rounded-full border border-[#FF8C0055] bg-[#FF8C0018] px-2 py-0.5 text-[10px] font-black text-[#FF8C00]">{openCount} pending</span>
+          <span className={REGISTER_LABEL}>REGISTER</span>
+          <span className="rounded-full border border-[#FF8C0055] bg-[#FF8C0018] px-2 py-0.5 text-[11px] font-black text-[#FF8C00]">{openCount} pending</span>
         </div>
         <div className="mt-2 grid grid-cols-3 gap-2 text-center">
           <div className="rounded-lg bg-black p-2">
-            <div className="text-[8px] font-bold text-neutral-500">TOTAL GROSS</div>
-            <div className="font-mono text-[15px] font-black text-[#FFD700]">{fmt(totalGross)}</div>
+            <div className={REGISTER_LABEL}>TOTAL GROSS</div>
+            <div className={`${REGISTER_AMOUNT} text-[#FFD700]`}>{fmt(totalGross)}</div>
           </div>
           <div className="rounded-lg bg-black p-2">
-            <div className="text-[8px] font-bold text-neutral-500">TOTAL NET</div>
-            <div className="font-mono text-[15px] font-black text-[#00FF6A]">{fmt(totalNet)}</div>
+            <div className={REGISTER_LABEL}>TOTAL NET</div>
+            <div className={`${REGISTER_AMOUNT} text-[#00FF6A]`}>{fmt(totalNet)}</div>
           </div>
           <div className="rounded-lg bg-black p-2">
-            <div className="text-[8px] font-bold text-neutral-500">COUNT PENDING</div>
-            <div className="font-mono text-[15px] font-black text-white">{openCount}</div>
+            <div className={REGISTER_LABEL}>COUNT PENDING</div>
+            <div className={`${REGISTER_AMOUNT} text-white`}>{openCount}</div>
           </div>
         </div>
         <div className="mt-3 grid grid-cols-4 gap-1">
@@ -166,11 +167,11 @@ export default function QueueScreen({ entries, onEdit, onEditEntry, onDelete, on
                   )}
                 </span>
                 <div className="text-right">
-                  <div className="font-mono text-[15px] font-black text-[#00FF6A]">{fmt(e.netPayout)}</div>
-                  <div className="text-[9px] font-bold text-[#6f6f6f]">{e.datetime.slice(11,16)}</div>
+                  <div className={`${REGISTER_AMOUNT} text-[#00FF6A]`}>{fmt(e.netPayout)}</div>
+                  <div className={REGISTER_META}>{e.datetime.slice(11,16)}</div>
                 </div>
               </div>
-              <div className="mt-1 flex items-center justify-between text-[10px] font-bold text-[#8a8a8a]">
+              <div className={`mt-1 flex items-center justify-between font-bold ${REGISTER_META}`}>
                 <span className="truncate">{e.pickup.address || "—"} → {e.dropoff.address || "—"}</span>
                 <span className={`ml-2 rounded-full border px-1.5 py-0.5 text-[8px] font-black ${e.status === "reconciled" ? "border-[#00FF6A55] bg-[#00FF6A18] text-[#00FF6A]" : "border-[#FF8C0055] bg-[#FF8C0018] text-[#FF8C00]"}`}>
                   {e.status === "reconciled" ? "RECONCILIADA" : e.status === "posted" ? "LEDGER" : "PENDIENTE"}
@@ -182,12 +183,12 @@ export default function QueueScreen({ entries, onEdit, onEditEntry, onDelete, on
             {isOpen && (
               <div className="mt-3 space-y-2 border-t border-[#1a1a1a] pt-3">
                 <div className="grid grid-cols-2 gap-2 text-[11px]">
-                  <div><span className="text-neutral-500">Earnings:</span> <span className="font-mono font-bold" style={{color:"#1E3A8A"}}>{fmt(e.earnings)}</span></div>
-                  <div><span className="text-neutral-500">Extra Cash:</span> <span className="font-mono font-bold" style={{color:"#16A34A"}}>{fmt(e.extraCash)}</span></div>
-                  <div><span className="text-neutral-500">Tips:</span> <span className="font-mono font-bold" style={{color:"#CA8A04"}}>{fmt(e.tips)}</span></div>
-                  <div><span className="text-neutral-500">Toll:</span> <span className="font-mono font-bold" style={{color:"#EA580C"}}>{fmt(e.toll)}</span></div>
-                  <div><span className="text-neutral-500">Fee:</span> <span className="font-mono font-bold" style={{color:"#DC2626"}}>{fmt(e.platformFee)}</span></div>
-                  <div><span className="text-neutral-500">Gross:</span> <span className="font-mono font-bold text-[#111827]">{fmt(e.grossIncome)}</span></div>
+                  <div><span className="text-neutral-400">Earnings:</span> <span className="font-mono tabular-nums font-bold text-[#60A5FA]">{fmt(e.earnings)}</span></div>
+                  <div><span className="text-neutral-400">Extra Cash:</span> <span className="font-mono tabular-nums font-bold text-[#4ADE80]">{fmt(e.extraCash)}</span></div>
+                  <div><span className="text-neutral-400">Tips:</span> <span className="font-mono tabular-nums font-bold text-[#FACC15]">{fmt(e.tips)}</span></div>
+                  <div><span className="text-neutral-400">Toll:</span> <span className="font-mono tabular-nums font-bold text-[#FB923C]">{fmt(e.toll)}</span></div>
+                  <div><span className="text-neutral-400">Fee:</span> <span className="font-mono tabular-nums font-bold text-[#F87171]">{fmt(e.platformFee)}</span></div>
+                  <div><span className="text-neutral-400">Gross:</span> <span className="font-mono tabular-nums font-bold text-white">{fmt(e.grossIncome)}</span></div>
                 </div>
                 <EditableLocation
                   label="PICKUP"

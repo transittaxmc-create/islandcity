@@ -4,6 +4,7 @@ import { type EntryRecord } from "../lib/domain";
 import { type EzpTransaction, detectToll, tollAmount, TOLLS } from "../lib/tolls";
 import { type ReceiptRecord, EXPENSE_CATEGORIES, detectCategoryFromVendor, simulateOCR, fileToDataUrl, putPhoto, getPhoto, type OcrResult, ocrReceipt } from "../lib/receipts";
 import { ChevronLeft, ChevronDown, Camera, Upload } from "lucide-react";
+import { REGISTER_AMOUNT, REGISTER_LABEL, REGISTER_META } from "../lib/ui";
 
 interface Props {
   entries: EntryRecord[];
@@ -24,6 +25,7 @@ export default function ExpensesScreen({ entries, addExpense, expenses, transact
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ReceiptRecord | null>(null);
   const [showRegularForm, setShowRegularForm] = useState(false);
+  const [expenseFilter, setExpenseFilter] = useState<"all" | "personal" | "business">("all");
   const [regVendor, setRegVendor] = useState("");
   const [regAmount, setRegAmount] = useState("");
   const [regCategory, setRegCategory] = useState("Fuel");
@@ -118,6 +120,9 @@ export default function ExpensesScreen({ entries, addExpense, expenses, transact
       default: return transactions;
     }
   };
+  const visibleExpenses = expenseFilter === "all"
+    ? expenses
+    : expenses.filter((expense) => expense.type === expenseFilter);
 
   return (
     <div className="pb-24">
@@ -140,16 +145,16 @@ export default function ExpensesScreen({ entries, addExpense, expenses, transact
           {/* Totals */}
           <div className="mb-4 grid grid-cols-3 gap-2">
             <div className="rounded-xl bg-[#0e0e0e] p-3 text-center">
-              <div className="text-[8px] font-bold text-neutral-500">PENDING</div>
-              <div className="font-mono text-[16px] font-black text-[#F59E0B]">{pendingCount}</div>
+              <div className={REGISTER_LABEL}>PENDING</div>
+              <div className={`${REGISTER_AMOUNT} text-[#F59E0B]`}>{pendingCount}</div>
             </div>
             <div className="rounded-xl bg-[#0e0e0e] p-3 text-center">
-              <div className="text-[8px] font-bold text-neutral-500">RECONCILED</div>
-              <div className="font-mono text-[16px] font-black text-[#00FF6A]">{reconciledCount}</div>
+              <div className={REGISTER_LABEL}>RECONCILED</div>
+              <div className={`${REGISTER_AMOUNT} text-[#00FF6A]`}>{reconciledCount}</div>
             </div>
             <div className="rounded-xl bg-[#0e0e0e] p-3 text-center">
-              <div className="text-[8px] font-bold text-neutral-500">TOTAL</div>
-              <div className="font-mono text-[16px] font-black text-[#FFD700]">${totalEzpassMonth.toFixed(2)}</div>
+              <div className={REGISTER_LABEL}>TOTAL</div>
+              <div className={`${REGISTER_AMOUNT} text-[#FFD700]`}>${totalEzpassMonth.toFixed(2)}</div>
             </div>
           </div>
 
@@ -160,16 +165,16 @@ export default function ExpensesScreen({ entries, addExpense, expenses, transact
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="font-medium">{tx.tollName}</div>
-                    <div className="text-[11px] text-neutral-400">{tx.timestamp}</div>
+                    <div className={REGISTER_META}>{tx.timestamp}</div>
                   </div>
                   <div className="text-right">
-                    <div className="font-mono font-bold">${tx.detectedAmount.toFixed(2)}</div>
+                    <div className="font-mono tabular-nums text-[15px] font-bold">${tx.detectedAmount.toFixed(2)}</div>
                     <span className={`text-[10px] font-black ${tx.status === 'reconciled' ? 'text-[#00FF6A]' : tx.status === 'discrepancy' ? 'text-[#DC2626]' : 'text-[#F59E0B]'}`}>
                       {tx.status.toUpperCase()}
                     </span>
                   </div>
                 </div>
-                {tx.status === 'discrepancy' || tx.status === 'pending' && (
+                {(tx.status === 'discrepancy' || tx.status === 'pending') && (
                   <div className="mt-2 flex gap-2">
                     <input 
                       type="number" 
@@ -366,31 +371,38 @@ export default function ExpensesScreen({ entries, addExpense, expenses, transact
         <div className="px-4 pt-2">
           <div className="mb-2 flex items-center gap-2">
             <span className="text-[10px] font-black text-neutral-400">FILTERS:</span>
-            <button className="text-[11px] font-black text-[#FFD700]">ALL</button>
-            <button className="text-[11px] font-black text-neutral-500">PERSONAL</button>
-            <button className="text-[11px] font-black text-neutral-500">BUSINESS</button>
+            {(["all", "personal", "business"] as const).map((filter) => (
+              <button
+                key={filter}
+                onClick={() => setExpenseFilter(filter)}
+                aria-pressed={expenseFilter === filter}
+                className={`rounded-md px-2 py-1 text-[11px] font-black ${expenseFilter === filter ? "bg-[#FFD700] text-black" : "text-neutral-300"}`}
+              >
+                {filter.toUpperCase()}
+              </button>
+            ))}
           </div>
           
           <div className="space-y-2">
-            {expenses.map((expense) => (
+            {visibleExpenses.map((expense) => (
               <div key={expense.id} className="flex items-center gap-3 rounded-xl border border-[#2a2a2a] bg-[#0e0e0e] p-2">
                 {expense.thumbnailBase64 && (
                   <img src={expense.thumbnailBase64} alt={expense.vendor} className="h-10 w-10 rounded object-cover" />
                 )}
                 <div className="flex-1">
                   <div className="font-medium">{expense.vendor}</div>
-                  <div className="text-[11px] text-neutral-400">{expense.category} · {expense.dueDate}</div>
+                  <div className={REGISTER_META}>{expense.category} · {expense.dueDate}</div>
                 </div>
                 <div className="text-right">
-                  <div className="font-mono font-bold">${expense.amount.toFixed(2)}</div>
+                  <div className="font-mono tabular-nums text-[15px] font-bold">${expense.amount.toFixed(2)}</div>
                   <span className={`text-[9px] font-black ${expense.type === 'business' ? 'text-[#FFD700]' : 'text-neutral-500'}`}>
                     {expense.type.toUpperCase()}
                   </span>
                 </div>
               </div>
             ))}
-            {expenses.length === 0 && (
-              <div className="py-4 text-center text-[12px] text-neutral-500">No expenses recorded yet</div>
+            {visibleExpenses.length === 0 && (
+              <div className="py-4 text-center text-[12px] text-neutral-400">{expenses.length === 0 ? "No expenses recorded yet" : "No expenses match this filter"}</div>
             )}
           </div>
         </div>
@@ -398,5 +410,4 @@ export default function ExpensesScreen({ entries, addExpense, expenses, transact
     </div>
   );
 }
-
 

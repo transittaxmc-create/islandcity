@@ -14,6 +14,11 @@ export const BTN_GOLD =
 export const BTN_DARK =
   "h-14 w-full rounded-xl border border-[#2a2a2a] bg-[#111] text-[12px] font-bold text-white active:bg-[#1c1c1c]";
 
+export const REGISTER_LABEL =
+  "text-[11px] font-bold uppercase tracking-[0.12em] text-neutral-300";
+export const REGISTER_META = "text-[11px] leading-5 text-neutral-400";
+export const REGISTER_AMOUNT = "font-mono tabular-nums text-[17px] font-black";
+
 export function pillCls(color: "gold" | "green" | "orange"): string {
   const map = {
     gold: "border-[#FFD70055] bg-[#FFD70018] text-[#FFD700]",
