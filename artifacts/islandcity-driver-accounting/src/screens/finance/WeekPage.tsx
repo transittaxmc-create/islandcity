@@ -21,8 +21,8 @@ export function WeekPage({ F, dailyGoal, workDays, setWorkDays, dayTargets, setD
       {/* ESTA SEMANA chart */}
       <div className="bg-[#101010] border border-[#2e2e2e] rounded-2xl p-4">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-[9px] tracking-[0.22em] text-neutral-300 font-bold uppercase">THIS WEEK</p>
-          <div className="flex gap-3 text-[8px] text-neutral-400">
+          <p className="text-[12px] tracking-[0.12em] text-neutral-200 font-bold uppercase">THIS WEEK</p>
+          <div className="flex gap-3 text-[11px] text-neutral-300">
             <span className="flex items-center gap-1"><span className="inline-block w-2 h-1.5 rounded bg-[#d9b64f]/30" />Planned</span>
             <span className="flex items-center gap-1"><span className="inline-block w-2 h-1.5 rounded bg-[#f6dd8c]" />Actual</span>
           </div>
@@ -39,13 +39,13 @@ export function WeekPage({ F, dailyGoal, workDays, setWorkDays, dayTargets, setD
         </ResponsiveContainer>
         <div className="flex justify-between mt-2 pt-2 border-t border-[#2e2e2e]">
           <div>
-            <p className="text-[9px] text-neutral-400">Earned so far</p>
-            <p className="text-[15px] font-bold text-[#f6dd8c] font-mono-jet">${F.earnWeek.toFixed(2)}</p>
+            <p className="text-[11px] text-neutral-300">Earned so far</p>
+            <p className="text-[16px] font-bold tabular-nums text-[#f6dd8c] font-mono-jet">${F.earnWeek.toFixed(2)}</p>
           </div>
           <div className="text-right">
-            <p className="text-[9px] text-neutral-400">Week plan total</p>
-            <p className="text-[15px] font-bold text-white font-mono-jet">${F.projWeek.toFixed(2)}</p>
-            <p className="text-[8px] text-neutral-400 mt-0.5">pending + posted trips</p>
+            <p className="text-[11px] text-neutral-300">Week plan total</p>
+            <p className="text-[16px] font-bold tabular-nums text-white font-mono-jet">${F.projWeek.toFixed(2)}</p>
+            <p className="text-[11px] text-neutral-400 mt-0.5">Includes pending and posted trips</p>
           </div>
         </div>
       </div>
@@ -53,8 +53,8 @@ export function WeekPage({ F, dailyGoal, workDays, setWorkDays, dayTargets, setD
       {/* PLAN SEMANAL DE INGRESOS */}
       <div className="bg-[#101010] border border-[#2e2e2e] rounded-2xl p-4">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-[9px] tracking-[0.22em] text-neutral-300 font-bold uppercase">WEEKLY INCOME PLAN</p>
-          <span className="text-[9px] text-neutral-400">{workDays.length} active day{workDays.length !== 1 ? "s" : ""}</span>
+          <p className="text-[12px] tracking-[0.12em] text-neutral-200 font-bold uppercase">WEEKLY INCOME PLAN</p>
+          <span className="text-[11px] text-neutral-300">{workDays.length} active day{workDays.length !== 1 ? "s" : ""}</span>
         </div>
         <div className="grid grid-cols-7 gap-1 mb-1.5">
           {([1, 2, 3, 4, 5, 6, 7] as const).map((iso, i) => {
@@ -89,14 +89,14 @@ export function WeekPage({ F, dailyGoal, workDays, setWorkDays, dayTargets, setD
               ${F.weekPlanTotal.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
             </p>
           </div>
-          <p className="text-[8px] text-neutral-400 mb-3">avg ${F.avgDayTarget.toFixed(0)}/day</p>
+          <p className="text-[11px] text-neutral-300 mb-3">Average ${F.avgDayTarget.toFixed(0)}/day</p>
           <div className="grid grid-cols-2 gap-2 mb-3">
             <div className="bg-black border border-[#2e2e2e] rounded-xl p-2.5 text-center">
-              <p className="text-[8px] text-neutral-400 uppercase tracking-widest mb-0.5">Est. monthly</p>
+              <p className="text-[11px] text-neutral-300 uppercase tracking-wide mb-0.5">Estimated monthly</p>
               <p className="text-[13px] font-bold text-white font-mono-jet">${((F.weekPlanTotal * 4.33) / 1000).toFixed(1)}k</p>
             </div>
             <div className="bg-black border border-[#2e2e2e] rounded-xl p-2.5 text-center">
-              <p className="text-[8px] text-neutral-400 uppercase tracking-widest mb-0.5">Est. yearly</p>
+              <p className="text-[11px] text-neutral-300 uppercase tracking-wide mb-0.5">Estimated yearly</p>
               <p className="text-[13px] font-bold text-white font-mono-jet">${(F.annTarget / 1000).toFixed(0)}k</p>
             </div>
           </div>

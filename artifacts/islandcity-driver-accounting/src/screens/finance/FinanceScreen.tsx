@@ -1,5 +1,6 @@
 ﻿// FINANCE Â· shell â€” 6 pages horizontal scroll â€” Trip + Copiloto + 4 more
 import { useRef, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { FinanceData, BankAdjEntry, RecurringPlan } from "./financeData";
 import type { ReceiptRecord } from "../../lib/receipts";
 import type { EntryRecord } from "../../lib/domain";
@@ -42,12 +43,26 @@ export function FinanceScreen(props: {
           <p className="text-[10px] tracking-[0.22em] text-neutral-400 font-semibold uppercase">Financial Intelligence</p>
           <p className="text-[12px] font-semibold text-neutral-200 mt-0.5">{names[finPage]}</p>
         </div>
-        <div className="flex items-center gap-1.5 mt-1">
-          {Array.from({ length: PAGE_COUNT }, (_, i) => i).map((i) => (
-            <button key={i}
-              onClick={() => { const el = finScrollRef.current; if (el) el.scrollTo({ left: i * el.offsetWidth, behavior: "smooth" }); }}
-              style={{ width: i === finPage ? 16 : 8, height: 8, borderRadius: 4, background: i === finPage ? "#f6dd8c" : "#2a2a2a", transition: "all 0.3s", flexShrink: 0, border: "none", padding: 0, cursor: "pointer" }} />
-          ))}
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-label="Previous finance section"
+            disabled={finPage === 0}
+            onClick={() => { const el = finScrollRef.current; if (el) el.scrollTo({ left: (finPage - 1) * el.offsetWidth, behavior: "smooth" }); }}
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-neutral-200 disabled:text-neutral-600"
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <span className="min-w-[48px] text-center text-[12px] font-semibold tabular-nums text-neutral-300">{finPage + 1} / {PAGE_COUNT}</span>
+          <button
+            type="button"
+            aria-label="Next finance section"
+            disabled={finPage === PAGE_COUNT - 1}
+            onClick={() => { const el = finScrollRef.current; if (el) el.scrollTo({ left: (finPage + 1) * el.offsetWidth, behavior: "smooth" }); }}
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-neutral-200 disabled:text-neutral-600"
+          >
+            <ChevronRight size={20} />
+          </button>
         </div>
       </div>
 
@@ -78,4 +93,3 @@ export function FinanceScreen(props: {
     </div>
   );
 }
-

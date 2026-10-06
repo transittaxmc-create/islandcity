@@ -110,6 +110,7 @@ export default function QueueScreen({ entries, onEdit, onEditEntry, onDelete, on
           <span className={REGISTER_LABEL}>REGISTER</span>
           <span className="rounded-full border border-[#FF8C0055] bg-[#FF8C0018] px-2 py-0.5 text-[11px] font-black text-[#FF8C00]">{openCount} pending</span>
         </div>
+        <p className={`mt-1 ${REGISTER_META}`}>Review a trip, match its payment, then send reconciled trips to the ledger.</p>
         <div className="mt-2 grid grid-cols-3 gap-2 text-center">
           <div className="rounded-lg bg-black p-2">
             <div className={REGISTER_LABEL}>TOTAL GROSS</div>
@@ -151,7 +152,12 @@ export default function QueueScreen({ entries, onEdit, onEditEntry, onDelete, on
         return (
           <div key={e.id} className="rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-3">
             {/* compact row 2-3 lines spec */}
-            <button onClick={() => onEdit(e)} className="w-full text-left">
+            <button
+              type="button"
+              onClick={() => setExpanded(isOpen ? null : e.id)}
+              aria-expanded={isOpen}
+              className="w-full text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#FFD700]"
+            >
               <div className="flex items-center gap-2">
                 {platformLogo(e.platform) ? (
                   <img src={platformLogo(e.platform)!} alt="" className="h-5 w-5 rounded object-contain" />
