@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { fmt, platformLogo, type EntryRecord } from "../lib/domain";
 import type { ReceiptRecord } from "../lib/receipts";
 import { IRS_RATE_PER_MILE } from "../lib/nycZones";
+import { REGISTER_AMOUNT, REGISTER_LABEL, REGISTER_META } from "../lib/ui";
 
 interface Props {
   entries: EntryRecord[];
@@ -117,8 +118,8 @@ export default function ReportsScreen({ entries, expenses, showToast }: Props) {
 
   const stat = (label: string, value: string, color: string) => (
     <div className="rounded-xl border p-3" style={{ background: "#080808", borderColor: `${color}22` }}>
-      <p className="text-[9px] font-black uppercase tracking-[0.14em] text-neutral-400">{label}</p>
-      <p className="mt-1 font-mono-jet text-[15px] font-black" style={{ color }}>{value}</p>
+      <p className={REGISTER_LABEL}>{label}</p>
+      <p className={`mt-1 ${REGISTER_AMOUNT}`} style={{ color }}>{value}</p>
     </div>
   );
 
@@ -129,7 +130,7 @@ export default function ReportsScreen({ entries, expenses, showToast }: Props) {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400">REPORTS</p>
-            <p className="mt-0.5 text-[9px] text-neutral-500">Profit &amp; Loss · {R.trips.length} viajes · {R.bills.length} gastos</p>
+            <p className={`mt-0.5 ${REGISTER_META}`}>Profit &amp; Loss · {R.trips.length} viajes · {R.bills.length} gastos</p>
           </div>
           <button onClick={exportCsv} className="h-10 rounded-lg bg-[#FFD700] px-3 text-[11px] font-black text-black">⬇ CSV</button>
         </div>
@@ -151,7 +152,7 @@ export default function ReportsScreen({ entries, expenses, showToast }: Props) {
 
       {/* ═══ P&L ═══ */}
       <div className="rounded-2xl border border-[#1a1a1a] bg-[#0e0e0e] p-4">
-        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400">PROFIT &amp; LOSS</p>
+        <p className={REGISTER_LABEL}>PROFIT &amp; LOSS</p>
         <div className="mt-3 space-y-1.5">
           {([
             ["Gross Income", R.gross, "#ffffff"],
@@ -160,8 +161,8 @@ export default function ReportsScreen({ entries, expenses, showToast }: Props) {
             ["Expenses", -R.expTotal, "#f87171"],
           ] as [string, number, string][]).map(([label, val, col]) => (
             <div key={label} className="flex items-center justify-between border-b border-[#141414] pb-1.5 last:border-0">
-              <span className="text-[11px] text-neutral-300">{label}</span>
-              <span className="font-mono-jet text-[13px] font-black" style={{ color: col }}>
+              <span className={REGISTER_META}>{label}</span>
+              <span className="font-mono-jet tabular-nums text-[15px] font-black" style={{ color: col }}>
                 {val < 0 ? `-${fmt(Math.abs(val))}` : fmt(val)}
               </span>
             </div>

@@ -1,6 +1,6 @@
 // ── IslandCity Tip Tracker · PHASE 1 ────────────────────────────────
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {ChartColumn, ClipboardList, Gauge, Home, Receipt, FileText, Sparkles, Boxes} from "lucide-react";
+import { ChartColumn, ChevronDown, ClipboardList, FileText, Gauge, Home, Receipt, Sparkles, Boxes } from "lucide-react";
 import {
   emptyState,
   calcGross,
@@ -47,6 +47,7 @@ export default function App() {
   stateRef.current = state;
 
   const [tab, setTab] = useState<Tab>("ENTRY");
+  const [moreOpen, setMoreOpen] = useState(false);
   const [clock, setClock] = useState(() => new Date());
   const [gps, setGps] = useState<{ lat: number; lng: number; acc: number } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -474,17 +475,20 @@ export default function App() {
   const tabs: { key: Tab; label: string; Icon: typeof Home }[] = [
     { key: "ENTRY", label: "ENTRY", Icon: Home },
     { key: "QUEUE", label: "REGISTER", Icon: ClipboardList },
-    { key: "LEDGER", label: "LEDGER", Icon: FileText },
-    { key: "EXPENSES", label: "EXPENSES", Icon: Receipt },
-    { key: "DASH", label: "DASH", Icon: Gauge },
     { key: "FINANCE", label: "FINANCE", Icon: ChartColumn },
     { key: "REPORTS", label: "REPORTS", Icon: FileText },
-    { key: "AI", label: "AI", Icon: Sparkles },
-    { key: "DATA", label: "DATA", Icon: Boxes },
+  ];
+  const isMoreSection = !tabs.some(({ key }) => key === tab);
+  const moreItems: { key: Tab; label: string; Icon: typeof Home; description: string }[] = [
+    { key: "DASH", label: "Dashboard", Icon: Gauge, description: "Shift, goals, GPS and tolls" },
+    { key: "LEDGER", label: "Transaction ledger", Icon: FileText, description: "Reconciled trip history" },
+    { key: "EXPENSES", label: "Expenses", Icon: Receipt, description: "Receipts and E-ZPass" },
+    { key: "AI", label: "Insights", Icon: Sparkles, description: "Trends and projections" },
+    { key: "DATA", label: "Data & backup", Icon: Boxes, description: "Export, restore and import" },
   ];
 
   return (
-    <div className="app-shell min-h-screen bg-[#0A0A0A] text-white pb-24" style={{ maxWidth: 480, margin: "0 auto" }}>
+    <div className="app-shell mx-auto min-h-screen max-w-[480px] bg-[#0A0A0A] pb-24 text-white md:max-w-[720px]">
       {toast && (
         <div className="fixed top-4 z-50 rounded-full border border-[#FFD70055] bg-[#1a1a1a] px-4 py-2 text-[12px] font-bold text-white" style={{ left: "50%", transform: "translateX(-50%)" }}>
           {toast}
@@ -565,17 +569,58 @@ export default function App() {
           />
         )}
       </div>
-      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#1c1c1c] bg-[#030303]" style={{ maxWidth: 480, margin: "0 auto" }}>
-        <div className="flex">
+      {moreOpen && (
+        <>
+          <button
+            type="button"
+            aria-label="Close more menu"
+            className="fixed inset-0 z-40 bg-black/60"
+            onClick={() => setMoreOpen(false)}
+          />
+          <section
+            aria-label="More sections"
+            className="fixed bottom-[70px] left-3 right-3 z-50 mx-auto max-w-[456px] rounded-2xl border border-[#2a2a2a] bg-[#101010] p-2 shadow-2xl md:max-w-[696px]"
+          >
+            {moreItems.map(({ key, label, Icon, description }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => { setTab(key); setMoreOpen(false); }}
+                className="flex min-h-14 w-full items-center gap-3 rounded-xl px-3 text-left hover:bg-[#1a1a1a] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#FFD700]"
+              >
+                <Icon size={20} className="shrink-0 text-[#f6dd8c]" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[14px] font-semibold text-white">{label}</span>
+                  <span className="block text-[12px] text-neutral-400">{description}</span>
+                </span>
+                {tab === key && <span className="text-[11px] font-bold text-[#f6dd8c]">OPEN</span>}
+              </button>
+            ))}
+          </section>
+        </>
+      )}
+      <div className="fixed bottom-0 left-0 right-0 z-40 mx-auto max-w-[480px] border-t border-[#1c1c1c] bg-[#030303] pb-[env(safe-area-inset-bottom)] md:max-w-[720px]">
+        <div className="grid grid-cols-5">
           {tabs.map(({ key, label, Icon }) => {
             const active = tab === key;
             return (
-              <button key={key} onClick={() => setTab(key)} className="flex h-[62px] flex-1 flex-col items-center justify-center gap-[3px]" style={{ color: active ? "#FFD700" : "#525252" }}>
-                <Icon size={active ? 20 : 18} strokeWidth={active ? 2 : 1.5} />
-                <span className="text-[8px] font-black tracking-wider">{label}</span>
+              <button key={key} type="button" onClick={() => { setTab(key); setMoreOpen(false); }} aria-current={active ? "page" : undefined} className="flex h-[62px] flex-col items-center justify-center gap-1" style={{ color: active ? "#FFD700" : "#8a8a8a" }}>
+                <Icon size={active ? 21 : 20} strokeWidth={active ? 2 : 1.75} />
+                <span className="text-[10px] font-bold tracking-wide">{label}</span>
               </button>
             );
           })}
+          <button
+            type="button"
+            onClick={() => setMoreOpen((open) => !open)}
+            aria-expanded={moreOpen}
+            aria-haspopup="true"
+            aria-current={isMoreSection ? "page" : undefined}
+            className={`flex h-[62px] flex-col items-center justify-center gap-1 ${isMoreSection || moreOpen ? "text-[#FFD700]" : "text-neutral-300"}`}
+          >
+            <ChevronDown size={20} className={`transition-transform ${moreOpen ? "rotate-180" : ""}`} />
+            <span className="text-[10px] font-bold tracking-wide">MORE</span>
+          </button>
         </div>
       </div>
       {editTarget && (

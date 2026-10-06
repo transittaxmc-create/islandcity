@@ -40,35 +40,34 @@ export function PlatformsPage({ F }: { F: FinanceData }) {
   return (
     <div className="flex-shrink-0 w-full px-4 pb-6" style={{ scrollSnapAlign: "start" }}>
       <div className="bg-[#101010] border border-[#2e2e2e] rounded-2xl p-4">
-        <p className="text-[9px] tracking-[0.22em] text-neutral-300 font-bold uppercase mb-3">INCOME BY PLATFORM</p>
-        <table className="w-full text-[11px]">
-          <thead>
-            <tr className="text-[8px] text-neutral-400 uppercase tracking-widest border-b border-[#2e2e2e]">
-              <th className="text-left pb-2 font-semibold">Platform</th>
-              <th className="text-right pb-2 font-semibold">Today</th>
-              <th className="text-right pb-2 font-semibold">Week</th>
-              <th className="text-right pb-2 font-semibold">Month</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#1a1a1a]">
-            {F.platRows.map(([platform, d]) => {
-              const meta = getPlatformMeta(platform);
-              return (
-                <tr key={platform}>
-                  <td className="py-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className={`w-5 h-5 rounded-full ${meta.bg} flex items-center justify-center text-[7px] font-bold text-black flex-shrink-0`}>{meta.initial}</span>
-                      <span className="text-neutral-300 text-[10px] truncate max-w-[70px]">{platform}</span>
+        <p className="mb-3 text-[12px] font-bold uppercase tracking-[0.12em] text-neutral-200">Income by platform</p>
+        <div className="space-y-2">
+          {F.platRows.map(([platform, d]) => {
+            const meta = getPlatformMeta(platform);
+            return (
+              <div key={platform} className="rounded-xl border border-[#242424] bg-[#090909] p-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${meta.bg} text-[10px] font-bold text-black`}>{meta.initial}</span>
+                  <span className="min-w-0 flex-1 break-words text-[13px] font-semibold leading-5 text-white">{platform}</span>
+                </div>
+                <dl className="mt-3 grid grid-cols-3 gap-2">
+                  {([
+                    ["Today", d.today, "text-neutral-300"],
+                    ["Week", d.week, "text-[#f6dd8c]"],
+                    ["Month", d.month, "text-white"],
+                  ] as const).map(([label, amount, color]) => (
+                    <div key={label} className="min-w-0">
+                      <dt className="text-[11px] font-medium text-neutral-400">{label}</dt>
+                      <dd className={`mt-0.5 break-all font-mono-jet tabular-nums text-[13px] font-semibold ${color}`}>
+                        ${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </dd>
                     </div>
-                  </td>
-                  <td className="py-2 text-right font-mono-jet text-neutral-400 text-[10px]">{d.today > 0 ? `$${d.today.toFixed(0)}` : "—"}</td>
-                  <td className="py-2 text-right font-mono-jet text-[#f6dd8c] font-semibold text-[10px]">${d.week.toFixed(0)}</td>
-                  <td className="py-2 text-right font-mono-jet text-white text-[10px]">${d.month.toFixed(0)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                  ))}
+                </dl>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
