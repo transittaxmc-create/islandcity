@@ -478,6 +478,7 @@ export default function App() {
     { key: "FINANCE", label: "FINANCE", Icon: ChartColumn },
     { key: "REPORTS", label: "REPORTS", Icon: FileText },
   ];
+  const isMoreSection = !tabs.some(({ key }) => key === tab);
   const moreItems: { key: Tab; label: string; Icon: typeof Home; description: string }[] = [
     { key: "DASH", label: "Dashboard", Icon: Gauge, description: "Shift, goals, GPS and tolls" },
     { key: "LEDGER", label: "Transaction ledger", Icon: FileText, description: "Reconciled trip history" },
@@ -487,7 +488,7 @@ export default function App() {
   ];
 
   return (
-    <div className="app-shell min-h-screen bg-[#0A0A0A] text-white pb-24" style={{ maxWidth: 480, margin: "0 auto" }}>
+    <div className="app-shell mx-auto min-h-screen max-w-[480px] bg-[#0A0A0A] pb-24 text-white md:max-w-[720px]">
       {toast && (
         <div className="fixed top-4 z-50 rounded-full border border-[#FFD70055] bg-[#1a1a1a] px-4 py-2 text-[12px] font-bold text-white" style={{ left: "50%", transform: "translateX(-50%)" }}>
           {toast}
@@ -578,7 +579,7 @@ export default function App() {
           />
           <section
             aria-label="More sections"
-            className="fixed bottom-[70px] left-3 right-3 z-50 mx-auto max-w-[456px] rounded-2xl border border-[#2a2a2a] bg-[#101010] p-2 shadow-2xl"
+            className="fixed bottom-[70px] left-3 right-3 z-50 mx-auto max-w-[456px] rounded-2xl border border-[#2a2a2a] bg-[#101010] p-2 shadow-2xl md:max-w-[696px]"
           >
             {moreItems.map(({ key, label, Icon, description }) => (
               <button
@@ -598,7 +599,7 @@ export default function App() {
           </section>
         </>
       )}
-      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#1c1c1c] bg-[#030303] pb-[env(safe-area-inset-bottom)]" style={{ maxWidth: 480, margin: "0 auto" }}>
+      <div className="fixed bottom-0 left-0 right-0 z-40 mx-auto max-w-[480px] border-t border-[#1c1c1c] bg-[#030303] pb-[env(safe-area-inset-bottom)] md:max-w-[720px]">
         <div className="grid grid-cols-5">
           {tabs.map(({ key, label, Icon }) => {
             const active = tab === key;
@@ -614,7 +615,8 @@ export default function App() {
             onClick={() => setMoreOpen((open) => !open)}
             aria-expanded={moreOpen}
             aria-haspopup="true"
-            className="flex h-[62px] flex-col items-center justify-center gap-1 text-neutral-300"
+            aria-current={isMoreSection ? "page" : undefined}
+            className={`flex h-[62px] flex-col items-center justify-center gap-1 ${isMoreSection || moreOpen ? "text-[#FFD700]" : "text-neutral-300"}`}
           >
             <ChevronDown size={20} className={`transition-transform ${moreOpen ? "rotate-180" : ""}`} />
             <span className="text-[10px] font-bold tracking-wide">MORE</span>
